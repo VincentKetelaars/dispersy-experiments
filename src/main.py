@@ -11,6 +11,8 @@ import time
 import os
 import argparse
 from os.path import expanduser
+from datetime import datetime
+from thread import get_ident
 
 from dispersy.crypto import ec_generate_key, ec_signature_length, ec_to_private_bin, ec_to_public_bin
 from dispersy.callback import Callback
@@ -18,6 +20,7 @@ from dispersy.endpoint import StandaloneEndpoint
 from dispersy.dispersy import Dispersy
 
 from community import MyCommunity
+from extend.callback import MyCallback
 
 SECURITY = u"medium"
 
@@ -45,32 +48,37 @@ MASTER_MEMBER_PUBLIC_KEY = "307e301006072a8648ce3d020106052b81040024036a0004004b
 import logging
 import logging.config
 
-def join_mycommunity(dispersy):    
+def create_mycommunity(dispersy):    
     master_member = dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
     my_member = dispersy.get_new_member(SECURITY)
     return MyCommunity.join_community(dispersy, master_member, my_member)
-    
+
+def get_mycommunity(dispersy, community):
+    return MyCommunity.load_community(dispersy, community.master_member)
 
 def single_callback_multiple_dispersy():
     # Create Dispersy object
-    callback = Callback("MyDispersy")
-    database_path = expanduser("~") + u"/Music/Multi/"
+    callback = MyCallback("MyDispersy")
+    dt = datetime.now()
+    database_path = expanduser("~") + u"/Music/Multi/" + dt.strftime("%Y%m%d%H%M%S") # Create unique place for database
     
     endpoint1 = StandaloneEndpoint(random.randint(10000, 20000))
-    dispersy1 = Dispersy(callback, endpoint1, database_path)    
-    
+    dispersy1 = Dispersy(callback, endpoint1, database_path)        
     
     endpoint2 = StandaloneEndpoint(random.randint(10000, 20000))
     dispersy2 = Dispersy(callback, endpoint2, database_path) # Multiple instances, same database gives errors?
     
     dispersy1.start()
     print "Dispersy1 is listening on port %d" % dispersy1.lan_address[1]
+    
     dispersy2.start()
     print "Dispersy2 is listening on port %d" % dispersy2.lan_address[1]
     
     # Same community?
-    community1 = callback.call(join_mycommunity, (dispersy1,))
-    community2 = callback.call(join_mycommunity, (dispersy2,))
+    community1 = callback.call(create_mycommunity, (dispersy1,))
+    callback.call(community1.dispersy_auto_load, (True,))
+    
+    #community2 = callback.call(get_mycommunity, (dispersy2, community1))
     
     callback.register(community1.create_my_messages, (1,), delay=5.0)
     
@@ -92,7 +100,7 @@ def single_callback_single_dispersy():
     dispersy.start()
     print "Dispersy is listening on port %d" % dispersy.lan_address[1]
     
-    community = callback.call(join_mycommunity, (dispersy,))
+    community = callback.call(create_mycommunity, (dispersy,))
     callback.register(community.create_my_messages, (1,), delay=5.0)
     
     try:
@@ -107,9 +115,7 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--single", metavar="Single dispersy instance", default="True", help='If True only one dispersy instance for each callback, false otherwise')
     parser.add_argument("-i", "--info", metavar="Infologger", default="False", help="If True, Info logs will be shown in the cmd")
     args = parser.parse_args()
-    
-    print args.single == False
-    
+        
     if (args.single == "True"):
         single_callback_single_dispersy()
     else:
