@@ -21,7 +21,7 @@ A6LfbbW5Rf81iSJ9aG1r9ZOxNyd27OKDqw0=
 
 import argparse
 
-import dispersy.crypto as Crypto
+from dispersy.crypto import *
 
 
 if __name__ == '__main__':
@@ -29,6 +29,20 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--security", metavar="SECURITY", default="medium", help='Levels of security: very-low, low, medium, high. Default=medium')
     args = parser.parse_args()
     
-    print Crypto.main()
+    ec = ec_generate_key(args.security)
+    private_pem = ec_to_private_pem(ec)
+    public_pem = ec_to_public_pem(ec)
+    public_bin = ec_to_public_bin(ec)
+    private_bin = ec_to_private_bin(ec)
+    print
+    print "generated:", time.ctime()
+    print "curve:", curve
+    print "len:", len(ec), "bits ~", ec_signature_length(ec), "bytes signature"
+    print "pub:", len(public_bin), public_bin.encode("HEX")
+    print "prv:", len(private_bin), private_bin.encode("HEX")
+    print "pub-sha1", sha1(public_bin).digest().encode("HEX")
+    print "prv-sha1", sha1(private_bin).digest().encode("HEX")
+    print public_pem.strip()
+    print private_pem.strip()
     
     
