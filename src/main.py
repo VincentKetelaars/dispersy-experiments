@@ -9,6 +9,8 @@ This is the main file which starts up an instance of Dispersy.
 import random
 import time
 import os
+import argparse
+from os.path import expanduser
 
 from dispersy.crypto import ec_generate_key, ec_signature_length, ec_to_private_bin, ec_to_public_bin
 from dispersy.callback import Callback
@@ -42,11 +44,6 @@ MASTER_MEMBER_PUBLIC_KEY = "307e301006072a8648ce3d020106052b81040024036a0004004b
 
 import logging
 import logging.config
-logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
-print "Logger using configuration file: " + logger_conf
-logging.config.fileConfig(logger_conf)
-logger = logging.getLogger(__name__)
-
 
 def join_mycommunity(dispersy):    
     master_member = dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
@@ -57,13 +54,14 @@ def join_mycommunity(dispersy):
 def single_callback_multiple_dispersy():
     # Create Dispersy object
     callback = Callback("MyDispersy")
+    database_path = expanduser("~") + u"/Music/Multi/"
     
     endpoint1 = StandaloneEndpoint(random.randint(10000, 20000))
-    dispersy1 = Dispersy(callback, endpoint1, u"~/Music")    
+    dispersy1 = Dispersy(callback, endpoint1, database_path)    
     
     
     endpoint2 = StandaloneEndpoint(random.randint(10000, 20000))
-    dispersy2 = Dispersy(callback, endpoint2, u"~/Music") # Multiple instances, same database gives errors?
+    dispersy2 = Dispersy(callback, endpoint2, database_path) # Multiple instances, same database gives errors?
     
     dispersy1.start()
     print "Dispersy1 is listening on port %d" % dispersy1.lan_address[1]
@@ -87,8 +85,9 @@ def single_callback_multiple_dispersy():
 def single_callback_single_dispersy():
     # Create Dispersy object
     callback = Callback("MyDispersy")
-    endpoint = StandaloneEndpoint(random.randint(10000, 20000))
-    dispersy = Dispersy(callback, endpoint, u"~/Music/"+unicode(endpoint.get_address)) # Multiple instances, same database gives errors?
+    port = random.randint(10000, 20000)
+    endpoint = StandaloneEndpoint(port)
+    dispersy = Dispersy(callback, endpoint, expanduser("~") + u"/Music/"+unicode(port)) # Multiple instances, same database gives errors?
     
     dispersy.start()
     print "Dispersy is listening on port %d" % dispersy.lan_address[1]
@@ -97,14 +96,29 @@ def single_callback_single_dispersy():
     callback.register(community.create_my_messages, (1,), delay=5.0)
     
     try:
-        time.sleep(60)
+        time.sleep(30)
     except:
         pass
     finally:
         dispersy.stop()
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Start Dispersy instance(s)')
+    parser.add_argument("-s", "--single", metavar="Single dispersy instance", default="True", help='If True only one dispersy instance for each callback, false otherwise')
+    parser.add_argument("-i", "--info", metavar="Infologger", default="False", help="If True, Info logs will be shown in the cmd")
+    args = parser.parse_args()
     
-    single_callback_multiple_dispersy()
+    print args.single == False
+    
+    if (args.single == "True"):
+        single_callback_single_dispersy()
+    else:
+        single_callback_multiple_dispersy()
+        
+    if (args.info == "True"):
+        logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
+        print "Logger using configuration file: " + logger_conf
+        logging.config.fileConfig(logger_conf)
+        logger = logging.getLogger(__name__)
     
     

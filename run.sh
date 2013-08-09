@@ -1,6 +1,6 @@
 export PYTHONPATH=${PYTHONPATH}:/home/vincent/git/MyDispersy
 
 for (( PEER=1; PEER< $1 + 1 ; PEER++ )); do
-    python src/main.py &
+    python -O src/main.py -s False &
 done
-wai$0
+wait
