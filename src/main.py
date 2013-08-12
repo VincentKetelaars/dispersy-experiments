@@ -45,7 +45,6 @@ SECURITY = u"medium"
 
 MASTER_MEMBER_PUBLIC_KEY = "307e301006072a8648ce3d020106052b81040024036a0004004b2c2fbbf036a0ae1dedf4420ff724869e324bc63064ec2e7bad062a7a9c7f31a7c3ff17a11fd582c9eb8b727dacb228afceb2002ad6e916efd4531e79f040341c7259c99938aae9f6ece17c5075b7ab8e9c92f7ff4493468d1e354a31d139e73928266b824fe3".decode("HEX")
 
-import logging
 import logging.config
 
 def create_mycommunity(dispersy):    
@@ -53,8 +52,8 @@ def create_mycommunity(dispersy):
     my_member = dispersy.get_new_member(SECURITY)
     return MyCommunity.join_community(dispersy, master_member, my_member)
 
-def get_mycommunity(dispersy, community):
-    return MyCommunity.load_community(dispersy, community.master_member)
+def get_mycommunity(dispersy, master_member):
+    return MyCommunity.load_community(dispersy, master_member)
 
 def single_callback_multiple_dispersy():
     # Create Dispersy object
@@ -74,21 +73,19 @@ def single_callback_multiple_dispersy():
     dispersy2.start()
     print "Dispersy2 is listening on port %d" % dispersy2.lan_address[1]
     
-    # Same community?
+    # Two different communities with same master_member and only one member
     community1 = callback.call(create_mycommunity, (dispersy1,))
-    callback.call(community1.dispersy_auto_load, (True,))
+    community2 = callback.call(get_mycommunity, (dispersy2, community1.master_member))
     
-    #community2 = callback.call(get_mycommunity, (dispersy2, community1))
-    
-    callback.register(community1.create_my_messages, (1,), delay=5.0)
+    callback.register(community1.create_my_messages, (1,), delay=1.0)
     
     try:
-        time.sleep(30)
+        time.sleep(5)
     except:
         pass
     finally:
         dispersy1.stop()
-        dispersy2.stop()
+        dispersy2.stop() # Somewhere in callback._loop something goes wrong
         
 def single_callback_single_dispersy():
     # Create Dispersy object
@@ -115,16 +112,19 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--single", metavar="Single dispersy instance", default="True", help='If True only one dispersy instance for each callback, false otherwise')
     parser.add_argument("-i", "--info", metavar="Infologger", default="False", help="If True, Info logs will be shown in the cmd")
     args = parser.parse_args()
-        
-    if (args.single == "True"):
-        single_callback_single_dispersy()
-    else:
-        single_callback_multiple_dispersy()
-        
+    
+    # Why show only INFO?
     if (args.info == "True"):
         logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
         print "Logger using configuration file: " + logger_conf
         logging.config.fileConfig(logger_conf)
         logger = logging.getLogger(__name__)
+        
+    if (args.single == "True"):
+        single_callback_single_dispersy()
+    else:
+        single_callback_multiple_dispersy()
+    
+    
     
     

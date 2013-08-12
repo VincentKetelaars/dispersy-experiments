@@ -55,11 +55,11 @@ class MyCommunity(Community):
         Handle Callback
         """
         for x in messages:
-            print x.payload.data + " : " + self._short_member_id()
+            print x.payload.data + ", receiver_member_id: " + self._short_member_id()
         
     def create_my_messages(self, count):
         meta = self.get_meta_message(u"mymessage")
-        mymessage = self._short_member_id()+": mymessage!!!!"
+        mymessage = "Message! sender_member_id: " + self._short_member_id()+", sender_port: " + str(self.dispersy.lan_address[1])
         messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), 1), payload=(mymessage,)) for x in xrange(count)]
         self.dispersy.store_update_forward(messages, True, True, True)
     
