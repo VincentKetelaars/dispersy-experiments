@@ -19,8 +19,8 @@ from dispersy.callback import Callback
 from dispersy.endpoint import StandaloneEndpoint
 from dispersy.dispersy import Dispersy
 
-from community import MyCommunity
-from extend.callback import MyCallback
+from src.community import MyCommunity
+from src.extend.callback import MyCallback
 
 SECURITY = u"medium"
 

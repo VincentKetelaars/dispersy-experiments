@@ -12,8 +12,8 @@ from dispersy.resolution import PublicResolution
 from dispersy.distribution import FullSyncDistribution
 from dispersy.destination import CommunityDestination
 
-from conversion import MyConversion
-from payload import MyPayload
+from src.conversion import MyConversion
+from src.payload import MyPayload
 
 class MyCommunity(Community):
     '''

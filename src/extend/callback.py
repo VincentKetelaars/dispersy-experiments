@@ -4,9 +4,10 @@ Created on Aug 9, 2013
 @author: Vincent Ketelaars
 '''
 
-from dispersy.callback import Callback
-from threading import Thread
 from time import sleep
+from threading import Thread
+
+from dispersy.callback import Callback
 
 class MyCallback(Callback):
     '''
