@@ -12,8 +12,8 @@ from dispersy.resolution import PublicResolution
 from dispersy.distribution import FullSyncDistribution
 from dispersy.destination import CommunityDestination
 
-from src.conversion import MyConversion
-from src.payload import MyPayload
+from src.extend.conversion import MyConversion
+from src.extend.payload import MyPayload
 
 class MyCommunity(Community):
     '''
@@ -41,7 +41,10 @@ class MyCommunity(Community):
                          CommunityDestination(2), MyPayload(), self.check_callback, self.handle_callback)]
         
     def _short_member_id(self):
-        return str(self.my_member.mid.encode("HEX"))[0:5]
+        return str(self.my_member.mid.encode("HEX"))[0:5]            
+            
+    def _port(self):
+        return str(self.dispersy.endpoint.get_address()[1])
         
     def check_callback(self, messages):
         """
@@ -55,12 +58,16 @@ class MyCommunity(Community):
         Handle Callback
         """
         for x in messages:
-            print x.payload.data + ", receiver_member_id: " + self._short_member_id()
-        self.dispersy.callback.register(self.create_my_messages, (1,), delay=1.0 )
+            print x.payload.data + "\n\treceiver_member_id: " + self._short_member_id() + ", receiver_port: " + self._port()
+        #self.dispersy.callback.register(self.create_my_messages, (1,), delay=1.0 )
         
     def create_my_messages(self, count):
         meta = self.get_meta_message(u"mymessage")
-        mymessage = "Message! sender_member_id: " + self._short_member_id()+", sender_port: " + str(self.dispersy.endpoint.get_address()[1])
-        messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), 1), payload=(mymessage,)) for x in xrange(count)]
+        mymessage = "Message! sender_member_id: " + self._short_member_id()+", sender_port: " + self._port()
+        messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), 1), payload=(mymessage,)) for _ in xrange(count)]
         self.dispersy.store_update_forward(messages, True, True, True)
+        
+    @property
+    def dispersy_enable_candidate_walker(self):
+        return False
     

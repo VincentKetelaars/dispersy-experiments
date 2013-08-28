@@ -61,12 +61,13 @@ def single_callback_multiple_dispersy():
     callback = MyCallback("MyDispersy")
     dt = datetime.now()
     database_path = expanduser("~") + u"/Music/Multi/" + dt.strftime("%Y%m%d%H%M%S") # Create unique place for database
+    working_directory = u"."
     
     endpoint1 = StandaloneEndpoint(random.randint(10000, 20000))
-    dispersy1 = Dispersy(callback, endpoint1, database_path)        
+    dispersy1 = Dispersy(callback, endpoint1, working_directory, database_path)        
     
     endpoint2 = StandaloneEndpoint(random.randint(10000, 20000))
-    dispersy2 = Dispersy(callback, endpoint2, database_path) # Multiple instances, same database gives errors?
+    dispersy2 = Dispersy(callback, endpoint2, working_directory, database_path) # Multiple instances, same database gives errors?
     
     dispersy1.start()
     print "Dispersy1 is listening on port %d" % dispersy1.lan_address[1]
@@ -91,12 +92,17 @@ def single_callback_multiple_dispersy():
 def single_callback_single_dispersy():
     # Create Dispersy object
     callback = Callback("MyDispersy")
-    port = random.randint(10000, 20000)
-    #endpoint = MultiEndpoint()
-    #endpoint.add_endpoint(StandaloneEndpoint(port))
-    #endpoint.add_endpoint(StandaloneEndpoint(12345))
-    endpoint = StandaloneEndpoint(port);
-    dispersy = Dispersy(callback, endpoint, expanduser("~") + u"/Music/"+unicode(port)) # Multiple instances, same database gives errors?
+    port1 = random.randint(10000, 20000)
+    port2 = random.randint(10000, 20000)
+    endpoint = MultiEndpoint()
+    endpoint.add_endpoint(StandaloneEndpoint(port1))
+    endpoint.add_endpoint(StandaloneEndpoint(port2))
+    endpoint = StandaloneEndpoint(port1);
+    
+    working_dir = u"."
+    sqlite_database = expanduser("~") + u"/Music/"+unicode(port1)
+    #sqlite_database = u":memory:"
+    dispersy = Dispersy(callback, endpoint, working_dir, sqlite_database) # Multiple instances, same database gives errors?
     
     dispersy.start()
     print "Dispersy is listening on port %d" % dispersy.lan_address[1]
@@ -105,9 +111,9 @@ def single_callback_single_dispersy():
     callback.register(community.create_my_messages, (1,), delay=2.0)
     
     try:
-        time.sleep(10)
+        time.sleep(25)
     except:
-        pass
+        print "Did you do something?" + str(dispersy.endpoint.get_address()[1])
     finally:
         dispersy.stop()
 

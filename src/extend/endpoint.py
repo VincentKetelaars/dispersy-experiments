@@ -27,6 +27,13 @@ class MultiEndpoint(Endpoint):
         self._endpoints.append(endpoint);
         if len(self._endpoints) == 1:
             self._endpoint = endpoint
+            
+    def remove_endpoint(self, endpoint):
+        """
+        Remove endpoint. The endpoint needs some kind of identifier for this
+        """
+        assert isinstance(endpoint, Endpoint), type(endpoint)
+        pass
     
     def get_address(self):
         if self._endpoint is None:
