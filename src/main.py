@@ -21,6 +21,7 @@ from dispersy.dispersy import Dispersy
 
 from src.community import MyCommunity
 from src.extend.callback import MyCallback
+from src.extend.endpoint import MultiEndpoint
 
 SECURITY = u"medium"
 
@@ -91,17 +92,20 @@ def single_callback_single_dispersy():
     # Create Dispersy object
     callback = Callback("MyDispersy")
     port = random.randint(10000, 20000)
-    endpoint = StandaloneEndpoint(port)
+    #endpoint = MultiEndpoint()
+    #endpoint.add_endpoint(StandaloneEndpoint(port))
+    #endpoint.add_endpoint(StandaloneEndpoint(12345))
+    endpoint = StandaloneEndpoint(port);
     dispersy = Dispersy(callback, endpoint, expanduser("~") + u"/Music/"+unicode(port)) # Multiple instances, same database gives errors?
     
     dispersy.start()
     print "Dispersy is listening on port %d" % dispersy.lan_address[1]
     
     community = callback.call(create_mycommunity, (dispersy,))
-    callback.register(community.create_my_messages, (1,), delay=5.0)
+    callback.register(community.create_my_messages, (1,), delay=2.0)
     
     try:
-        time.sleep(30)
+        time.sleep(10)
     except:
         pass
     finally:
@@ -119,7 +123,7 @@ if __name__ == '__main__':
         print "Logger using configuration file: " + logger_conf
         logging.config.fileConfig(logger_conf)
         logger = logging.getLogger(__name__)
-        
+    
     if (args.single == "True"):
         single_callback_single_dispersy()
     else:

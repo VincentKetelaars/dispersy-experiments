@@ -56,10 +56,11 @@ class MyCommunity(Community):
         """
         for x in messages:
             print x.payload.data + ", receiver_member_id: " + self._short_member_id()
+        self.dispersy.callback.register(self.create_my_messages, (1,), delay=1.0 )
         
     def create_my_messages(self, count):
         meta = self.get_meta_message(u"mymessage")
-        mymessage = "Message! sender_member_id: " + self._short_member_id()+", sender_port: " + str(self.dispersy.lan_address[1])
+        mymessage = "Message! sender_member_id: " + self._short_member_id()+", sender_port: " + str(self.dispersy.endpoint.get_address()[1])
         messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), 1), payload=(mymessage,)) for x in xrange(count)]
         self.dispersy.store_update_forward(messages, True, True, True)
     
