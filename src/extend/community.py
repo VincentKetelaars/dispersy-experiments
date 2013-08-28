@@ -65,7 +65,7 @@ class MyCommunity(Community):
         meta = self.get_meta_message(u"mymessage")
         mymessage = "Message! sender_member_id: " + self._short_member_id()+", sender_port: " + self._port()
         messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), 1), payload=(mymessage,)) for _ in xrange(count)]
-        self.dispersy.store_update_forward(messages, True, True, True)
+        self.dispersy.store_update_forward(messages, True, False, True)
         
     @property
     def dispersy_enable_candidate_walker(self):

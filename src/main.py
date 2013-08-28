@@ -14,13 +14,12 @@ from os.path import expanduser
 from datetime import datetime
 from thread import get_ident
 
-from dispersy.crypto import ec_generate_key, ec_signature_length, ec_to_private_bin, ec_to_public_bin
 from dispersy.callback import Callback
 from dispersy.endpoint import StandaloneEndpoint
 from dispersy.dispersy import Dispersy
+from dispersy.candidate import WalkCandidate
 
-from src.community import MyCommunity
-from src.extend.callback import MyCallback
+from src.extend.community import MyCommunity
 from src.extend.endpoint import MultiEndpoint
 
 SECURITY = u"medium"
@@ -52,55 +51,20 @@ def create_mycommunity(dispersy):
     master_member = dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
     my_member = dispersy.get_new_member(SECURITY)
     return MyCommunity.join_community(dispersy, master_member, my_member)
-
-def get_mycommunity(dispersy, master_member):
-    return MyCommunity.load_community(dispersy, master_member)
-
-def single_callback_multiple_dispersy():
-    # Create Dispersy object
-    callback = MyCallback("MyDispersy")
-    dt = datetime.now()
-    database_path = expanduser("~") + u"/Music/Multi/" + dt.strftime("%Y%m%d%H%M%S") # Create unique place for database
-    working_directory = u"."
-    
-    endpoint1 = StandaloneEndpoint(random.randint(10000, 20000))
-    dispersy1 = Dispersy(callback, endpoint1, working_directory, database_path)        
-    
-    endpoint2 = StandaloneEndpoint(random.randint(10000, 20000))
-    dispersy2 = Dispersy(callback, endpoint2, working_directory, database_path) # Multiple instances, same database gives errors?
-    
-    dispersy1.start()
-    print "Dispersy1 is listening on port %d" % dispersy1.lan_address[1]
-    
-    dispersy2.start()
-    print "Dispersy2 is listening on port %d" % dispersy2.lan_address[1]
-    
-    # Two different communities with same master_member and only one member
-    community1 = callback.call(create_mycommunity, (dispersy1,))
-    community2 = callback.call(get_mycommunity, (dispersy2, community1.master_member))
-    
-    callback.register(community1.create_my_messages, (1,), delay=1.0)
-    
-    try:
-        time.sleep(5)
-    except:
-        pass
-    finally:
-        dispersy1.stop()
-        dispersy2.stop() # Somewhere in callback._loop something goes wrong
         
 def single_callback_single_dispersy():
     # Create Dispersy object
     callback = Callback("MyDispersy")
     port1 = random.randint(10000, 20000)
-    port2 = random.randint(10000, 20000)
+    #port2 = random.randint(10000, 20000)
     endpoint = MultiEndpoint()
     endpoint.add_endpoint(StandaloneEndpoint(port1))
-    endpoint.add_endpoint(StandaloneEndpoint(port2))
+    #endpoint.add_endpoint(StandaloneEndpoint(port2))
     endpoint = StandaloneEndpoint(port1);
     
     working_dir = u"."
-    sqlite_database = expanduser("~") + u"/Music/"+unicode(port1)
+    dt = datetime.now()
+    sqlite_database = expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "_" + unicode(port1)
     #sqlite_database = u":memory:"
     dispersy = Dispersy(callback, endpoint, working_dir, sqlite_database) # Multiple instances, same database gives errors?
     
@@ -108,32 +72,50 @@ def single_callback_single_dispersy():
     print "Dispersy is listening on port %d" % dispersy.lan_address[1]
     
     community = callback.call(create_mycommunity, (dispersy,))
-    callback.register(community.create_my_messages, (1,), delay=2.0)
+    callback.register(community.create_my_messages, (1,), delay=5.0)
     
-    try:
-        time.sleep(25)
-    except:
-        print "Did you do something?" + str(dispersy.endpoint.get_address()[1])
-    finally:
-        dispersy.stop()
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Start Dispersy instance(s)')
-    parser.add_argument("-s", "--single", metavar="Single dispersy instance", default="True", help='If True only one dispersy instance for each callback, false otherwise')
-    parser.add_argument("-i", "--info", metavar="Infologger", default="False", help="If True, Info logs will be shown in the cmd")
-    args = parser.parse_args()
-    
-    # Why show only INFO?
-    if (args.info == "True"):
+    return (community, dispersy)
+        
+def main(num_instances, show_logs):
+    if show_logs:
         logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
         print "Logger using configuration file: " + logger_conf
         logging.config.fileConfig(logger_conf)
         logger = logging.getLogger(__name__)
     
-    if (args.single == "True"):
-        single_callback_single_dispersy()
-    else:
-        single_callback_multiple_dispersy()
+    dispersy_list = []
+    community = None
+    for i in range(num_instances):
+        community, dispersy = single_callback_single_dispersy()
+        dispersy_list.append(dispersy)
+    
+    for dispersy in dispersy_list:
+        for other in dispersy_list:
+            if dispersy != other:
+                dispersy.create_introduction_request(community,
+                                                     WalkCandidate(other.lan_address, False, other.lan_address, other.wan_address, u"unknown"), 
+                                                     True, 
+                                                     True)
+        
+    try:
+        time.sleep(25)
+    except:
+        print "Did you do something?" + str(dispersy.endpoint.get_address()[1])
+    finally:
+        for dispersy in dispersy_list:
+            dispersy.stop()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Start Dispersy instance(s)')
+    parser.add_argument("-n", "--instances", metavar="Number of instances", default="2", help="Create # Dispersy instances")
+    parser.add_argument("-i", "--logging", metavar="Infologger", default="False", help="If True, logs will be shown in the cmd")
+    args = parser.parse_args()
+    
+    num = int(args.instances)
+    show_logs = True if args.logging == "True" else False;
+    main(num, show_logs)
+    
+    
     
     
     
