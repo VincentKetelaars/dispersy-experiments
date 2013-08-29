@@ -63,9 +63,9 @@ def single_callback_single_dispersy(conn, n):
 #     endpoint.add_endpoint(StandaloneEndpoint(port2))
     endpoint = StandaloneEndpoint(port1);
     
-    working_dir = u"."
     dt = datetime.now()
-    sqlite_database = expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "_" + unicode(port1)
+    working_dir = expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "/"
+    sqlite_database = working_dir + unicode(port1)
 #     sqlite_database = u":memory:"
     dispersy = Dispersy(callback, endpoint, working_dir, sqlite_database)
     
