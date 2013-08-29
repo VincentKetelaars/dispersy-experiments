@@ -57,17 +57,17 @@ def single_callback_single_dispersy(conn, n):
     # Create Dispersy object
     callback = Callback("MyDispersy")
     port1 = random.randint(10000, 20000)
-    #port2 = random.randint(10000, 20000)
+#     port2 = random.randint(10000, 20000)
     endpoint = MultiEndpoint()
     endpoint.add_endpoint(StandaloneEndpoint(port1))
-    #endpoint.add_endpoint(StandaloneEndpoint(port2))
+#     endpoint.add_endpoint(StandaloneEndpoint(port2))
     endpoint = StandaloneEndpoint(port1);
     
     working_dir = u"."
     dt = datetime.now()
     sqlite_database = expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "_" + unicode(port1)
-    #sqlite_database = u":memory:"
-    dispersy = Dispersy(callback, endpoint, working_dir, sqlite_database) # Multiple instances, same database gives errors?
+#     sqlite_database = u":memory:"
+    dispersy = Dispersy(callback, endpoint, working_dir, sqlite_database)
     
     dispersy.start()
     print "Dispersy is listening on port %d" % dispersy.lan_address[1]
@@ -79,47 +79,65 @@ def single_callback_single_dispersy(conn, n):
     
     for _ in range(n-1):
         address = conn.recv()
-        print "Create Introduction Request! "
         callback.call(dispersy.create_introduction_request, (community,WalkCandidate(address, False, address, address, u"unknown"),True,True))
+        
     callback.register(community.create_my_messages, (1,), delay=5.0)
     
-    try:
-        time.sleep(20)
-    except:
-        print "Did you do something?"
-    finally:
-        dispersy.stop()
+    _continue = True
+    while _continue:
+        if conn.poll(0.1):
+            _continue = conn.recv()        
+    
+    conn.close()
+    dispersy.stop()
         
 def main(num_instances, show_logs):
     if show_logs:
         logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
-        print "Logger using configuration file: " + logger_conf
         logging.config.fileConfig(logger_conf)
         logger = logging.getLogger(__name__)
+        logger.info("Logger using configuration file: " + logger_conf)
     
+    # Start the Dispersy instances
     process_list = []
     for _ in range(num_instances):
         conn1, conn2 = Pipe()
         p = Process(target=single_callback_single_dispersy, args=(conn2,num_instances))
         process_list.append(DispersyProcess(p, conn1))
         p.start()
-        
+    
+    logger.info(str(num_instances) + " processes have been started")
+    
+    # Receive the lan addresses from each of the instances   
     for p in process_list:
         p.lan = p.pipe.recv()
-
+    logger.info("The addresses of all processes have been received")
+    
+    # Send to each instance the lan addresses of the others
     for x in process_list:
         for y in process_list:
             if x != y:
                 x.pipe.send(y.lan)
+    logger.info("All processes have been send all addresses")
                 
     try:
         time.sleep(20)
     except:
-        print "Did you do something?"
+        logger.warning("Main thread fails to sleep!")
     finally:
-        for p in process_list:
-            p.pipe.close()
-            p.process.join()
+        try:
+            # Make sure to stop each Dispersy instance, pipe and process
+            for p in process_list:
+                p.pipe.send(False) # Tell process to end connection and stop Dispersy
+                p.pipe.close()
+                p.process.join()
+        except:
+            logger.warning("Stopping instances, pipes and processes has failed")
+        finally:
+            for p in process_list:
+                p.process.terminate()
+    
+    logger.info("The program is finished")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance(s)')
