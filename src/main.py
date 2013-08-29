@@ -53,7 +53,7 @@ def create_mycommunity(dispersy):
     my_member = dispersy.get_new_member(SECURITY)
     return MyCommunity.join_community(dispersy, master_member, my_member)
         
-def single_callback_single_dispersy(conn):
+def single_callback_single_dispersy(conn, n):
     # Create Dispersy object
     callback = Callback("MyDispersy")
     port1 = random.randint(10000, 20000)
@@ -73,17 +73,22 @@ def single_callback_single_dispersy(conn):
     print "Dispersy is listening on port %d" % dispersy.lan_address[1]
     
     community = callback.call(create_mycommunity, (dispersy,))
-    callback.register(community.create_my_messages, (1,), delay=5.0)
     
     # At some point kill the connection
     conn.send(dispersy.lan_address)
     
-    address =  conn.recv()
-    print "Create Introduction Request! "
-    callback.call(dispersy.create_introduction_request, (community,
-                                         WalkCandidate(address, False, address, address, u"unknown"), 
-                                         True, 
-                                         True))
+    for _ in range(n-1):
+        address = conn.recv()
+        print "Create Introduction Request! "
+        callback.call(dispersy.create_introduction_request, (community,WalkCandidate(address, False, address, address, u"unknown"),True,True))
+    callback.register(community.create_my_messages, (1,), delay=5.0)
+    
+    try:
+        time.sleep(20)
+    except:
+        print "Did you do something?"
+    finally:
+        dispersy.stop()
         
 def main(num_instances, show_logs):
     if show_logs:
@@ -95,20 +100,20 @@ def main(num_instances, show_logs):
     process_list = []
     for _ in range(num_instances):
         conn1, conn2 = Pipe()
-        p = Process(target=single_callback_single_dispersy, args=(conn2,))
+        p = Process(target=single_callback_single_dispersy, args=(conn2,num_instances))
         process_list.append(DispersyProcess(p, conn1))
         p.start()
         
     for p in process_list:
         p.lan = p.pipe.recv()
-    
+
     for x in process_list:
         for y in process_list:
             if x != y:
                 x.pipe.send(y.lan)
                 
     try:
-        time.sleep(10)
+        time.sleep(20)
     except:
         print "Did you do something?"
     finally:
