@@ -71,3 +71,8 @@ class MyCommunity(Community):
     def dispersy_enable_candidate_walker(self):
         return False
     
+    @property
+    def dispersy_enable_candidate_walker_responses(self):
+        # initialization and nat meta messages will still be created
+        return True
+    

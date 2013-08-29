@@ -6,13 +6,11 @@ if [ $# -ge 1 ]
 then n=$1
 else n=1
 fi
-# This second argument determines whether logging will be 
-# shown in the output
+# This second argument adds a single argument
 if [ $# -eq 2 ]
 then log=$2
-else log=False
 fi
 
-python -O -m src.main -n $n -i $log &
+python -O -m src.main -n $n $log &
 
 wait

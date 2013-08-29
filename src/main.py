@@ -12,7 +12,7 @@ import os
 import argparse
 from os.path import expanduser
 from datetime import datetime
-from thread import get_ident
+from multiprocessing import Process, Pipe
 
 from dispersy.callback import Callback
 from dispersy.endpoint import StandaloneEndpoint
@@ -21,6 +21,7 @@ from dispersy.candidate import WalkCandidate
 
 from src.extend.community import MyCommunity
 from src.extend.endpoint import MultiEndpoint
+from src.dispersy_process import DispersyProcess
 
 SECURITY = u"medium"
 
@@ -52,7 +53,7 @@ def create_mycommunity(dispersy):
     my_member = dispersy.get_new_member(SECURITY)
     return MyCommunity.join_community(dispersy, master_member, my_member)
         
-def single_callback_single_dispersy():
+def single_callback_single_dispersy(conn):
     # Create Dispersy object
     callback = Callback("MyDispersy")
     port1 = random.randint(10000, 20000)
@@ -74,7 +75,15 @@ def single_callback_single_dispersy():
     community = callback.call(create_mycommunity, (dispersy,))
     callback.register(community.create_my_messages, (1,), delay=5.0)
     
-    return (community, dispersy)
+    # At some point kill the connection
+    conn.send(dispersy.lan_address)
+    
+    address =  conn.recv()
+    print "Create Introduction Request! "
+    callback.call(dispersy.create_introduction_request, (community,
+                                         WalkCandidate(address, False, address, address, u"unknown"), 
+                                         True, 
+                                         True))
         
 def main(num_instances, show_logs):
     if show_logs:
@@ -83,40 +92,35 @@ def main(num_instances, show_logs):
         logging.config.fileConfig(logger_conf)
         logger = logging.getLogger(__name__)
     
-    dispersy_list = []
-    community = None
-    for i in range(num_instances):
-        community, dispersy = single_callback_single_dispersy()
-        dispersy_list.append(dispersy)
-    
-    for dispersy in dispersy_list:
-        for other in dispersy_list:
-            if dispersy != other:
-                dispersy.create_introduction_request(community,
-                                                     WalkCandidate(other.lan_address, False, other.lan_address, other.wan_address, u"unknown"), 
-                                                     True, 
-                                                     True)
+    process_list = []
+    for _ in range(num_instances):
+        conn1, conn2 = Pipe()
+        p = Process(target=single_callback_single_dispersy, args=(conn2,))
+        process_list.append(DispersyProcess(p, conn1))
+        p.start()
         
+    for p in process_list:
+        p.lan = p.pipe.recv()
+    
+    for x in process_list:
+        for y in process_list:
+            if x != y:
+                x.pipe.send(y.lan)
+                
     try:
-        time.sleep(25)
+        time.sleep(10)
     except:
-        print "Did you do something?" + str(dispersy.endpoint.get_address()[1])
+        print "Did you do something?"
     finally:
-        for dispersy in dispersy_list:
-            dispersy.stop()
+        for p in process_list:
+            p.pipe.close()
+            p.process.join()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance(s)')
-    parser.add_argument("-n", "--instances", metavar="Number of instances", default="2", help="Create # Dispersy instances")
-    parser.add_argument("-i", "--logging", metavar="Infologger", default="False", help="If True, logs will be shown in the cmd")
+    parser.add_argument("-n", type=int, help="Create n Dispersy instances")
+    parser.add_argument("-i", "--logging", action="store_true", help="If set, logs will be shown in the cmd")
     args = parser.parse_args()
-    
-    num = int(args.instances)
-    show_logs = True if args.logging == "True" else False;
-    main(num, show_logs)
-    
-    
-    
-    
-    
+
+    main(args.n, args.logging)   
     
