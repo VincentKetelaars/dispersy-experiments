@@ -12,6 +12,8 @@ from os.path import exists, isfile, isdir, getmtime, join
 import logging
 logger = logging.getLogger()
 
+UPDATE_TIME = 1 # Seconds
+
 class FilePusher(object):
     '''
     classdocs
@@ -53,7 +55,7 @@ class FilePusher(object):
                     s = f.read()
                     self._conn.send("Message! " + s)
                        
-            time.sleep(1)
+            time.sleep(UPDATE_TIME)
             
     def _list_files_to_send(self):
         all_files = []    

@@ -17,7 +17,6 @@ class DispersyProcess(object):
         self.__process = process
         self.__pipe = pipe
         self.__lan = None
-        self.__community = None
 
     def get_process(self):
         return self.__process
@@ -27,10 +26,7 @@ class DispersyProcess(object):
     
     def get_lan(self):
         return self.__lan
-
-    def get_community(self):
-        return self.__community
-
+    
 
     def set_process(self, process):
         self.__process = process
@@ -40,14 +36,10 @@ class DispersyProcess(object):
         
     def set_lan(self, lan):
         self.__lan = lan
-
-    def set_community(self, community):
-        self.__community = community
         
     
     lan = property(get_lan, set_lan)
     process = property(get_process, set_process)
     pipe = property(get_pipe, set_pipe)
-    community = property(get_community, set_community)
     
         

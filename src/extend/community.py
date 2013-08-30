@@ -18,6 +18,11 @@ from src.extend.payload import MyPayload
 import logging
 logger = logging.getLogger()
 
+DISTRIBUTION_DIRECTION = u"ASC" # "ASC" or "DESC"
+DISTRIBUTION_PRIORITY = 127
+NUMBER_OF_PEERS_TO_SYNC = 3
+MESSAGE_NAME = u"mymessage"
+
 class MyCommunity(Community):
     '''
     classdocs
@@ -40,9 +45,9 @@ class MyCommunity(Community):
         """
         Overwrite
         """
-        self._distribution = FullSyncDistribution(u"ASC", 127, True)
-        return [Message(self, u"mymessage", MemberAuthentication(encoding="sha1"), PublicResolution(), self._distribution,
-                         CommunityDestination(2), MyPayload(), self.check_callback, self.handle_callback)]
+        self._distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
+        return [Message(self, MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), self._distribution,
+                         CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), MyPayload(), self.check_callback, self.handle_callback)]
         
     def check_callback(self, messages):
         """
@@ -68,7 +73,7 @@ class MyCommunity(Community):
         if message is None:
             logger.info("The message is empty!")
             message = "Message! sender_member_id: " + self._short_member_id()+", sender_port: " + self._port()
-        meta = self.get_meta_message(u"mymessage")
+        meta = self.get_meta_message(MESSAGE_NAME)
         messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._distribution.claim_sequence_number()), 
                               payload=(message,)) for _ in xrange(count)]
         self.dispersy.store_update_forward(messages, True, False, True)

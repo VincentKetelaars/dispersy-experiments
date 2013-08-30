@@ -17,6 +17,10 @@ from src.dispersy_instance import DispersyInstance
 from src.filepusher import FilePusher
 
 import logging.config
+
+# Time in seconds
+UPDATE_TIME = 1
+TOTAL_RUN_TIME = 20 # Integer
         
 def main(num_instances, show_logs, directory=None, files=[]):
     if show_logs:
@@ -64,7 +68,7 @@ def main(num_instances, show_logs, directory=None, files=[]):
     Process(target=filepusher.run).start()
     logger.info("FilePusher is running!")
     
-    counter = 20
+    counter = int(TOTAL_RUN_TIME / UPDATE_TIME)
     while counter > 0:
         if fileconn.poll():
             m = fileconn.recv()
@@ -72,7 +76,7 @@ def main(num_instances, show_logs, directory=None, files=[]):
             process_list[0].pipe.send("message")
             process_list[0].pipe.send(m)
             logger.info("Message send to process!")
-        time.sleep(1)
+        time.sleep(UPDATE_TIME)
         counter -= 1
         
     logger.info("Done fooling around for today!")
