@@ -98,7 +98,7 @@ class DispersyInstance(object):
         self._stop()
         
     def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
-        logger.info("Registered %d messages: %s with delay %f", count, message, delay)
+        logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)
         self._callback.register(self._community.create_my_messages, (count,message), delay=delay)        
         
     def _loop(self):

@@ -1,4 +1,4 @@
-export PYTHONPATH=${PYTHONPATH}:/home/vincent/git/dispersy-experiments/
+export PYTHONPATH=${PYTHONPATH}:${PWD}
 
 python -O -m src.main -n $* &
 

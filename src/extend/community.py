@@ -12,22 +12,22 @@ from dispersy.resolution import PublicResolution
 from dispersy.distribution import FullSyncDistribution
 from dispersy.destination import CommunityDestination
 
-from src.extend.conversion import MyConversion
-from src.extend.payload import MyPayload
+from src.extend.conversion import SimpleFileConversion
+from src.extend.payload import SimpleFileCarrier, SimpleFilePayload
 
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger()    
 
 DISTRIBUTION_DIRECTION = u"ASC" # "ASC" or "DESC"
 DISTRIBUTION_PRIORITY = 127
 NUMBER_OF_PEERS_TO_SYNC = 3
-MESSAGE_NAME = u"mymessage"
-
+    
 class MyCommunity(Community):
     '''
     classdocs
     '''
 
+    MESSAGE_NAME = u"mymessage"
 
     def __init__(self, dispersy, master_member):
         '''
@@ -39,15 +39,15 @@ class MyCommunity(Community):
         """
         Overwrite
         """
-        return [DefaultConversion(self), MyConversion(self)]
+        return [DefaultConversion(self), SimpleFileConversion(self)]
     
     def initiate_meta_messages(self):
         """
         Overwrite
         """
         self._distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
-        return [Message(self, MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), self._distribution,
-                         CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), MyPayload(), self.check_callback, self.handle_callback)]
+        return [Message(self, self.MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), self._distribution,
+                         CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), SimpleFilePayload(), self.check_callback, self.handle_callback)]
         
     def check_callback(self, messages):
         """
@@ -61,7 +61,7 @@ class MyCommunity(Community):
         Handle Callback
         """
         for x in messages:
-            print x.payload.data    
+            print x.payload.filename +": "+x.payload.data    
             
     def _short_member_id(self):
         return str(self.my_member.mid.encode("HEX"))[0:5]            
@@ -72,10 +72,10 @@ class MyCommunity(Community):
     def create_my_messages(self, count, message=None):
         if message is None:
             logger.info("The message is empty!")
-            message = "Message! sender_member_id: " + self._short_member_id()+", sender_port: " + self._port()
-        meta = self.get_meta_message(MESSAGE_NAME)
+            message = SimpleFileCarrier("Message! sender_member_id: " + self._short_member_id()+", sender_port: " + self._port(),".")
+        meta = self.get_meta_message(self.MESSAGE_NAME)
         messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._distribution.claim_sequence_number()), 
-                              payload=(message,)) for _ in xrange(count)]
+                              payload=(message.filename, message.data)) for _ in xrange(count)]
         self.dispersy.store_update_forward(messages, True, False, True)
         
     @property

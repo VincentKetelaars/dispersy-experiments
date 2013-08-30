@@ -9,6 +9,8 @@ import time
 from os import listdir
 from os.path import exists, isfile, isdir, getmtime, join
 
+from src.extend.payload import SimpleFileCarrier
+
 import logging
 logger = logging.getLogger()
 
@@ -53,7 +55,7 @@ class FilePusher(object):
             for absfilename in diff:
                 with file(absfilename) as f:
                     s = f.read()
-                    self._conn.send("Message! " + s)
+                    self._conn.send(SimpleFileCarrier(s, absfilename))
                        
             time.sleep(UPDATE_TIME)
             

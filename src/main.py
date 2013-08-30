@@ -61,10 +61,7 @@ def main(num_instances, show_logs, directory=None, files=[]):
         filepusher = FilePusher(conn2, directory=dirc)
     else:
         filepusher = FilePusher(conn2, directory=directory, files=files)
-    
-    process_list[0].pipe.send("message")
-    process_list[0].pipe.send("Message! Testing this shit!:D")
-    
+        
     Process(target=filepusher.run).start()
     logger.info("FilePusher is running!")
     
