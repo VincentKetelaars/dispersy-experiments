@@ -1,6 +1,3 @@
 [submodule "dipsersy"]
 	path = dipsersy
 	url = git://github.com/VincentKetelaars/dispersy.git
-[submodule "tribler"]
-	path = tribler
-	url = ssh://www.github.com:VincentKetelaars/tribler.git
