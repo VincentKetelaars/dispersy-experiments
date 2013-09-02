@@ -11,9 +11,10 @@ from os.path import expanduser
 from datetime import datetime
 
 from dispersy.callback import Callback
-from dispersy.endpoint import StandaloneEndpoint
+from dispersy.endpoint import StandaloneEndpoint, TunnelEndpoint
 from dispersy.dispersy import Dispersy
 from dispersy.candidate import WalkCandidate
+from Tribler.Core.Swift.SwiftProcess import SwiftProcess
 
 from src.extend.community import MyCommunity
 from src.extend.endpoint import MultiEndpoint
@@ -47,7 +48,7 @@ MASTER_MEMBER_PUBLIC_KEY = "307e301006072a8648ce3d020106052b81040024036a0004004b
 RANDOM_PORTS = (10000, 20000)
 
 DEFAULT_MESSAGE_COUNT = 1
-DEFAULT_MESSAGE_DELAY = 1.0
+DEFAULT_MESSAGE_DELAY = 0.0
 
 UPDATE_TIME = 0.5 # Seconds
 
@@ -72,7 +73,16 @@ class DispersyInstance(object):
         endpoint = MultiEndpoint()
         endpoint.add_endpoint(StandaloneEndpoint(port1))
     #     endpoint.add_endpoint(StandaloneEndpoint(port2))
-        endpoint = StandaloneEndpoint(port1);
+        
+        binpath = "/home/vincent/Desktop/test_large"
+        workdir = binpath
+        zerostatedir = binpath
+        listenport = port1
+        httpgwport = None
+        cmdgwport = None
+        spmgr = None
+        swift_process = SwiftProcess(binpath, workdir, zerostatedir, listenport, httpgwport, cmdgwport, spmgr)
+        endpoint = TunnelEndpoint(swift_process);
         
         dt = datetime.now()
         working_dir = expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "_" + str(getpid()) + "/"
