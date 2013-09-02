@@ -39,3 +39,35 @@ class SimpleFilePayload(Payload):
         @property
         def filename(self):
             return self._filename
+        
+class FileHashCarrier():
+    
+    def __init__(self, hash, filename):
+        self._hash = hash
+        self._filename = filename
+        
+    @property
+    def hash(self):
+        return self._hash
+    
+    @property
+    def filename(self):
+        return self._filename
+    
+    
+class FileHashPayload(Payload):
+    
+    class Implementation(Payload.Implementation):
+        
+        def __init__(self, meta, hash, filename):
+            super(Payload.Implementation, self).__init__(meta)
+            self._hash = hash
+            self._filename = filename
+        
+        @property
+        def hash(self):
+            return self._hash
+        
+        @property
+        def filename(self):
+            return self._filename

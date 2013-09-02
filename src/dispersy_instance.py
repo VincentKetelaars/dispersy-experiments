@@ -11,13 +11,13 @@ from os.path import expanduser
 from datetime import datetime
 
 from dispersy.callback import Callback
-from dispersy.endpoint import StandaloneEndpoint, TunnelEndpoint
+from dispersy.endpoint import StandaloneEndpoint
 from dispersy.dispersy import Dispersy
 from dispersy.candidate import WalkCandidate
 from Tribler.Core.Swift.SwiftProcess import SwiftProcess
 
 from src.extend.community import MyCommunity
-from src.extend.endpoint import MultiEndpoint
+from src.extend.endpoint import MultiEndpoint, SwiftEndpoint
 
 import logging
 logger = logging.getLogger()
@@ -74,15 +74,15 @@ class DispersyInstance(object):
         endpoint.add_endpoint(StandaloneEndpoint(port1))
     #     endpoint.add_endpoint(StandaloneEndpoint(port2))
         
-        binpath = "/home/vincent/Desktop/test_large"
-        workdir = binpath
-        zerostatedir = binpath
+        binpath = "/home/vincent/svn/libswift/ppsp/swift"
+        workdir = "/home/vincent/Desktop/test_large"
+        zerostatedir = "/home/vincent/Desktop/tests_dest"
         listenport = port1
         httpgwport = None
         cmdgwport = None
         spmgr = None
         swift_process = SwiftProcess(binpath, workdir, zerostatedir, listenport, httpgwport, cmdgwport, spmgr)
-        endpoint = TunnelEndpoint(swift_process);
+        endpoint = SwiftEndpoint(swift_process)
         
         dt = datetime.now()
         working_dir = expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "_" + str(getpid()) + "/"
@@ -109,7 +109,7 @@ class DispersyInstance(object):
         
     def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
         logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)
-        self._callback.register(self._community.create_my_messages, (count,message), delay=delay)        
+        self._callback.register(self._community.create_simple_messages, (count,message), delay=delay)        
         
     def _loop(self):
         self._continue = True

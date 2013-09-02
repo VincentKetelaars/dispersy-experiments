@@ -4,7 +4,16 @@ Created on Aug 27, 2013
 @author: Vincent Ketelaars
 '''
 
-from dispersy.endpoint import Endpoint
+from os.path import isfile
+
+from dispersy.endpoint import Endpoint, TunnelEndpoint
+from Tribler.Core.DownloadConfig import DownloadStartupConfig
+from Tribler.Core.Swift.SwiftDownloadImpl import SwiftDownloadImpl
+from Tribler.Core.Swift.SwiftDef import SwiftDef
+from Tribler.Core.Swift.SwiftProcess import SwiftProcess
+
+import logging
+logger = logging.getLogger()
 
 class NoEndpointAvailableException(Exception):
     pass
@@ -78,5 +87,24 @@ class MultiEndpoint(Endpoint):
         return self._endpoint
             
     
+class SwiftEndpoint(TunnelEndpoint):
+    
+    def __init__(self, swift_process):
+        super(SwiftEndpoint, self).__init__(swift_process)
         
+        dsc = DownloadStartupConfig()
+        dsc.set_dest_dir("/home/vincent/Desktop/tests_dest")
+        self._dsc = dsc
+    
+    def open(self, dispersy):
+        super(SwiftEndpoint, self).open(dispersy)
+        self._swift.start_cmd_connection()        
+        
+    def add_file(self, filename):
+        """
+        This method lets the swiftprocess know that an additional file is available. 
+        It returns the roothash of this file
+        """
+        if isfile(filename):
+            pass
         
