@@ -43,7 +43,7 @@ class MyCommunity(Community):
         """
         Overwrite
         """
-        return [DefaultConversion(self), SimpleFileConversion(self), FileHashConversion]
+        return [DefaultConversion(self), SimpleFileConversion(self), FileHashConversion(self)]
     
     def initiate_meta_messages(self):
         """
@@ -70,16 +70,21 @@ class MyCommunity(Community):
             print x.payload.filename +": "+x.payload.data
             
     def file_hash_check(self, messages):
-        pass
+        for x in messages:
+            yield x
     
     def file_hash_handle(self, messages):
-        pass
+        for x in messages:
+            self._dispersy.endpoint.start_download(x.payload.filename, x.payload.hash, x.payload.address)
             
     def _short_member_id(self):
-        return str(self.my_member.mid.encode("HEX"))[0:5]            
+        return str(self.my_member.mid.encode("HEX"))[0:5]     
+    
+    def _address(self):
+        return self._dispersy.endpoint.get_address()     
             
     def _port(self):
-        return str(self.dispersy.endpoint.get_address()[1])       
+        return str(self._dispersy.endpoint.get_address()[1])       
      
     def create_simple_messages(self, count, message=None):
         if message is None:
@@ -90,20 +95,20 @@ class MyCommunity(Community):
                               payload=(message.filename, message.data)) for _ in xrange(count)]
         self.dispersy.store_update_forward(messages, True, False, True)
         
-    def create_file_hash_message(self, count, filename):
+    def create_file_hash_messages(self, count, file_hash_message):
         # Make sure you have the filename, and a proper hash
-        if isfile(filename):
+        if isfile(file_hash_message.filename):
             
             # Let Swift know that it should seed this file
             # Get a hash of the file 
-            hash = self._dispersy.endpoint.add_file(filename)
+            hash = self._dispersy.endpoint.add_file(file_hash_message.filename)
             
-            if len(hash) == HASH_LENGTH:
+            if hash is not None and len(hash) == HASH_LENGTH:
             
                 # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
                 meta = self.get_meta_message(self.FILE_HASH_MESSAGE)
                 messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._distribution.claim_sequence_number()), 
-                                      payload=(filename, hash)) for _ in xrange(count)]
+                                      payload=(file_hash_message.filename, hash, self._address())) for _ in xrange(count)]
                 self.dispersy.store_update_forward(messages, True, False, True)
         
     @property

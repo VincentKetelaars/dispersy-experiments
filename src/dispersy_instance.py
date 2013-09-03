@@ -18,6 +18,7 @@ from Tribler.Core.Swift.SwiftProcess import SwiftProcess
 
 from src.extend.community import MyCommunity
 from src.extend.endpoint import MultiEndpoint, SwiftEndpoint
+from src.extend.payload import SimpleFileCarrier, FileHashCarrier
 
 import logging
 logger = logging.getLogger()
@@ -109,7 +110,12 @@ class DispersyInstance(object):
         
     def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
         logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)
-        self._callback.register(self._community.create_simple_messages, (count,message), delay=delay)        
+        if isinstance(message, SimpleFileCarrier):
+            self._callback.register(self._community.create_simple_messages, (count,message), delay=delay)
+        elif isinstance(message, FileHashCarrier):
+            self._callback.register(self._community.create_file_hash_messages, (count,message), delay=delay)
+        else:
+            self._callback.register(self._community.create_simple_messages, (count,None), delay=delay)
         
     def _loop(self):
         self._continue = True
