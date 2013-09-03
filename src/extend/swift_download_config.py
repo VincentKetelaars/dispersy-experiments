@@ -28,7 +28,7 @@ class FakeSession(object):
 class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     
     def __init__(self, session):
-        SwiftDownloadImpl.__init__(self, session, SwiftDef())       
+        SwiftDownloadImpl.__init__(self, session, SwiftDef())   
         
     def set_def(self, sdef):
         self.sdef = sdef
@@ -38,4 +38,5 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     
     def setup(self, dcfg=None, pstate=None, initialdlstatus=DLSTATUS_STOPPED, lm_network_engine_wrapper_created_callback=None, lm_network_vod_event_callback=None):
         # By setting initialstatus=DLSTATUS_STOPPED, no lm_network stuff will be created
-        SwiftDownloadImpl.setup(dcfg, pstate, initialdlstatus, lm_network_engine_wrapper_created_callback, lm_network_vod_event_callback)
+        # We rely on the fact that a proper import is done for DownloadStartupConfig in this function
+        SwiftDownloadImpl.setup(self, dcfg, pstate, initialdlstatus, lm_network_engine_wrapper_created_callback, lm_network_vod_event_callback)
