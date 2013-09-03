@@ -83,7 +83,7 @@ class DispersyInstance(object):
         cmdgwport = None
         spmgr = None
         swift_process = SwiftProcess(binpath, workdir, zerostatedir, listenport, httpgwport, cmdgwport, spmgr)
-        endpoint = SwiftEndpoint(swift_process)
+        endpoint = SwiftEndpoint(swift_process, binpath)
         
         dt = datetime.now()
         working_dir = expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "_" + str(getpid()) + "/"

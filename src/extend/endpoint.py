@@ -91,17 +91,23 @@ class MultiEndpoint(Endpoint):
     
 class SwiftEndpoint(TunnelEndpoint):
     
-    def __init__(self, swift_process):
+    def __init__(self, swift_process, binpath):
         super(SwiftEndpoint, self).__init__(swift_process)
+        
+        self._swift_path = binpath
         
         # This object must have: get_def, get_selected_files, get_max_speed, get_swift_meta_dir
         d = FakeSessionSwiftDownloadImpl(FakeSession())
         d.setup()
         # get_selected_files is initialized to empty list
         # get_max_speed for UPLOAD and DOWNLOAD are set to 0 initially (infinite)
-        d.set_swift_meta_dir("/home/vincent/Desktop/tests_dest")
+        d.set_swift_meta_dir("/home/vincent/Desktop/test_large")
         d.set_dest_dir("/home/vincent/Desktop/tests_dest")
         self._d = d
+        
+    def send(self, candidates, packets):
+        logger.info("Endpoint send: ")
+        TunnelEndpoint.send(self, candidates, packets)
     
     def open(self, dispersy):
         super(SwiftEndpoint, self).open(dispersy)
@@ -113,21 +119,16 @@ class SwiftEndpoint(TunnelEndpoint):
         It returns the roothash of this file
         """
         if isfile(filename):
-            roothash = self.get_roothash(filename)
-            tracker = None
-            chunksize = None
-            duration = None
-            sd = SwiftDef(roothash, tracker, chunksize, duration)
-            
-            self._d.set_def(sd)
+            sdef = SwiftDef()
+            sdef.add_content(filename)
+            sdef.finalize(self._swift_path, destdir=self._d.get_dest_dir())
+            self._d.set_def(sdef)
             self._swift.start_download(self._d)
-            return roothash
+            return sdef.get_roothash()
         return None
-        
-    def get_roothash(self, filename):
-        return "00000000000000000000"
     
     def start_download(self, filename, roothash, address):
         logger.info("Start download: " +  filename +" : "+ roothash + address)
+        
         
     

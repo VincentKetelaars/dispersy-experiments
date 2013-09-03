@@ -98,13 +98,11 @@ class MyCommunity(Community):
     def create_file_hash_messages(self, count, file_hash_message):
         # Make sure you have the filename, and a proper hash
         if isfile(file_hash_message.filename):
-            
             # Let Swift know that it should seed this file
             # Get a hash of the file 
             hash = self._dispersy.endpoint.add_file(file_hash_message.filename)
             
             if hash is not None and len(hash) == HASH_LENGTH:
-            
                 # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
                 meta = self.get_meta_message(self.FILE_HASH_MESSAGE)
                 messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._distribution.claim_sequence_number()), 
