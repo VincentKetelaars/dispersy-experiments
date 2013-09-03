@@ -68,8 +68,8 @@ class DispersyInstance(object):
         
     def run(self, num_instances):     
         # Create Dispersy object
-        self._callback = Callback("MyDispersy")
         port1 = random.randint(*RANDOM_PORTS)
+        self._callback = Callback("MyDispersy-" + str(port1))
     #     port2 = random.randint(10000, 20000)
         endpoint = MultiEndpoint()
         endpoint.add_endpoint(StandaloneEndpoint(port1))

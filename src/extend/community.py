@@ -31,7 +31,7 @@ class MyCommunity(Community):
     '''
 
     SIMPLE_MESSAGE_NAME = u"simple_message"
-    FILE_HASH_MESSAGE = u"file_hash"
+    FILE_HASH_MESSAGE = u"file_hash_message"
 
     def __init__(self, dispersy, master_member):
         '''
@@ -49,10 +49,11 @@ class MyCommunity(Community):
         """
         Overwrite
         """
-        self._distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
-        return [Message(self, self.SIMPLE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), self._distribution,
+        self._simple_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
+        self._file_hash_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
+        return [Message(self, self.SIMPLE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), self._simple_distribution,
                          CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), SimpleFilePayload(), self.simple_message_check, self.simple_message_handle),
-                Message(self, self.FILE_HASH_MESSAGE, MemberAuthentication(encoding="sha1"), PublicResolution(), self._distribution,
+                Message(self, self.FILE_HASH_MESSAGE, MemberAuthentication(encoding="sha1"), PublicResolution(), self._file_hash_distribution,
                          CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), FileHashPayload(), self.file_hash_check, self.file_hash_handle)]
         
     def simple_message_check(self, messages):
@@ -75,23 +76,23 @@ class MyCommunity(Community):
     
     def file_hash_handle(self, messages):
         for x in messages:
-            self._dispersy.endpoint.start_download(x.payload.filename, x.payload.hash, x.payload.address)
+            self.dispersy.endpoint.start_download(x.payload.filename, x.payload.hash, x.payload.address)
             
     def _short_member_id(self):
         return str(self.my_member.mid.encode("HEX"))[0:5]     
     
     def _address(self):
-        return self._dispersy.endpoint.get_address()     
+        return self.dispersy.endpoint.get_address()     
             
     def _port(self):
-        return str(self._dispersy.endpoint.get_address()[1])       
+        return str(self.dispersy.endpoint.get_address()[1])       
      
     def create_simple_messages(self, count, message=None):
         if message is None:
             logger.info("The message is empty!")
             message = SimpleFileCarrier("Message! sender_member_id: " + self._short_member_id()+", sender_port: " + self._port(),".")
         meta = self.get_meta_message(self.SIMPLE_MESSAGE_NAME)
-        messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._distribution.claim_sequence_number()), 
+        messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._simple_distribution.claim_sequence_number()), 
                               payload=(message.filename, message.data)) for _ in xrange(count)]
         self.dispersy.store_update_forward(messages, True, False, True)
         
@@ -100,12 +101,12 @@ class MyCommunity(Community):
         if isfile(file_hash_message.filename):
             # Let Swift know that it should seed this file
             # Get a hash of the file 
-            hash = self._dispersy.endpoint.add_file(file_hash_message.filename)
+            hash = self.dispersy.endpoint.add_file(file_hash_message.filename)
             
             if hash is not None and len(hash) == HASH_LENGTH:
                 # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
                 meta = self.get_meta_message(self.FILE_HASH_MESSAGE)
-                messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._distribution.claim_sequence_number()), 
+                messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
                                       payload=(file_hash_message.filename, hash, self._address())) for _ in xrange(count)]
                 self.dispersy.store_update_forward(messages, True, False, True)
         

@@ -20,7 +20,7 @@ import logging.config
 
 # Time in seconds
 UPDATE_TIME = 1
-TOTAL_RUN_TIME = 20 # Integer
+TOTAL_RUN_TIME = 30 # Integer
         
 def main(num_instances, show_logs, directory=None, files=[]):
     if show_logs:
@@ -101,7 +101,11 @@ if __name__ == '__main__':
     parser.add_argument("-i", "--logging", action="store_true", help="If set, logs will be shown in the cmd")
     parser.add_argument("-d", "--directory",help="List directory of files to send")
     parser.add_argument("-f", "--files", nargs="+", help="List files to send")
+    parser.add_argument("-t", "--time",type=int, help="Set runtime")
     args = parser.parse_args()
+    
+    if args.time:
+        TOTAL_RUN_TIME = args.time
 
     main(args.n, args.logging, args.directory, args.files)   
     

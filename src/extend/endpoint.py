@@ -106,12 +106,14 @@ class SwiftEndpoint(TunnelEndpoint):
         self._d = d
         
     def send(self, candidates, packets):
-        logger.info("Endpoint send: ")
         TunnelEndpoint.send(self, candidates, packets)
     
     def open(self, dispersy):
         super(SwiftEndpoint, self).open(dispersy)
-        self._swift.start_cmd_connection()        
+        self._swift.start_cmd_connection()
+    
+    def get_address(self):
+        return (self._dispersy.lan_address[0],self._swift.get_listen_port())
         
     def add_file(self, filename):
         """
@@ -124,11 +126,14 @@ class SwiftEndpoint(TunnelEndpoint):
             sdef.finalize(self._swift_path, destdir=self._d.get_dest_dir())
             self._d.set_def(sdef)
             self._swift.start_download(self._d)
-            return sdef.get_roothash()
+            return sdef.get_roothash_as_hex()
         return None
     
     def start_download(self, filename, roothash, address):
-        logger.info("Start download: " +  filename +" : "+ roothash + address)
+        logger.info("Start download: %s %s %s %s", filename, roothash, address[0], address[1])
+        self._d.set_def(SwiftDef(roothash=roothash))
+        # d is only needed for the roothash
+        self._swift.add_peer(self._d, address)
         
         
     

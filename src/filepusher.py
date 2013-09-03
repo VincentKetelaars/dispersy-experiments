@@ -58,14 +58,15 @@ class FilePusher(object):
                     if len(s) > 2**16-60:
                         self._conn.send(FileHashCarrier(absfilename, None, None))
                     else:
-                        self._conn.send(SimpleFileCarrier(s, absfilename))
+                        self._conn.send(SimpleFileCarrier(absfilename, s))
                        
             time.sleep(UPDATE_TIME)
             
     def _list_files_to_send(self):
         all_files = []    
         if self._dir: # Get all files in the directory
-            all_files = [ join(self._dir,f) for f in listdir(self._dir) if isfile(join(self._dir,f)) ]
+            all_files = [ join(self._dir,f) for f in listdir(self._dir) if isfile(join(self._dir,f)) and 
+                         not (f.endswith(".mbinmap") or f.endswith(".mhash")) ]
         if self._files:
             all_files.extend(self._files)
         file_updates = [ (f, getmtime(f)) for f in all_files] # create tuple of file and last modified timestamp
