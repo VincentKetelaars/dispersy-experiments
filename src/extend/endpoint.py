@@ -5,6 +5,7 @@ Created on Aug 27, 2013
 '''
 
 from os.path import isfile
+import binascii
 
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from Tribler.Core.DownloadConfig import DownloadStartupConfig
@@ -113,6 +114,7 @@ class SwiftEndpoint(TunnelEndpoint):
         self._swift.start_cmd_connection()
     
     def get_address(self):
+        # Dispersy retrieves the local ip
         return (self._dispersy.lan_address[0],self._swift.get_listen_port())
         
     def add_file(self, filename):
@@ -126,11 +128,14 @@ class SwiftEndpoint(TunnelEndpoint):
             sdef.finalize(self._swift_path, destdir=self._d.get_dest_dir())
             self._d.set_def(sdef)
             self._swift.start_download(self._d)
+            
+            # returning get_roothash() gives an error somewhere (perhaps message?)
             return sdef.get_roothash_as_hex()
         return None
     
     def start_download(self, filename, roothash, address):
         logger.info("Start download: %s %s %s %s", filename, roothash, address[0], address[1])
+        roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         self._d.set_def(SwiftDef(roothash=roothash))
         # d is only needed for the roothash
         self._swift.add_peer(self._d, address)

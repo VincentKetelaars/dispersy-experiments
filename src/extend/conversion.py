@@ -59,7 +59,7 @@ class FileHashConversion(BinaryConversion):
         self.define_meta_message(chr(13), community.get_meta_message(community.FILE_HASH_MESSAGE), self.encode_payload, self.decode_payload)
         
     def encode_payload(self, message):
-        m = message.payload.filename + self.SEPARATOR + message.payload.hash + self.SEPARATOR + str(message.payload.address)
+        m = message.payload.filename + self.SEPARATOR + str(message.payload.hash) + self.SEPARATOR + str(message.payload.address)
         return struct.pack("!L", len(m)), m            
 
     def decode_payload(self, placeholder, offset, data):

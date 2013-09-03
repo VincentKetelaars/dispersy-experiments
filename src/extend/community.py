@@ -104,6 +104,7 @@ class MyCommunity(Community):
             hash = self.dispersy.endpoint.add_file(file_hash_message.filename)
             
             if hash is not None and len(hash) == HASH_LENGTH:
+                logger.info("Hash: %s", hash)
                 # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
                 meta = self.get_meta_message(self.FILE_HASH_MESSAGE)
                 messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
