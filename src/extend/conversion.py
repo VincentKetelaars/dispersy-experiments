@@ -72,12 +72,14 @@ class FileHashConversion(BinaryConversion):
             raise DropPacket("Insufficient packet size")
         data_payload = data[offset:offset + data_length]
         file_offset = data_payload.find(self.SEPARATOR)
-        filename = data_payload[0:file_offset]
-        data = data_payload[file_offset+2:]
-        address_offset = data_payload.find(self.SEPARATOR)
-        hash = data[:address_offset+2]
-        address_str = data[address_offset+4:]
+        filename = data_payload[0:file_offset]        
+        data = data_payload[file_offset + len(self.SEPARATOR):]
+        
+        address_offset = data.find(self.SEPARATOR)
+        hash = data[:address_offset]        
+        address_str = data[address_offset + len(self.SEPARATOR):]
         address = self._address_string_to_tuple(address_str)
+        
         offset += data_length
         
         return offset, placeholder.meta.payload.implement(filename, hash, address)

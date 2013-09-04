@@ -103,14 +103,12 @@ class MyCommunity(Community):
             # Let Swift know that it should seed this file
             # Get a hash of the file 
             addr = None
+            hash = self.dispersy.endpoint.add_file(file_hash_message.filename)
             for candidate in self.dispersy_yield_candidates():
                 addr = candidate.get_destination_address(self._address()[0])
-                logger.info("Candidate: %s %s", addr[0], addr[1])
-                # Perhaps every candidate should be added as peer?
-            hash = self.dispersy.endpoint.add_file(file_hash_message.filename, addr)
+                self.dispersy.endpoint.add_peer(addr)
             
             if hash is not None and len(hash) == HASH_LENGTH:
-                logger.info("Hash: %s", hash)
                 # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
                 meta = self.get_meta_message(self.FILE_HASH_MESSAGE)
                 messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 

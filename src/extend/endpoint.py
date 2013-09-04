@@ -4,7 +4,8 @@ Created on Aug 27, 2013
 @author: Vincent Ketelaars
 '''
 
-from os.path import isfile
+from os import makedirs
+from os.path import isfile, isdir, dirname
 import binascii
 
 from dispersy.endpoint import Endpoint, TunnelEndpoint
@@ -118,7 +119,7 @@ class SwiftEndpoint(TunnelEndpoint):
         # Dispersy retrieves the local ip
         return (self._dispersy.lan_address[0],self._swift.get_listen_port())
         
-    def add_file(self, filename, addr):
+    def add_file(self, filename):
         """
         This method lets the swiftprocess know that an additional file is available. 
         It returns the roothash of this file
@@ -126,19 +127,24 @@ class SwiftEndpoint(TunnelEndpoint):
         if isfile(filename):
             sdef = SwiftDef()
             sdef.add_content(filename)
-            sdef.finalize(self._swift_path, destdir=self._d.get_dest_dir())
-            self._d.set_def(sdef)            
+            sdef.finalize(self._swift_path, destdir=dirname(filename))
+            self._d.set_def(sdef)
             self._d.set_dest_dir(filename)
             self._swift.start_download(self._d)
-            self._swift.add_peer(self._d, addr)
             
             # returning get_roothash() gives an error somewhere (perhaps message?)
             return sdef.get_roothash_as_hex()
         return None
     
+    def add_peer(self, addr):
+        self._swift.add_peer(self._d, addr)        
+    
     def start_download(self, filename, roothash, address, dest_dir):
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
-        self._d.set_dest_dir(dest_dir)
+        new_dir = dest_dir +"/"+str(self._swift.get_listen_port())
+        if not isdir(new_dir):
+            makedirs(new_dir)
+        self._d.set_dest_dir(new_dir)
         self._d.set_def(SwiftDef(roothash=roothash))
         self._swift.start_download(self._d)
     
