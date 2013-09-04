@@ -58,8 +58,12 @@ class DispersyInstance(object):
     Instance of Dispersy that runs on its own process
     '''
 
-    def __init__(self, conn):    
-        self._conn = conn        
+    def __init__(self, conn, dest_dir, swift_binpath, swift_workdir=None, swift_zerostatedir=None):
+        self._conn = conn
+        self._dest_dir = dest_dir
+        self._swift_binpath = swift_binpath
+        self._swift_workdir = swift_workdir
+        self._swift_zerostatedir = swift_zerostatedir
 
     def _create_mycommunity(self):    
         master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
@@ -74,16 +78,13 @@ class DispersyInstance(object):
         endpoint = MultiEndpoint()
         endpoint.add_endpoint(StandaloneEndpoint(port1))
     #     endpoint.add_endpoint(StandaloneEndpoint(port2))
-        
-        binpath = "/home/vincent/svn/libswift/ppsp/swift"
-        workdir = "/home/vincent/Desktop/test_large"
-        zerostatedir = "/home/vincent/Desktop/tests_dest"
+    
         listenport = port1
         httpgwport = None
         cmdgwport = None
         spmgr = None
-        swift_process = SwiftProcess(binpath, workdir, zerostatedir, listenport, httpgwport, cmdgwport, spmgr)
-        endpoint = SwiftEndpoint(swift_process, binpath)
+        swift_process = SwiftProcess(self._swift_binpath, self._swift_workdir, self._swift_zerostatedir, listenport, httpgwport, cmdgwport, spmgr)
+        endpoint = SwiftEndpoint(swift_process, self._swift_binpath)
         
         dt = datetime.now()
         working_dir = expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "_" + str(getpid()) + "/"
@@ -95,11 +96,13 @@ class DispersyInstance(object):
         print "Dispersy is listening on port %d" % self._dispersy.lan_address[1]
         
         self._community = self._callback.call(self._create_mycommunity)
+        self._community.dest_dir = self.dest_dir
         
         # At some point kill the self._connection
         self._conn.send(self._dispersy.lan_address)
         
-        for _ in range(num_instances-1):
+        num = self._conn.recv()
+        for _ in range(num):
             address = self._conn.recv()
             self._callback.call(self._dispersy.create_introduction_request, (self._community, WalkCandidate(address, False, address, address, u"unknown"),
                                                                              True,True))
@@ -135,3 +138,7 @@ class DispersyInstance(object):
     def _stop(self):
         self._conn.close()
         self._dispersy.stop()
+        
+    @property
+    def dest_dir(self):
+        return self._dest_dir

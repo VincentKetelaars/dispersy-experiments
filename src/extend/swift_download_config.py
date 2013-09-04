@@ -35,6 +35,9 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         
     def set_dest_dir(self, path):
         DownloadConfigInterface.set_dest_dir(self, path)
+        
+    def set_selected_files(self, files):
+        DownloadConfigInterface.set_selected_files(self, files)
     
     def setup(self, dcfg=None, pstate=None, initialdlstatus=DLSTATUS_STOPPED, lm_network_engine_wrapper_created_callback=None, lm_network_vod_event_callback=None):
         # By setting initialstatus=DLSTATUS_STOPPED, no lm_network stuff will be created

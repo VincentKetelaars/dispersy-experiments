@@ -38,6 +38,7 @@ class MyCommunity(Community):
         Constructor
         '''
         super(MyCommunity, self).__init__(dispersy, master_member)
+        self._dest_dir = None
         
     def initiate_conversions(self):
         """
@@ -76,7 +77,7 @@ class MyCommunity(Community):
     
     def file_hash_handle(self, messages):
         for x in messages:
-            self.dispersy.endpoint.start_download(x.payload.filename, x.payload.hash, x.payload.address)
+            self.dispersy.endpoint.start_download(x.payload.filename, x.payload.hash, x.payload.address, self._dest_dir)
             
     def _short_member_id(self):
         return str(self.my_member.mid.encode("HEX"))[0:5]     
@@ -101,7 +102,12 @@ class MyCommunity(Community):
         if isfile(file_hash_message.filename):
             # Let Swift know that it should seed this file
             # Get a hash of the file 
-            hash = self.dispersy.endpoint.add_file(file_hash_message.filename)
+            addr = None
+            for candidate in self.dispersy_yield_candidates():
+                addr = candidate.get_destination_address(self._address()[0])
+                logger.info("Candidate: %s %s", addr[0], addr[1])
+                # Perhaps every candidate should be added as peer?
+            hash = self.dispersy.endpoint.add_file(file_hash_message.filename, addr)
             
             if hash is not None and len(hash) == HASH_LENGTH:
                 logger.info("Hash: %s", hash)
@@ -119,4 +125,12 @@ class MyCommunity(Community):
     def dispersy_enable_candidate_walker_responses(self):
         # initialization and nat meta messages will still be created
         return True
+    
+    @property
+    def dest_dir(self):
+        return self._dest_dir
+    
+    @dest_dir.setter
+    def dest_dir(self, dest_dir):
+        self._dest_dir = dest_dir
     

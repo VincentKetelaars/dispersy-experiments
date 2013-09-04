@@ -8,10 +8,7 @@ from os.path import isfile
 import binascii
 
 from dispersy.endpoint import Endpoint, TunnelEndpoint
-from Tribler.Core.DownloadConfig import DownloadStartupConfig
-from Tribler.Core.Swift.SwiftDownloadImpl import SwiftDownloadImpl
 from Tribler.Core.Swift.SwiftDef import SwiftDef
-from Tribler.Core.Swift.SwiftProcess import SwiftProcess
 
 from src.extend.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 
@@ -102,8 +99,7 @@ class SwiftEndpoint(TunnelEndpoint):
         d.setup()
         # get_selected_files is initialized to empty list
         # get_max_speed for UPLOAD and DOWNLOAD are set to 0 initially (infinite)
-        d.set_swift_meta_dir("/home/vincent/Desktop/test_large")
-        d.set_dest_dir("/home/vincent/Desktop/tests_dest")
+        d.set_swift_meta_dir(None)
         self._d = d
         
     def send(self, candidates, packets):
@@ -112,12 +108,17 @@ class SwiftEndpoint(TunnelEndpoint):
     def open(self, dispersy):
         super(SwiftEndpoint, self).open(dispersy)
         self._swift.start_cmd_connection()
+        
+    def close(self, timeout=0.0):
+        self._swift.remove_download(self, True, True)
+        self._swift.early_shutdown()
+        super(TunnelEndpoint, self).close(timeout)
     
     def get_address(self):
         # Dispersy retrieves the local ip
         return (self._dispersy.lan_address[0],self._swift.get_listen_port())
         
-    def add_file(self, filename):
+    def add_file(self, filename, addr):
         """
         This method lets the swiftprocess know that an additional file is available. 
         It returns the roothash of this file
@@ -126,19 +127,18 @@ class SwiftEndpoint(TunnelEndpoint):
             sdef = SwiftDef()
             sdef.add_content(filename)
             sdef.finalize(self._swift_path, destdir=self._d.get_dest_dir())
-            self._d.set_def(sdef)
+            self._d.set_def(sdef)            
+            self._d.set_dest_dir(filename)
             self._swift.start_download(self._d)
+            self._swift.add_peer(self._d, addr)
             
             # returning get_roothash() gives an error somewhere (perhaps message?)
             return sdef.get_roothash_as_hex()
         return None
     
-    def start_download(self, filename, roothash, address):
-        logger.info("Start download: %s %s %s %s", filename, roothash, address[0], address[1])
+    def start_download(self, filename, roothash, address, dest_dir):
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
+        self._d.set_dest_dir(dest_dir)
         self._d.set_def(SwiftDef(roothash=roothash))
-        # d is only needed for the roothash
-        self._swift.add_peer(self._d, address)
-        
-        
+        self._swift.start_download(self._d)
     
