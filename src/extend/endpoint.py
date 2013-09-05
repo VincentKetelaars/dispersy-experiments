@@ -4,13 +4,15 @@ Created on Aug 27, 2013
 @author: Vincent Ketelaars
 '''
 
-from os import makedirs, urandom
-from os.path import isfile, isdir, dirname, basename
+from os import urandom
+from os.path import isfile, dirname, basename
 from time import time
+from sets import Set
 import binascii
 
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
+from dispersy.candidate import Candidate
 from Tribler.Core.Swift.SwiftDef import SwiftDef
 
 from src.extend.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
@@ -24,24 +26,13 @@ class NoEndpointAvailableException(Exception):
 class EndpointStatistics(Statistics):
     
     def __init__(self):
-        self._start_time = time()
-        self._is_alive = False # The endpoint is alive between open and close
-        self._id = urandom(16)
+        self.start_time = time()
+        self.is_alive = False # The endpoint is alive between open and close
+        self.id = urandom(16)
+        self.known_addresses = Set()
         
     def update(self):
         pass
-    
-    @property
-    def is_alive(self):
-        return self._is_alive
-    
-    @is_alive.setter
-    def is_alive(self, is_alive):
-        self._is_alive = is_alive
-        
-    @property
-    def id(self):
-        self._id
 
 class MultiEndpoint(Endpoint):
     '''
@@ -58,7 +49,7 @@ class MultiEndpoint(Endpoint):
     
     def add_endpoint(self, endpoint):
         assert isinstance(endpoint, Endpoint), type(endpoint)
-        self._endpoints.append(endpoint);
+        self._endpoints.append(endpoint)
         if len(self._endpoints) == 1:
             self._endpoint = endpoint
             
@@ -81,12 +72,21 @@ class MultiEndpoint(Endpoint):
             return ("0.0.0.0", -1)
         else:
             return self._endpoint.get_address()
+        
+    def get_all_addresses(self):
+        return list(endpoint.get_address() for endpoint in self._endpoints)
     
     def send(self, candidates, packets):
-        self.determine_endpoint(False)
-        self._endpoint.send(candidates, packets)
+        name = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False).name
+        if name == "dispersy-introduction-request":
+            for e in self._endpoints:
+                e.send(candidates, packets)
+        else:
+            self.determine_endpoint(known_addresses=list(c.sock_addr for c in candidates), subset=True)
+            self._endpoint.send(candidates, packets)
             
     def open(self, dispersy):
+        self._dispersy = dispersy
         for x in self._endpoints:
             x.open(dispersy)
     
@@ -101,7 +101,7 @@ class MultiEndpoint(Endpoint):
         """
         e = self._endpoints[0]
         for x in self._endpoints:
-            if e.cur_sendqueue > x.cur_sendqueue: # First check is unnecessarily with itself
+            if e.cur_sendqueue > x.cur_sendqueue: # First check is unnecessarily with itself 
                 e = x
         return e
     
@@ -113,32 +113,64 @@ class MultiEndpoint(Endpoint):
             i+=1
         return self._endpoint
     
-    def determine_endpoint(self, swift):
+    def determine_endpoint(self, swift=False, known_addresses=None, subset=True):
         """
         The endpoint that will take care of the task at hand, will be chosen here. 
         The chosen endpoint will be assigned to self._endpoint
-        No recursion fail safe mechanism. Make sure that if you ask for swift, such an endpoint is available
+        If no appropriate endpoint is found, the current endpoint will remain.
         """
+        
+        def recur(endpoints, swift=False, known_addresses=None, subset=True):
+            if endpoints == Set():
+                return self._endpoint
+            
+            endpoint = None
+            tried = Set()
+            if known_addresses is not None:
+                for e in endpoints:
+                    tried.add(e)
+                    if subset and Set(known_addresses).issubset(e.known_addresses):
+                        endpoint = e
+                    if not subset and not Set(known_addresses).issubset(e.known_addresses):
+                        endpoint = e
+                
+                if endpoint is None:
+                    return self._endpoint
+            
+            else:
+                endpoint = endpoints.pop()
+                tried.add(endpoint)
+            
+            if swift and not isinstance(endpoint, SwiftEndpoint):
+                recur(tried.difference(endpoints), swift, known_addresses, subset)
+                
+            return endpoint  
+        
         if (len(self._endpoints) == 0):
             raise NoEndpointAvailableException()
         elif (len(self._endpoints) > 1):
-            self._endpoint = self._next_endpoint()
-            if swift and not isinstance(self._endpoint, SwiftEndpoint):
-                self.determine_endpoint(swift)
+            self._endpoint = recur(Set(self._endpoints), swift, known_addresses, subset)
         else:
             pass # Number of endpoints is 1, self._endpoint stays employed!
+        
+    def get_hash(self, filename):
+        self.determine_endpoint(swift=True)
+        return self._endpoint.get_hash(filename)
     
-    def add_file(self, filename):
-        self.determine_endpoint(True)
-        return self._endpoint.add_file(filename)
+    def add_file(self, filename, roothash):
+        for e in self._endpoints:
+            if isinstance(e, SwiftEndpoint):
+                e.add_file(filename, roothash)
         
     def add_peer(self, addr):
-        self.determine_endpoint(True)
-        self._endpoint.add_peer(addr)
+        for e in self._endpoints:
+            if isinstance(e, SwiftEndpoint):
+                e.add_peer(addr)
             
     def start_download(self, filename, roothash, address, dest_dir):
-        self.determine_endpoint(True)
-        self._endpoint.start_download(filename, roothash, address, dest_dir)    
+        for e in self._endpoints:
+            if isinstance(e, SwiftEndpoint):
+                e.start_download(filename, roothash, address, dest_dir)   
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
@@ -155,16 +187,14 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         # get_max_speed for UPLOAD and DOWNLOAD are set to 0 initially (infinite)
         d.set_swift_meta_dir(None)
         self._d = d
-        
-    def send(self, candidates, packets):
-        TunnelEndpoint.send(self, candidates, packets)
-    
+            
     def open(self, dispersy):
         super(SwiftEndpoint, self).open(dispersy)
         self._swift.start_cmd_connection()
         self.is_alive = True
         
     def close(self, timeout=0.0):
+        logger.info("TOTAL %s: down %d, send %d, up %d, cur %d", self.get_address(), self.total_down, self.total_send, self.total_up, self.cur_sendqueue)
         self._swift.remove_download(self, True, True)
         self._swift.early_shutdown()
         super(TunnelEndpoint, self).close(timeout)
@@ -173,24 +203,28 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     def get_address(self):
         # Dispersy retrieves the local ip
         return (self._dispersy.lan_address[0],self._swift.get_listen_port())
-        
-    def add_file(self, filename):
-        """
-        This method lets the swiftprocess know that an additional file is available. 
-        It returns the roothash of this file
-        """
+    
+    def send(self, candidates, packets):
+        TunnelEndpoint.send(self, candidates, packets)
+        self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))
+    
+    def get_hash(self, filename):
         if isfile(filename):
             sdef = SwiftDef()
             sdef.add_content(filename)
             sdef.finalize(self._swift_path, destdir=dirname(filename))
-            self._d.set_def(sdef)
-            self._d.set_dest_dir(filename)
-            self._swift.start_download(self._d)
-            
             # returning get_roothash() gives an error somewhere (perhaps message?)
-            return sdef.get_roothash_as_hex()
-        return None
-    
+            return sdef.get_roothash_as_hex()     
+        
+    def add_file(self, filename, roothash):
+        """
+        This method lets the swiftprocess know that an additional file is available.
+        """
+        roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
+        self._d.set_def(SwiftDef(roothash=roothash))
+        self._d.set_dest_dir(filename)
+        self._swift.start_download(self._d)
+            
     def add_peer(self, addr):
         self._swift.add_peer(self._d, addr)        
     
@@ -199,4 +233,9 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._d.set_dest_dir(dest_dir + "/" + basename(filename))
         self._d.set_def(SwiftDef(roothash=roothash))
         self._swift.start_download(self._d)
+        
+    def i2ithread_data_came_in(self, session, sock_addr, data):
+        if isinstance(sock_addr, tuple):
+            self.known_addresses.update([sock_addr])
+        TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
     

@@ -74,7 +74,7 @@ class DispersyInstance(object):
         # Create Dispersy object
         port1 = random.randint(*RANDOM_PORTS)
         self._callback = Callback("MyDispersy-" + str(port1))
-    #     port2 = random.randint(10000, 20000)
+        port2 = random.randint(10000, 20000)
         endpoint = MultiEndpoint()
     
         httpgwport = None
@@ -82,11 +82,13 @@ class DispersyInstance(object):
         spmgr = None
         swift_process = SwiftProcess(self._swift_binpath, self._swift_workdir, self._swift_zerostatedir, port1, httpgwport, cmdgwport, spmgr)
         endpoint.add_endpoint(SwiftEndpoint(swift_process, self._swift_binpath))
+        swift_process = SwiftProcess(self._swift_binpath, self._swift_workdir, self._swift_zerostatedir, port2, httpgwport, cmdgwport, spmgr)
+        endpoint.add_endpoint(SwiftEndpoint(swift_process, self._swift_binpath))
         
         dt = datetime.now()
         working_dir = expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "_" + str(getpid()) + "/"
         sqlite_database = working_dir + unicode(port1)
-    #     sqlite_database = u":memory:"
+        sqlite_database = u":memory:"
         self._dispersy = Dispersy(self._callback, endpoint, working_dir, sqlite_database)
         
         self._dispersy.start()
@@ -96,12 +98,13 @@ class DispersyInstance(object):
         self._community.dest_dir = self.dest_dir
         
         # At some point kill the self._connection
-        self._conn.send(self._dispersy.lan_address)
+        self._conn.send(self._dispersy.endpoint.get_all_addresses())
         
         num = self._conn.recv()
         for _ in range(num):
-            address = self._conn.recv()
-            self._callback.call(self._dispersy.create_introduction_request, (self._community, WalkCandidate(address, False, address, address, u"unknown"),
+            addresses = self._conn.recv()
+            for address in addresses:
+                self._callback.call(self._dispersy.create_introduction_request, (self._community, WalkCandidate(address, False, address, address, u"unknown"),
                                                                              True,True))
             
         self._loop()
