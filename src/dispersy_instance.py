@@ -76,15 +76,12 @@ class DispersyInstance(object):
         self._callback = Callback("MyDispersy-" + str(port1))
     #     port2 = random.randint(10000, 20000)
         endpoint = MultiEndpoint()
-        endpoint.add_endpoint(StandaloneEndpoint(port1))
-    #     endpoint.add_endpoint(StandaloneEndpoint(port2))
     
-        listenport = port1
         httpgwport = None
         cmdgwport = None
         spmgr = None
-        swift_process = SwiftProcess(self._swift_binpath, self._swift_workdir, self._swift_zerostatedir, listenport, httpgwport, cmdgwport, spmgr)
-        endpoint = SwiftEndpoint(swift_process, self._swift_binpath)
+        swift_process = SwiftProcess(self._swift_binpath, self._swift_workdir, self._swift_zerostatedir, port1, httpgwport, cmdgwport, spmgr)
+        endpoint.add_endpoint(SwiftEndpoint(swift_process, self._swift_binpath))
         
         dt = datetime.now()
         working_dir = expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "_" + str(getpid()) + "/"

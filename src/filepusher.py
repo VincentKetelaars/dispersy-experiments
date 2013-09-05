@@ -66,7 +66,7 @@ class FilePusher(object):
         all_files = []    
         if self._dir: # Get all files in the directory
             all_files = [ join(self._dir,f) for f in listdir(self._dir) if isfile(join(self._dir,f)) and 
-                         not (f.endswith(".mbinmap") or f.endswith(".mhash")) ]
+                         not (f.endswith(".mbinmap") or f.endswith(".mhash") or f.find("swifturl-") >= 0) ]
         if self._files:
             all_files.extend(self._files)
         file_updates = [ (f, getmtime(f)) for f in all_files] # create tuple of file and last modified timestamp

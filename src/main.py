@@ -116,6 +116,9 @@ if __name__ == '__main__':
         
     if args.destination:
         DEST_DIR = args.destination
+    
+    if args.swift:
+        SWIFT_BINPATH = args.swift
 
     main(args.n, args.logging, args.files)   
     
