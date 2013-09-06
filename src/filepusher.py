@@ -21,7 +21,7 @@ class FilePusher(object):
     classdocs
     '''
 
-    def __init__(self, conn, directory=None, files=[]):
+    def __init__(self, callback, directory=None, files=[]):
         '''
         Constructor
         '''
@@ -35,32 +35,30 @@ class FilePusher(object):
             for f in files:
                 if exists(f) and isfile(f):
                     self._files.append(f)
-        
-        self._conn = conn
-        
+                
         self._recent_files = []
+        self._callback = callback
         
     def run(self):
         self._loop()
         
     def _loop(self):
-        _continue = True
-        while _continue:
-            if self._conn.poll():
-                _continue = self._conn.recv()
-                if not _continue:
-                    break
-                
+        self._continue = True
+        while self._continue:
+                            
             diff = self._list_files_to_send()
             for absfilename in diff:
                 with file(absfilename) as f:
                     s = f.read()
                     if len(s) > 2**16-60:
-                        self._conn.send(FileHashCarrier(absfilename, None, None))
+                        self._callback(message=FileHashCarrier(absfilename, None, None))
                     else:
-                        self._conn.send(SimpleFileCarrier(absfilename, s))
+                        self._callback(message=SimpleFileCarrier(absfilename, s))
                        
             time.sleep(UPDATE_TIME)
+            
+    def stop(self):
+        self._continue = False
             
     def _list_files_to_send(self):
         all_files = []    

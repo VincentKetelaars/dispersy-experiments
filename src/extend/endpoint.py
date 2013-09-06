@@ -212,7 +212,10 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
     def get_address(self):
         # Dispersy retrieves the local ip
-        return (self._dispersy.lan_address[0],self._swift.get_listen_port())
+        if self._dispersy is not None:
+            return (self._dispersy.lan_address[0],self._swift.get_listen_port())
+        else:
+            TunnelEndpoint.get_address(self)
     
     def send(self, candidates, packets):
         TunnelEndpoint.send(self, candidates, packets)

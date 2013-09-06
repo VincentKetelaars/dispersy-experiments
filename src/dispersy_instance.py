@@ -5,13 +5,14 @@ Created on Aug 29, 2013
 '''
 
 import random
+import sys
+import os
+import argparse
+import time
 
-from os import getpid
-from os.path import expanduser
 from datetime import datetime
 
 from dispersy.callback import Callback
-from dispersy.endpoint import StandaloneEndpoint
 from dispersy.dispersy import Dispersy
 from dispersy.candidate import WalkCandidate
 from Tribler.Core.Swift.SwiftProcess import SwiftProcess
@@ -19,6 +20,7 @@ from Tribler.Core.Swift.SwiftProcess import SwiftProcess
 from src.extend.community import MyCommunity
 from src.extend.endpoint import MultiEndpoint, SwiftEndpoint
 from src.extend.payload import SimpleFileCarrier, FileHashCarrier
+from src.filepusher import FilePusher
 
 import logging
 logger = logging.getLogger()
@@ -51,43 +53,55 @@ RANDOM_PORTS = (10000, 20000)
 DEFAULT_MESSAGE_COUNT = 1
 DEFAULT_MESSAGE_DELAY = 0.0
 
-UPDATE_TIME = 0.5 # Seconds
+# Time in seconds
+SLEEP_TIME = 0.5
+TOTAL_RUN_TIME = 30 # Integer
+FILE_DIR = "/home/vincent/Desktop/tests"
+DEST_DIR = "/home/vincent/Desktop/tests_dest"
+SWIFT_BINPATH = "/home/vincent/svn/libswift/ppsp/swift"
 
 class DispersyInstance(object):
     '''
     Instance of Dispersy that runs on its own process
     '''
 
-    def __init__(self, conn, dest_dir, swift_binpath, swift_workdir=None, swift_zerostatedir=None):
-        self._conn = conn
+    def __init__(self, dest_dir, swift_binpath, swift_workdir=None, swift_zerostatedir=None, num_endpoints=1, 
+                 addresses=[], ports=[], directory=None, files=[]):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
         self._swift_workdir = swift_workdir
         self._swift_zerostatedir = swift_zerostatedir
+        self._num_endpoints = num_endpoints
+        self._addresses = addresses
+        self._ports = ports
+        self._directory = directory
+        self._files = files
+        self._filepusher = None
 
     def _create_mycommunity(self):    
         master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
         my_member = self._dispersy.get_new_member(SECURITY)
         return MyCommunity.join_community(self._dispersy, master_member, my_member)
         
-    def run(self, num_instances):     
+    def run(self):
+        # redirect swift output:
+        sys.stderr = open(self._dest_dir+"/"+str(os.getpid()) + ".err", "w")
+        # redirect standard output: 
+        sys.stdout = open(self._dest_dir+"/"+str(os.getpid()) + ".out", "w")
+        
         # Create Dispersy object
-        port1 = random.randint(*RANDOM_PORTS)
-        self._callback = Callback("MyDispersy-" + str(port1))
-        port2 = random.randint(10000, 20000)
+        self._callback = Callback("Dispersy-Callback")
+        
         endpoint = MultiEndpoint()
-    
-        httpgwport = None
-        cmdgwport = None
-        spmgr = None
-        swift_process = SwiftProcess(self._swift_binpath, self._swift_workdir, self._swift_zerostatedir, port1, httpgwport, cmdgwport, spmgr)
-        endpoint.add_endpoint(SwiftEndpoint(swift_process, self._swift_binpath))
-        swift_process = SwiftProcess(self._swift_binpath, self._swift_workdir, self._swift_zerostatedir, port2, httpgwport, cmdgwport, spmgr)
-        endpoint.add_endpoint(SwiftEndpoint(swift_process, self._swift_binpath))
+        if self._ports:
+            for p in self._ports:
+                endpoint.add_endpoint(self.create_endpoint(p))
+        else:
+            endpoint.add_endpoint(self.create_endpoint())
         
         dt = datetime.now()
-        working_dir = expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "_" + str(getpid()) + "/"
-        sqlite_database = working_dir + unicode(port1)
+        working_dir = os.path.expanduser("~") + u"/Music/"+ dt.strftime("%Y%m%d%H%M%S") + "_" + str(os.getpid()) + "/"
+#         sqlite_database = working_dir + unicode(endpoint.get_address())
         sqlite_database = u":memory:"
         self._dispersy = Dispersy(self._callback, endpoint, working_dir, sqlite_database)
         
@@ -96,18 +110,17 @@ class DispersyInstance(object):
         
         self._community = self._callback.call(self._create_mycommunity)
         self._community.dest_dir = self.dest_dir
-        
-        # At some point kill the self._connection
-        self._conn.send(self._dispersy.endpoint.get_all_addresses())
-        
-        num = self._conn.recv()
-        for _ in range(num):
-            addresses = self._conn.recv()
-            for address in addresses:
-                logger.info("ADDRESSES: %s", address)
-                self._callback.call(self._dispersy.create_introduction_request, (self._community, WalkCandidate(address, False, address, address, u"unknown"),
-                                                                             True,True))
+                
+        for address in self._addresses:
+            logger.info("ADDRESSES: %s", address)
+            self._callback.call(self._dispersy.create_introduction_request, 
+                                (self._community, WalkCandidate(address, False, address, address, u"unknown"),
+                                 True,True))
             
+        # Start Filepusher
+        if self._directory or self._files:
+            self._filepusher = FilePusher(self._register_some_message, directory=self._directory, files=self._files)
+        
         self._loop()
         
         self._stop()
@@ -122,16 +135,8 @@ class DispersyInstance(object):
             self._callback.register(self._community.create_simple_messages, (count,None), delay=delay)
         
     def _loop(self):
-        self._continue = True
-        
-        options = {"message" : self._register_some_message,
-                   "continue" : self._set_continue}
-        
-        while self._continue:
-            if self._conn.poll(UPDATE_TIME):
-                kind = self._conn.recv()
-                value = self._conn.recv()
-                options[kind](value)
+        for _ in range(int(TOTAL_RUN_TIME / SLEEP_TIME)):
+            time.sleep(SLEEP_TIME)
     
     def _set_continue(self, _continue):
         self._continue = _continue
@@ -143,3 +148,65 @@ class DispersyInstance(object):
     @property
     def dest_dir(self):
         return self._dest_dir
+    
+    def create_endpoint(self, port=None):
+        if port is None:
+            port = random.randint(*RANDOM_PORTS)
+        httpgwport = None
+        cmdgwport = None
+        spmgr = None
+        swift_process = SwiftProcess(self._swift_binpath, self._swift_workdir, self._swift_zerostatedir, port, 
+                                     httpgwport, cmdgwport, spmgr)
+        return SwiftEndpoint(swift_process, self._swift_binpath)
+    
+    
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Start Dispersy instance')
+    parser.add_argument("-i", "--logging", action="store_true", help="If set, logs will be shown in the cmd")
+    parser.add_argument("-d", "--directory",help="List directory of files to send")
+    parser.add_argument("-f", "--files", nargs="+", help="List files to send")
+    parser.add_argument("-t", "--time",type=int, help="Set runtime")
+    parser.add_argument("-D", "--destination", help="List directory to put downloads")
+    parser.add_argument("-s", "--swift", help="Swift binary path")
+    parser.add_argument("-a", "--addresses", nargs="+", help="List addresses of other dispersy instances: 0.0.0.0:12345, space separated")
+    parser.add_argument("-p", "--ports", type=int, nargs="+", help="List ports to assign to endpoints, space separated")
+    parser.add_argument("-P", "--peer_ports", type=int, nargs="+", help="List ports of local dispersy instances, space separated")
+    args = parser.parse_args()
+    
+    if args.time:
+        TOTAL_RUN_TIME = args.time
+        
+    if args.destination:
+        DEST_DIR = args.destination
+    
+    if args.swift:
+        SWIFT_BINPATH = args.swift
+        
+    if args.logging:
+        logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
+        logging.config.fileConfig(logger_conf)
+        logger = logging.getLogger(__name__)
+        logger.info("Logger using configuration file: " + logger_conf)
+    else:
+        logger = logging.getLogger(__name__)
+        
+    addresses = []
+    if args.addresses:
+        for a in args.addresses:
+            i = a.find(":")
+            ip = a[:i]
+            port = int(a[i+1:])
+            addresses.append((ip, port))
+            
+    if args.peer_ports:
+        for p in args.peer_ports:
+            addresses.append(("127.0.0.1",p))
+    
+    ports = []
+    if args.ports:
+        for p in args.ports:
+            ports.append(p)
+        
+    d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, addresses=addresses, ports=ports, directory=args.directory, files=args.files)
+    d.run()
+    

@@ -36,9 +36,9 @@ def main(num_instances, show_logs, directory=None, files=[]):
     
     # Start the Dispersy instances
     process_list = []
-    for _ in range(num_instances):
+    for i in range(num_instances):
         conn1, conn2 = Pipe()
-        dis = DispersyInstance(conn2, DEST_DIR, SWIFT_BINPATH)
+        dis = DispersyInstance(conn2, DEST_DIR, SWIFT_BINPATH,num_endpoints=2)
         p = Process(target=dis.run, args=(num_instances,))
         process_list.append(DispersyProcess(p, conn1))
         p.start()
@@ -120,5 +120,5 @@ if __name__ == '__main__':
     if args.swift:
         SWIFT_BINPATH = args.swift
 
-    main(args.n, args.logging, args.files)   
+    main(args.n, args.files)   
     
