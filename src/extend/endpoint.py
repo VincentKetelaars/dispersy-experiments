@@ -6,7 +6,9 @@ Created on Aug 27, 2013
 
 from os import urandom
 from os.path import isfile, dirname, basename
-from time import time
+import time
+from time import time as Time
+from threading import Thread
 from sets import Set
 import binascii
 
@@ -26,7 +28,7 @@ class NoEndpointAvailableException(Exception):
 class EndpointStatistics(Statistics):
     
     def __init__(self):
-        self.start_time = time()
+        self.start_time = Time()
         self.is_alive = False # The endpoint is alive between open and close
         self.id = urandom(16)
         self.known_addresses = Set()
@@ -187,14 +189,22 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         # get_max_speed for UPLOAD and DOWNLOAD are set to 0 initially (infinite)
         d.set_swift_meta_dir(None)
         self._d = d
+        
+        self._thread_break = False
             
     def open(self, dispersy):
         super(SwiftEndpoint, self).open(dispersy)
         self._swift.start_cmd_connection()
         self.is_alive = True
         
+        self._thread = Thread(target=self._loop)
+        self._thread.daemon = True
+        self._thread.start()
+        
     def close(self, timeout=0.0):
         logger.info("TOTAL %s: down %d, send %d, up %d, cur %d", self.get_address(), self.total_down, self.total_send, self.total_up, self.cur_sendqueue)
+        self._thread_break = True
+        self._thread.join()
         self._swift.remove_download(self, True, True)
         self._swift.early_shutdown()
         super(TunnelEndpoint, self).close(timeout)
@@ -224,6 +234,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._d.set_def(SwiftDef(roothash=roothash))
         self._d.set_dest_dir(filename)
         self._swift.start_download(self._d)
+        self._swift.set_moreinfo_stats(self._d, True)
             
     def add_peer(self, addr):
         self._swift.add_peer(self._d, addr)        
@@ -233,9 +244,24 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._d.set_dest_dir(dest_dir + "/" + basename(filename))
         self._d.set_def(SwiftDef(roothash=roothash))
         self._swift.start_download(self._d)
+        self._swift.set_moreinfo_stats(self._d, True)
         
     def i2ithread_data_came_in(self, session, sock_addr, data):
         if isinstance(sock_addr, tuple):
             self.known_addresses.update([sock_addr])
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
+        
+    def get_stats(self):
+        return self._d.network_get_stats(None)
+    
+    def _loop(self):
+        while True:
+            time.sleep(1)
+            if self._thread_break:
+                break
+            (status, stats, seeding_stats, _) = self.get_stats()
+            logger.info("INFO: %s\r\nSEEDERS: %s\r\nPEERS: %s \r\nUPLOADED: %s\r\nDOWNLOADED: %s\r\nSEEDINGSTATS: %s" + 
+                        "\r\nUPSPEED: %s\r\nDOWNSPEED: %s\r\nFRACTION: %s\r\nSPEW: %s", 
+                        self.get_address(), stats["stats"].numSeeds, stats["stats"].numPeers, stats["stats"].upTotal, 
+                        stats["stats"].downTotal, seeding_stats, stats["up"], stats["down"], stats["frac"], stats["spew"])
     

@@ -104,6 +104,7 @@ class DispersyInstance(object):
         for _ in range(num):
             addresses = self._conn.recv()
             for address in addresses:
+                logger.info("ADDRESSES: %s", address)
                 self._callback.call(self._dispersy.create_introduction_request, (self._community, WalkCandidate(address, False, address, address, u"unknown"),
                                                                              True,True))
             
