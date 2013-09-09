@@ -54,7 +54,7 @@ DEFAULT_MESSAGE_DELAY = 0.0
 
 # Time in seconds
 SLEEP_TIME = 0.5
-TOTAL_RUN_TIME = 30
+TOTAL_RUN_TIME = 10
 DEST_DIR = "/home/vincent/Desktop/tests_dest"
 SWIFT_BINPATH = "/home/vincent/svn/libswift/ppsp/swift"
 
@@ -64,7 +64,7 @@ class DispersyInstance(object):
     '''
 
     def __init__(self, dest_dir, swift_binpath, swift_workdir=None, swift_zerostatedir=None, ports=[],
-                 addresses=[], directory=None, files=[], run_time=10):
+                 addresses=[], directory=None, files=[], run_time=TOTAL_RUN_TIME):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
         self._swift_workdir = swift_workdir
@@ -171,7 +171,7 @@ if __name__ == '__main__':
     parser.add_argument("-i", "--logging", action="store_true", help="If set, logs will be shown in the cmd")
     parser.add_argument("-d", "--directory",help="List directory of files to send")
     parser.add_argument("-f", "--files", nargs="+", help="List files to send")
-    parser.add_argument("-t", "--time",type=int, help="Set runtime")
+    parser.add_argument("-t", "--time",type=float, help="Set runtime")
     parser.add_argument("-D", "--destination", help="List directory to put downloads")
     parser.add_argument("-s", "--swift", help="Swift binary path")
     parser.add_argument("-a", "--addresses", nargs="+", help="List addresses of other dispersy instances: 0.0.0.0:12345, space separated")

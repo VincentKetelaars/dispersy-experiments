@@ -213,6 +213,9 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._thread_break = True
         self._thread.join()
         self._swift.remove_download(self, True, True)
+        for _, h in self.file_hashes:
+            self._d.set_def(SwiftDef(roothash=h))
+            self._swift.remove_download(self._d, True, False)
         self._swift.early_shutdown()
         super(TunnelEndpoint, self).close(timeout)
         self.is_alive = False
@@ -246,7 +249,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._swift.start_download(self._d)
         self._swift.set_moreinfo_stats(self._d, True)
         
-        self.file_hashes.add((filename, roothash))
+        self.file_hashes.add((filename, roothash)) # Know about all hashes that go through this endpoint
         
     def add_peer(self, addr, roothash=None):
         """
@@ -257,12 +260,22 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
                 self._swift.add_peer(self._d, addr)
                 self.added_peers.add((addr, roothash))            
     
-    def start_download(self, filename, roothash, address, dest_dir):
+    def start_download(self, filename, roothash, dest_dir):
+        """
+        This method lets the swift instance know that it should download the file that comes with this roothash.
+        
+        @param filename: The name the file will get
+        @param roothash: hash to locate swarm
+        @param dest_dir: The folder the file will be put
+        """
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
+        
         self._d.set_dest_dir(dest_dir + "/" + basename(filename))
         self._d.set_def(SwiftDef(roothash=roothash))
         self._swift.start_download(self._d)
         self._swift.set_moreinfo_stats(self._d, True)
+        
+        self.file_hashes.add((filename, roothash)) # Know about all hashes that go through this endpoint
         
     def i2ithread_data_came_in(self, session, sock_addr, data):
         if isinstance(sock_addr, tuple):

@@ -77,7 +77,7 @@ class MyCommunity(Community):
     
     def file_hash_handle(self, messages):
         for x in messages:
-            self.dispersy.endpoint.start_download(x.payload.filename, x.payload.hash, x.payload.address, self._dest_dir)
+            self.dispersy.endpoint.start_download(x.payload.filename, x.payload.hash, self._dest_dir)
             
     def _short_member_id(self):
         return str(self.my_member.mid.encode("HEX"))[0:5]     
