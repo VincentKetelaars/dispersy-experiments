@@ -22,8 +22,7 @@ from src.extend.endpoint import MultiEndpoint, SwiftEndpoint
 from src.extend.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
 
-import logging
-logger = logging.getLogger()
+import logging.config
 
 SECURITY = u"medium"
 
@@ -55,8 +54,7 @@ DEFAULT_MESSAGE_DELAY = 0.0
 
 # Time in seconds
 SLEEP_TIME = 0.5
-TOTAL_RUN_TIME = 30 # Integer
-FILE_DIR = "/home/vincent/Desktop/tests"
+TOTAL_RUN_TIME = 30
 DEST_DIR = "/home/vincent/Desktop/tests_dest"
 SWIFT_BINPATH = "/home/vincent/svn/libswift/ppsp/swift"
 
@@ -65,18 +63,18 @@ class DispersyInstance(object):
     Instance of Dispersy that runs on its own process
     '''
 
-    def __init__(self, dest_dir, swift_binpath, swift_workdir=None, swift_zerostatedir=None, num_endpoints=1, 
-                 addresses=[], ports=[], directory=None, files=[]):
+    def __init__(self, dest_dir, swift_binpath, swift_workdir=None, swift_zerostatedir=None, ports=[],
+                 addresses=[], directory=None, files=[], run_time=10):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
         self._swift_workdir = swift_workdir
         self._swift_zerostatedir = swift_zerostatedir
-        self._num_endpoints = num_endpoints
-        self._addresses = addresses
         self._ports = ports
+        self._addresses = addresses
         self._directory = directory
         self._files = files
         self._filepusher = None
+        self._run_time = run_time
 
     def _create_mycommunity(self):    
         master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
@@ -120,7 +118,8 @@ class DispersyInstance(object):
         # Start Filepusher
         if self._directory or self._files:
             self._filepusher = FilePusher(self._register_some_message, directory=self._directory, files=self._files)
-        
+            self._filepusher.start()
+            
         self._loop()
         
         self._stop()
@@ -135,15 +134,22 @@ class DispersyInstance(object):
             self._callback.register(self._community.create_simple_messages, (count,None), delay=delay)
         
     def _loop(self):
-        for _ in range(int(TOTAL_RUN_TIME / SLEEP_TIME)):
+        self._continue = True
+        for _ in range(int(self._run_time / SLEEP_TIME)):
+            if not self._continue:
+                break
             time.sleep(SLEEP_TIME)
     
     def _set_continue(self, _continue):
         self._continue = _continue
     
     def _stop(self):
-        self._conn.close()
-        self._dispersy.stop()
+        try:
+            if self._filepusher is not None:
+                self._filepusher.stop()
+            self._dispersy.stop()
+        except:
+            logger.info("STOPPING HAS FAILED!")
         
     @property
     def dest_dir(self):
@@ -200,13 +206,14 @@ if __name__ == '__main__':
             
     if args.peer_ports:
         for p in args.peer_ports:
-            addresses.append(("127.0.0.1",p))
+            addresses.append((Dispersy._guess_lan_address(),p))
     
     ports = []
     if args.ports:
         for p in args.ports:
             ports.append(p)
         
-    d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, addresses=addresses, ports=ports, directory=args.directory, files=args.files)
+    d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, addresses=addresses, ports=ports, directory=args.directory, 
+                         files=args.files, run_time=TOTAL_RUN_TIME)
     d.run()
     

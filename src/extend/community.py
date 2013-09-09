@@ -102,9 +102,6 @@ class MyCommunity(Community):
             # Get a hash of the file 
             roothash = self.dispersy.endpoint.get_hash(file_hash_message.filename)
             self.dispersy.endpoint.add_file(file_hash_message.filename, roothash)
-            for candidate in self.dispersy_yield_candidates():
-                addr = candidate.get_destination_address(self._address()[0])
-                self.dispersy.endpoint.add_peer(addr)
             
             if roothash is not None and len(roothash) == HASH_LENGTH:
                 # Send this hash to candidates (probably do the prior stuff out of the candidates loop)

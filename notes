@@ -1,0 +1,2 @@
+Check whether a port is actually available, for dispersy (and swift), and check the tcp cmd port.
+When sending anything over the tcp cmd port, make sure that it is functional.

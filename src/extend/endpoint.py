@@ -218,6 +218,9 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             TunnelEndpoint.get_address(self)
     
     def send(self, candidates, packets):
+        for candidate in candidates:
+            addr = candidate.get_destination_address(self._dispersy.wan_address)
+            self.add_peer(addr)
         TunnelEndpoint.send(self, candidates, packets)
         self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))
     
@@ -240,7 +243,9 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._swift.set_moreinfo_stats(self._d, True)
             
     def add_peer(self, addr):
-        self._swift.add_peer(self._d, addr)        
+        # Make sure that the roothash is already available in self._d
+        if self._d.get_def().get_roothash() is not None:
+            self._swift.add_peer(self._d, addr)
     
     def start_download(self, filename, roothash, address, dest_dir):
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file

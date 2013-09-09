@@ -5,6 +5,7 @@ Created on Aug 30, 2013
 '''
 
 import time
+from threading import Thread
 
 from os import listdir
 from os.path import exists, isfile, isdir, getmtime, join
@@ -39,8 +40,10 @@ class FilePusher(object):
         self._recent_files = []
         self._callback = callback
         
-    def run(self):
-        self._loop()
+    def start(self):
+        self._thread = Thread(target=self._loop)
+        self._thread.daemon = True
+        self._thread.start()
         
     def _loop(self):
         self._continue = True
@@ -59,6 +62,7 @@ class FilePusher(object):
             
     def stop(self):
         self._continue = False
+        self._thread.join()
             
     def _list_files_to_send(self):
         all_files = []    
