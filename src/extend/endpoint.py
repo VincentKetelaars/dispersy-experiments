@@ -32,6 +32,8 @@ class EndpointStatistics(Statistics):
         self.is_alive = False # The endpoint is alive between open and close
         self.id = urandom(16)
         self.known_addresses = Set()
+        self.added_peers = Set()
+        self.file_hashes = Set()
         
     def update(self):
         pass
@@ -80,6 +82,10 @@ class MultiEndpoint(Endpoint):
     
     def send(self, candidates, packets):
         name = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False).name
+        if name == "file_hash_message":
+            for candidate in candidates:
+                addr = candidate.get_destination_address(self._dispersy.wan_address)
+                self.distribute_all_hashes_to_peer(addr)
         if name == "dispersy-introduction-request":
             for e in self._endpoints:
                 e.send(candidates, packets)
@@ -164,10 +170,11 @@ class MultiEndpoint(Endpoint):
             if isinstance(e, SwiftEndpoint):
                 e.add_file(filename, roothash)
         
-    def add_peer(self, addr):
+    def distribute_all_hashes_to_peer(self, addr):
         for e in self._endpoints:
-            if isinstance(e, SwiftEndpoint):
-                e.add_peer(addr)
+            for _, h in e.file_hashes:
+                e._d.set_def(SwiftDef(roothash=h))
+                e.add_peer(addr, h)
             
     def start_download(self, filename, roothash, address, dest_dir):
         for e in self._endpoints:
@@ -218,9 +225,6 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             TunnelEndpoint.get_address(self)
     
     def send(self, candidates, packets):
-        for candidate in candidates:
-            addr = candidate.get_destination_address(self._dispersy.wan_address)
-            self.add_peer(addr)
         TunnelEndpoint.send(self, candidates, packets)
         self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))
     
@@ -241,11 +245,17 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._d.set_dest_dir(filename)
         self._swift.start_download(self._d)
         self._swift.set_moreinfo_stats(self._d, True)
-            
-    def add_peer(self, addr):
-        # Make sure that the roothash is already available in self._d
-        if self._d.get_def().get_roothash() is not None:
-            self._swift.add_peer(self._d, addr)
+        
+        self.file_hashes.add((filename, roothash))
+        
+    def add_peer(self, addr, roothash=None):
+        """
+        Call with unhexlified roothash
+        """
+        if roothash is not None:
+            if not (addr, roothash) in self.added_peers:
+                self._swift.add_peer(self._d, addr)
+                self.added_peers.add((addr, roothash))            
     
     def start_download(self, filename, roothash, address, dest_dir):
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
