@@ -6,66 +6,28 @@ Created on Aug 29, 2013
 
 import random
 import sys
-import os
 import argparse
 import time
-
-from datetime import datetime
 
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 from dispersy.candidate import WalkCandidate
 from Tribler.Core.Swift.SwiftProcess import SwiftProcess
 
-from src.extend.community import MyCommunity
-from src.extend.endpoint import MultiEndpoint, SwiftEndpoint
-from src.extend.payload import SimpleFileCarrier, FileHashCarrier
+from src.dispersy_extends.community import MyCommunity
+from src.dispersy_extends.endpoint import MultiEndpoint, SwiftEndpoint
+from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
+from src.definitions import *
 
 import logging.config
-
-SECURITY = u"medium"
-
-# generated: Wed Aug  7 14:21:33 2013
-# curve: medium <<< NID_sect409k1 >>>
-# len: 409 bits ~ 104 bytes signature
-# pub: 128 307e301006072a8648ce3d020106052b81040024036a0004004b2c2fbbf036a0ae1dedf4420ff724869e324bc63064ec2e7bad062a7a9c7f31a7c3ff17a11fd582c9eb8b727dacb228afceb2002ad6e916efd4531e79f040341c7259c99938aae9f6ece17c5075b7ab8e9c92f7ff4493468d1e354a31d139e73928266b824fe3
-# prv: 178 3081af0201010433252d8205db8f95bbe82a6668ba04c9e13db70b7c3669b451f5d18c24590b8ccb6033f37a9c49b956c84e412a0992f6f76f25ffa00706052b81040024a16c036a0004004b2c2fbbf036a0ae1dedf4420ff724869e324bc63064ec2e7bad062a7a9c7f31a7c3ff17a11fd582c9eb8b727dacb228afceb2002ad6e916efd4531e79f040341c7259c99938aae9f6ece17c5075b7ab8e9c92f7ff4493468d1e354a31d139e73928266b824fe3
-# pub-sha1 04b6c5a1eafb928ca5763a8bb93c5ad5a44c971e
-# prv-sha1 31510601257b8649d8280cf3334e52de646d4aa9
-# -----BEGIN PUBLIC KEY-----
-# MH4wEAYHKoZIzj0CAQYFK4EEACQDagAEAEssL7vwNqCuHe30Qg/3JIaeMkvGMGTs
-# LnutBip6nH8xp8P/F6Ef1YLJ64tyfayyKK/OsgAq1ukW79RTHnnwQDQcclnJmTiq
-# 6fbs4XxQdberjpyS9/9Ek0aNHjVKMdE55zkoJmuCT+M=
-# -----END PUBLIC KEY-----
-# -----BEGIN EC PRIVATE KEY-----
-# MIGvAgEBBDMlLYIF24+Vu+gqZmi6BMnhPbcLfDZptFH10YwkWQuMy2Az83qcSblW
-# yE5BKgmS9vdvJf+gBwYFK4EEACShbANqAAQASywvu/A2oK4d7fRCD/ckhp4yS8Yw
-# ZOwue60GKnqcfzGnw/8XoR/Vgsnri3J9rLIor86yACrW6Rbv1FMeefBANBxyWcmZ
-# OKrp9uzhfFB1t6uOnJL3/0STRo0eNUox0TnnOSgma4JP4w==
-# -----END EC PRIVATE KEY-----
-
-MASTER_MEMBER_PUBLIC_KEY = "307e301006072a8648ce3d020106052b81040024036a0004004b2c2fbbf036a0ae1dedf4420ff724869e324bc63064ec2e7bad062a7a9c7f31a7c3ff17a11fd582c9eb8b727dacb228afceb2002ad6e916efd4531e79f040341c7259c99938aae9f6ece17c5075b7ab8e9c92f7ff4493468d1e354a31d139e73928266b824fe3".decode("HEX")
-
-RANDOM_PORTS = (10000, 20000) # TODO: Determine exact range of available ports
-
-DEFAULT_MESSAGE_COUNT = 1
-DEFAULT_MESSAGE_DELAY = 0.0
-
-# Time in seconds
-SLEEP_TIME = 0.5
-TOTAL_RUN_TIME = 10
-DEST_DIR = "/home/vincent/Desktop/tests_dest"
-SWIFT_BINPATH = "/home/vincent/svn/libswift/ppsp/swift"
-WORK_DIR = os.path.expanduser("~") + u"/Music/"+ datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(os.getpid()) + "/"
-SQLITE_DATABASE = u":memory:"
 
 class DispersyInstance(object):
     '''
     Instance of Dispersy that runs on its own process
     '''
 
-    def __init__(self, dest_dir, swift_binpath, work_dir=WORK_DIR, sqlite_database=SQLITE_DATABASE, swift_work_dir=None, 
+    def __init__(self, dest_dir, swift_binpath, work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE, swift_work_dir=None, 
                  swift_zerostatedir=None, ports=[], addresses=[], directory=None, files=[], run_time=TOTAL_RUN_TIME):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
@@ -193,7 +155,7 @@ if __name__ == '__main__':
         SWIFT_BINPATH = args.swift
         
     if args.work_dir:
-        WORK_DIR = args.work_dir
+        DISPERSY_WORK_DIR = args.work_dir
         
     if args.sqlite_database:
         SQLITE_DATABASE = args.sqlite_database
@@ -227,7 +189,7 @@ if __name__ == '__main__':
         for p in args.ports:
             ports.append(p)
         
-    d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, work_dir=WORK_DIR, sqlite_database=SQLITE_DATABASE, 
+    d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE, 
                          swift_work_dir=args.swift_work_dir, addresses=addresses, ports=ports, directory=args.directory, 
                          files=args.files, run_time=TOTAL_RUN_TIME)
     d.run()

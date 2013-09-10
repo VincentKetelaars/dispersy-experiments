@@ -5,8 +5,8 @@ Created on Aug 27, 2013
 '''
 
 from os import urandom, makedirs
-from os.path import isfile, dirname, basename
-from time import time as Time
+from os.path import isfile, dirname, exists
+from datetime import datetime
 from threading import Thread, Event
 from sets import Set
 import binascii
@@ -15,7 +15,9 @@ from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
 from Tribler.Core.Swift.SwiftDef import SwiftDef
 
-from src.extend.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
+from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
+from src.download import Download
+from src.definitions import SLEEP_TIME
 
 import logging
 logger = logging.getLogger()
@@ -26,12 +28,12 @@ class NoEndpointAvailableException(Exception):
 class EndpointStatistics(Statistics):
     
     def __init__(self):
-        self.start_time = Time()
+        self.start_time = datetime.now()
         self.is_alive = False # The endpoint is alive between open and close
         self.id = urandom(16)
         self.known_addresses = Set()
         self.added_peers = Set()
-        self.file_hashes = Set()
+        self.downloads = {}
         
     def update(self):
         pass
@@ -170,7 +172,7 @@ class MultiEndpoint(Endpoint):
         
     def distribute_all_hashes_to_peer(self, addr):
         for e in self._endpoints:
-            for _, h in e.file_hashes:
+            for h, _ in e.downloads.iteritems():
                 e._d.set_def(SwiftDef(roothash=h))
                 e.add_peer(addr, h)
             
@@ -180,8 +182,6 @@ class MultiEndpoint(Endpoint):
                 e.start_download(filename, directories, roothash, dest_dir)   
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
-    
-    LOOP_WAIT = 1
     
     def __init__(self, swift_process, binpath):
         super(SwiftEndpoint, self).__init__(swift_process)
@@ -195,6 +195,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         # get_selected_files is initialized to empty list
         # get_max_speed for UPLOAD and DOWNLOAD are set to 0 initially (infinite)
         d.set_swift_meta_dir(None)
+        d.set_download_ready_callback(self.download_is_ready_callback)
         self._d = d
         
         self._thread_stop_event = Event()
@@ -220,7 +221,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     def clean_up_files(self, roothash, rm_state, rm_download):
         self._d.set_def(SwiftDef(roothash=roothash))
         self._swift.remove_download(self._d, rm_state, rm_download)
-        # TODO: Remove roothash from file_hashes and added_peers
+        # TODO: Remove roothash added_peers
     
     def get_address(self):
         # Dispersy retrieves the local ip
@@ -259,7 +260,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._swift.start_download(self._d)
         self._swift.set_moreinfo_stats(self._d, True)
         
-        self.file_hashes.add((filename, roothash)) # Know about all hashes that go through this endpoint
+        self.downloads[roothash] = Download(roothash, filename, seed=True) # Know about all hashes that go through this endpoint
         
     def add_peer(self, addr, roothash=None):
         """
@@ -282,15 +283,20 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param dest_dir: The folder the file will be put
         """
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
-        if directories != "":
-            makedirs(dest_dir + "/" + directories)
-        self._d.set_dest_dir(dest_dir + "/" + directories + basename(filename))
-        logger.info("DESTDIR: %s", self._d.get_dest_dir())
+        dir = dest_dir + "/" + directories
+        if not exists(dir):
+            makedirs(dir)
+        self._d.set_dest_dir(dir + filename)
         self._d.set_def(SwiftDef(roothash=roothash))
         self._swift.start_download(self._d)
         self._swift.set_moreinfo_stats(self._d, True)
         
-        self.file_hashes.add((filename, roothash)) # Know about all hashes that go through this endpoint
+        self.downloads[roothash] = Download(roothash, self._d.get_dest_dir(), download=True) # Know about all hashes that go through this endpoint
+        
+    def download_is_ready_callback(self, roothash):
+        download = self.downloads[roothash]
+        if download.set_finished() and not download.seeder():
+            self.clean_up_files(roothash, True, False)
         
     def i2ithread_data_came_in(self, session, sock_addr, data):
         if isinstance(sock_addr, tuple):
@@ -302,7 +308,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
     def _loop(self):
         while not self._thread_stop_event.is_set():
-            self._thread_stop_event.wait(self.LOOP_WAIT)
+            self._thread_stop_event.wait(SLEEP_TIME)
             (status, stats, seeding_stats, _) = self.get_stats()
             logger.info("INFO: %s\r\nSEEDERS: %s\r\nPEERS: %s \r\nUPLOADED: %s\r\nDOWNLOADED: %s\r\nSEEDINGSTATS: %s" + 
                         "\r\nUPSPEED: %s\r\nDOWNSPEED: %s\r\nFRACTION: %s\r\nSPEW: %s", 

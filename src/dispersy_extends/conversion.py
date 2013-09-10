@@ -9,26 +9,26 @@ import struct
 from dispersy.conversion import BinaryConversion
 from dispersy.conversion import DropPacket
 
+from src.definitions import SEPARATOR, SIMPLE_MESSAGE_NAME, FILE_HASH_MESSAGE
+
 import logging
 logger = logging.getLogger()
 
 class SimpleFileConversion(BinaryConversion):
     '''
     classdocs
-    '''
-    
-    SEPARATOR = ";;"
+    '''    
 
     def __init__(self, community):
         '''
         Constructor
         '''
         super(SimpleFileConversion, self).__init__(community, "\x12")
-        self.define_meta_message(chr(12), community.get_meta_message(community.SIMPLE_MESSAGE_NAME), self.encode_payload, self.decode_payload)
+        self.define_meta_message(chr(12), community.get_meta_message(SIMPLE_MESSAGE_NAME), self.encode_payload, self.decode_payload)
         
     def encode_payload(self, message):
-        return struct.pack("!L", len(message.payload.filename + self.SEPARATOR + message.payload.data)), \
-            message.payload.filename + self.SEPARATOR + message.payload.data
+        return struct.pack("!L", len(message.payload.filename + SEPARATOR + message.payload.data)), \
+            message.payload.filename + SEPARATOR + message.payload.data
 
     def decode_payload(self, placeholder, offset, data):
         if len(data) < offset + 4:
@@ -49,17 +49,15 @@ class SimpleFileConversion(BinaryConversion):
     
 class FileHashConversion(BinaryConversion):
     
-    SEPARATOR = ";;"
-    
     def __init__(self, community):
         '''
         Constructor
         '''
         super(FileHashConversion, self).__init__(community, "\x13")
-        self.define_meta_message(chr(13), community.get_meta_message(community.FILE_HASH_MESSAGE), self.encode_payload, self.decode_payload)
+        self.define_meta_message(chr(13), community.get_meta_message(FILE_HASH_MESSAGE), self.encode_payload, self.decode_payload)
         
     def encode_payload(self, message):
-        m = message.payload.filename + self.SEPARATOR + message.payload.directories + self.SEPARATOR + str(message.payload.roothash) + self.SEPARATOR + str(message.payload.address)
+        m = message.payload.filename + SEPARATOR + message.payload.directories + SEPARATOR + str(message.payload.roothash) + SEPARATOR + str(message.payload.address)
         return struct.pack("!L", len(m)), m            
 
     def decode_payload(self, placeholder, offset, data):
@@ -71,18 +69,18 @@ class FileHashConversion(BinaryConversion):
         if len(data) < offset + data_length:
             raise DropPacket("Insufficient packet size")
         data_payload = data[offset:offset + data_length]
-        file_offset = data_payload.find(self.SEPARATOR)
+        file_offset = data_payload.find(SEPARATOR)
         filename = data_payload[0:file_offset]
         
-        data_payload = data_payload[file_offset + len(self.SEPARATOR):]
-        file_offset = data_payload.find(self.SEPARATOR)
+        data_payload = data_payload[file_offset + len(SEPARATOR):]
+        file_offset = data_payload.find(SEPARATOR)
         directories = data_payload[0:file_offset]
         
-        data = data_payload[file_offset + len(self.SEPARATOR):]
+        data = data_payload[file_offset + len(SEPARATOR):]
         
-        address_offset = data.find(self.SEPARATOR)
+        address_offset = data.find(SEPARATOR)
         hash = data[:address_offset]        
-        address_str = data[address_offset + len(self.SEPARATOR):]
+        address_str = data[address_offset + len(SEPARATOR):]
         address = self._address_string_to_tuple(address_str)
         
         offset += data_length

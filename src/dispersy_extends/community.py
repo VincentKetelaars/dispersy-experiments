@@ -14,24 +14,18 @@ from dispersy.resolution import PublicResolution
 from dispersy.distribution import FullSyncDistribution
 from dispersy.destination import CommunityDestination
 
-from src.extend.conversion import SimpleFileConversion, FileHashConversion
-from src.extend.payload import SimpleFileCarrier, SimpleFilePayload, FileHashPayload
+from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConversion
+from src.dispersy_extends.payload import SimpleFileCarrier, SimpleFilePayload, FileHashPayload
+
+from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, FILE_HASH_MESSAGE, SIMPLE_MESSAGE_NAME
 
 import logging
 logger = logging.getLogger()    
-
-DISTRIBUTION_DIRECTION = u"ASC" # "ASC" or "DESC"
-DISTRIBUTION_PRIORITY = 127
-NUMBER_OF_PEERS_TO_SYNC = 3
-HASH_LENGTH = 40
     
 class MyCommunity(Community):
     '''
     classdocs
     '''
-
-    SIMPLE_MESSAGE_NAME = u"simple_message"
-    FILE_HASH_MESSAGE = u"file_hash_message"
 
     def __init__(self, dispersy, master_member):
         '''
@@ -52,9 +46,9 @@ class MyCommunity(Community):
         """
         self._simple_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
         self._file_hash_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
-        return [Message(self, self.SIMPLE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), self._simple_distribution,
+        return [Message(self, SIMPLE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), self._simple_distribution,
                          CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), SimpleFilePayload(), self.simple_message_check, self.simple_message_handle),
-                Message(self, self.FILE_HASH_MESSAGE, MemberAuthentication(encoding="sha1"), PublicResolution(), self._file_hash_distribution,
+                Message(self, FILE_HASH_MESSAGE, MemberAuthentication(encoding="sha1"), PublicResolution(), self._file_hash_distribution,
                          CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), FileHashPayload(), self.file_hash_check, self.file_hash_handle)]
         
     def simple_message_check(self, messages):
@@ -90,7 +84,7 @@ class MyCommunity(Community):
      
     def create_simple_messages(self, count, message=None):
         if message is not None:
-            meta = self.get_meta_message(self.SIMPLE_MESSAGE_NAME)
+            meta = self.get_meta_message(SIMPLE_MESSAGE_NAME)
             messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._simple_distribution.claim_sequence_number()), 
                                   payload=(message.filename, message.data)) for _ in xrange(count)]
             self.dispersy.store_update_forward(messages, True, False, True)
@@ -105,7 +99,7 @@ class MyCommunity(Community):
             
             if roothash is not None and len(roothash) == HASH_LENGTH:
                 # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
-                meta = self.get_meta_message(self.FILE_HASH_MESSAGE)
+                meta = self.get_meta_message(FILE_HASH_MESSAGE)
                 messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
                                       payload=(basename(file_hash_message.filename), file_hash_message.directories, roothash, self._address())) for _ in xrange(count)]
                 self.dispersy.store_update_forward(messages, True, False, True)

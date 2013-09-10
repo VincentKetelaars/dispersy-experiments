@@ -10,12 +10,11 @@ from string import find
 from os import listdir
 from os.path import exists, isfile, isdir, getmtime, join, getsize, basename
 
-from src.extend.payload import SimpleFileCarrier, FileHashCarrier
+from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
+from src.definitions import SLEEP_TIME
 
 import logging
 logger = logging.getLogger()
-
-UPDATE_TIME = 1 # Seconds
 
 class FilePusher(object):
     '''
@@ -79,7 +78,7 @@ class FilePusher(object):
                         s = f.read()
                         self._callback(message=SimpleFileCarrier(absfilename, s))
                 
-            self._stop_event.wait(UPDATE_TIME)
+            self._stop_event.wait(SLEEP_TIME)
             
     def stop(self):
         """
