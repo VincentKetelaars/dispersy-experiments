@@ -59,7 +59,7 @@ class FileHashConversion(BinaryConversion):
         self.define_meta_message(chr(13), community.get_meta_message(community.FILE_HASH_MESSAGE), self.encode_payload, self.decode_payload)
         
     def encode_payload(self, message):
-        m = message.payload.filename + self.SEPARATOR + str(message.payload.hash) + self.SEPARATOR + str(message.payload.address)
+        m = message.payload.filename + self.SEPARATOR + message.payload.directories + self.SEPARATOR + str(message.payload.roothash) + self.SEPARATOR + str(message.payload.address)
         return struct.pack("!L", len(m)), m            
 
     def decode_payload(self, placeholder, offset, data):
@@ -72,7 +72,12 @@ class FileHashConversion(BinaryConversion):
             raise DropPacket("Insufficient packet size")
         data_payload = data[offset:offset + data_length]
         file_offset = data_payload.find(self.SEPARATOR)
-        filename = data_payload[0:file_offset]        
+        filename = data_payload[0:file_offset]
+        
+        data_payload = data_payload[file_offset + len(self.SEPARATOR):]
+        file_offset = data_payload.find(self.SEPARATOR)
+        directories = data_payload[0:file_offset]
+        
         data = data_payload[file_offset + len(self.SEPARATOR):]
         
         address_offset = data.find(self.SEPARATOR)
@@ -82,7 +87,7 @@ class FileHashConversion(BinaryConversion):
         
         offset += data_length
         
-        return offset, placeholder.meta.payload.implement(filename, hash, address)
+        return offset, placeholder.meta.payload.implement(filename, directories, hash, address)
     
     def _address_string_to_tuple(self, address_str):
         port_offset = address_str.find(",")

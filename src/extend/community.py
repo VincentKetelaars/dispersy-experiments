@@ -4,7 +4,7 @@ Created on Aug 7, 2013
 @author: Vincent Ketelaars
 '''
 
-from os.path import isfile
+from os.path import isfile, basename
 
 from dispersy.community import Community
 from dispersy.conversion import DefaultConversion
@@ -77,7 +77,7 @@ class MyCommunity(Community):
     
     def file_hash_handle(self, messages):
         for x in messages:
-            self.dispersy.endpoint.start_download(x.payload.filename, x.payload.hash, self._dest_dir)
+            self.dispersy.endpoint.start_download(x.payload.filename, x.payload.directories, x.payload.roothash, self._dest_dir)
             
     def _short_member_id(self):
         return str(self.my_member.mid.encode("HEX"))[0:5]     
@@ -107,7 +107,7 @@ class MyCommunity(Community):
                 # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
                 meta = self.get_meta_message(self.FILE_HASH_MESSAGE)
                 messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
-                                      payload=(file_hash_message.filename, roothash, self._address())) for _ in xrange(count)]
+                                      payload=(basename(file_hash_message.filename), file_hash_message.directories, roothash, self._address())) for _ in xrange(count)]
                 self.dispersy.store_update_forward(messages, True, False, True)
         
     @property

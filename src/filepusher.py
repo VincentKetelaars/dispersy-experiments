@@ -6,8 +6,9 @@ Created on Aug 30, 2013
 
 from threading import Thread, Event
 
+from string import find
 from os import listdir
-from os.path import exists, isfile, isdir, getmtime, join
+from os.path import exists, isfile, isdir, getmtime, join, getsize, basename
 
 from src.extend.payload import SimpleFileCarrier, FileHashCarrier
 
@@ -66,13 +67,18 @@ class FilePusher(object):
                             
             diff = self._list_files_to_send()
             for absfilename in diff:
-                with file(absfilename) as f:
-                    s = f.read()
-                    if len(s) > self._file_size:
-                        self._callback(message=FileHashCarrier(absfilename, None, None))
+                if getsize(absfilename) > self._file_size:
+                    loc = find(absfilename, self._dir)
+                    if loc == -1:
+                        self._callback(message=FileHashCarrier(absfilename, None, None, None))
                     else:
+                        dirs = absfilename[len(self._dir) + 1:-len(basename(absfilename))]
+                        self._callback(message=FileHashCarrier(absfilename, dirs, None, None))
+                else:
+                    with file(absfilename) as f:
+                        s = f.read()
                         self._callback(message=SimpleFileCarrier(absfilename, s))
-                       
+                
             self._stop_event.wait(UPDATE_TIME)
             
     def stop(self):
@@ -89,10 +95,19 @@ class FilePusher(object):
         
         @return: the difference between _recent_files and the file_updates
         """
-        all_files = []    
-        if self._dir: # Get all files in the directory
-            all_files = [ join(self._dir,f) for f in listdir(self._dir) if isfile(join(self._dir,f)) and 
+        
+        def recur(dir):
+            all_files = [ join(dir,f) for f in listdir(dir) if isfile(join(dir,f)) and 
                          not (f.endswith(".mbinmap") or f.endswith(".mhash") or f.find("swifturl-") >= 0) ]
+            all_dir = [join(dir, d) for d in listdir(dir) if isdir(join(dir, d))]
+            for d in all_dir:
+                all_files.extend(recur(d))
+            return all_files
+        
+        all_files = []
+        if self._dir: # Get all files in the directory and subdirectories
+            all_files = recur(self._dir)
+            
         if self._files:
             all_files.extend(self._files)
         file_updates = [ (f, getmtime(f)) for f in all_files] # create tuple of file and last modified timestamp

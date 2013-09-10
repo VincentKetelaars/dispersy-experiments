@@ -42,9 +42,13 @@ class SimpleFilePayload(Payload):
         
 class FileHashCarrier():
     
-    def __init__(self, filename, hash, address):
-        self._hash = hash
+    def __init__(self, filename, directories, roothash, address):
         self._filename = filename
+        if directories is None:
+            self._directories = ""
+        else:
+            self._directories = directories
+        self._roothash = roothash
         self._address = address
         
     @property
@@ -52,8 +56,12 @@ class FileHashCarrier():
         return self._filename
     
     @property
-    def hash(self):
-        return self._hash
+    def directories(self):
+        return self._directories
+    
+    @property
+    def roothash(self):
+        return self._roothash
     
     @property
     def address(self):
@@ -63,10 +71,11 @@ class FileHashPayload(Payload):
     
     class Implementation(Payload.Implementation):
         
-        def __init__(self, meta, filename, hash, address):
+        def __init__(self, meta, filename, directories, roothash, address):
             super(Payload.Implementation, self).__init__(meta)
             self._filename = filename
-            self._hash = hash
+            self._directories = directories
+            self._roothash = roothash
             self._address = address
         
         @property
@@ -74,8 +83,12 @@ class FileHashPayload(Payload):
             return self._filename
         
         @property
-        def hash(self):
-            return self._hash
+        def directories(self):
+            return self._directories
+        
+        @property
+        def roothash(self):
+            return self._roothash
         
         @property
         def address(self):

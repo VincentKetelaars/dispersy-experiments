@@ -4,7 +4,7 @@ Created on Aug 27, 2013
 @author: Vincent Ketelaars
 '''
 
-from os import urandom
+from os import urandom, makedirs
 from os.path import isfile, dirname, basename
 from time import time as Time
 from threading import Thread, Event
@@ -174,10 +174,10 @@ class MultiEndpoint(Endpoint):
                 e._d.set_def(SwiftDef(roothash=h))
                 e.add_peer(addr, h)
             
-    def start_download(self, filename, roothash, dest_dir):
+    def start_download(self, filename, directories, roothash, dest_dir):
         for e in self._endpoints:
             if isinstance(e, SwiftEndpoint):
-                e.start_download(filename, roothash, dest_dir)   
+                e.start_download(filename, directories, roothash, dest_dir)   
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
@@ -213,12 +213,14 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._thread_stop_event.set()
         self._thread.join()
         self._swift.remove_download(self, True, True)
-        for _, h in self.file_hashes:
-            self._d.set_def(SwiftDef(roothash=h))
-            self._swift.remove_download(self._d, True, False)
         self._swift.early_shutdown()
         super(TunnelEndpoint, self).close(timeout)
         self.is_alive = False
+        
+    def clean_up_files(self, roothash, rm_state, rm_download):
+        self._d.set_def(SwiftDef(roothash=roothash))
+        self._swift.remove_download(self._d, rm_state, rm_download)
+        # TODO: Remove roothash from file_hashes and added_peers
     
     def get_address(self):
         # Dispersy retrieves the local ip
@@ -271,7 +273,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
                 self._swift.add_peer(self._d, addr)
                 self.added_peers.add((addr, roothash))            
     
-    def start_download(self, filename, roothash, dest_dir):
+    def start_download(self, filename, directories, roothash, dest_dir):
         """
         This method lets the swift instance know that it should download the file that comes with this roothash.
         
@@ -280,8 +282,10 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param dest_dir: The folder the file will be put
         """
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
-        
-        self._d.set_dest_dir(dest_dir + "/" + basename(filename))
+        if directories != "":
+            makedirs(dest_dir + "/" + directories)
+        self._d.set_dest_dir(dest_dir + "/" + directories + basename(filename))
+        logger.info("DESTDIR: %s", self._d.get_dest_dir())
         self._d.set_def(SwiftDef(roothash=roothash))
         self._swift.start_download(self._d)
         self._swift.set_moreinfo_stats(self._d, True)
