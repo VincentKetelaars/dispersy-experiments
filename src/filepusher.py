@@ -4,8 +4,7 @@ Created on Aug 30, 2013
 @author: Vincent Ketelaars
 '''
 
-import time
-from threading import Thread
+from threading import Thread, Event
 
 from os import listdir
 from os.path import exists, isfile, isdir, getmtime, join
@@ -19,12 +18,19 @@ UPDATE_TIME = 1 # Seconds
 
 class FilePusher(object):
     '''
-    classdocs
+    FilePusher goes through a directory or a list of files to find either new files or updated files,
+    and does a callback with the list of these files. It distinguishes between files larger and smaller than _file_size.
+    In the former case the filename is send back, whereas in the latter case the contents of the file (string) is send back.
     '''
+    
+    FILE_SIZE = 2**16-60
 
-    def __init__(self, callback, directory=None, files=[]):
+    def __init__(self, callback, directory=None, files=[], file_size=FILE_SIZE):
         '''
-        Constructor
+        @param callback: The function that will be called with a FileHashCarrier or SimpleFileCarrier object
+        @param directory: The directory to search for files
+        @param files: The list of files to monitor
+        @param file_size: The decision variable for choosing callback object
         '''
         if directory and exists(directory) and isdir(directory):
             self._dir = directory
@@ -39,32 +45,50 @@ class FilePusher(object):
                 
         self._recent_files = []
         self._callback = callback
+        self._file_size = file_size
         
     def start(self):
+        """
+        Start separate thread that calls _loop
+        """
         self._thread = Thread(target=self._loop)
         self._thread.daemon = True
         self._thread.start()
         
     def _loop(self):
-        self._continue = True
-        while self._continue:
+        """
+        Run until _stop_event is set. 
+        Determine list of files that have are new or have changed since previous iteration.
+        Call _callback with each of these files.
+        """
+        self._stop_event = Event()
+        while not self._stop_event.is_set():
                             
             diff = self._list_files_to_send()
             for absfilename in diff:
                 with file(absfilename) as f:
                     s = f.read()
-                    if len(s) > 2**16-60:
+                    if len(s) > self._file_size:
                         self._callback(message=FileHashCarrier(absfilename, None, None))
                     else:
                         self._callback(message=SimpleFileCarrier(absfilename, s))
                        
-            time.sleep(UPDATE_TIME)
+            self._stop_event.wait(UPDATE_TIME)
             
     def stop(self):
-        self._continue = False
+        """
+        Stop thread
+        """
+        self._stop_event.set()
         self._thread.join()
             
     def _list_files_to_send(self):
+        """
+        Compare all files in _directory and _files, combined in file_updates with the current list _recent_files,
+        which both hold tuples of filename and last modified time.
+        
+        @return: the difference between _recent_files and the file_updates
+        """
         all_files = []    
         if self._dir: # Get all files in the directory
             all_files = [ join(self._dir,f) for f in listdir(self._dir) if isfile(join(self._dir,f)) and 

@@ -6,15 +6,13 @@ Created on Aug 27, 2013
 
 from os import urandom
 from os.path import isfile, dirname, basename
-import time
 from time import time as Time
-from threading import Thread
+from threading import Thread, Event
 from sets import Set
 import binascii
 
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
-from dispersy.candidate import Candidate
 from Tribler.Core.Swift.SwiftDef import SwiftDef
 
 from src.extend.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
@@ -176,12 +174,14 @@ class MultiEndpoint(Endpoint):
                 e._d.set_def(SwiftDef(roothash=h))
                 e.add_peer(addr, h)
             
-    def start_download(self, filename, roothash, address, dest_dir):
+    def start_download(self, filename, roothash, dest_dir):
         for e in self._endpoints:
             if isinstance(e, SwiftEndpoint):
-                e.start_download(filename, roothash, address, dest_dir)   
+                e.start_download(filename, roothash, dest_dir)   
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
+    
+    LOOP_WAIT = 1
     
     def __init__(self, swift_process, binpath):
         super(SwiftEndpoint, self).__init__(swift_process)
@@ -197,7 +197,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         d.set_swift_meta_dir(None)
         self._d = d
         
-        self._thread_break = False
+        self._thread_stop_event = Event()
             
     def open(self, dispersy):
         super(SwiftEndpoint, self).open(dispersy)
@@ -210,7 +210,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         
     def close(self, timeout=0.0):
         logger.info("TOTAL %s: down %d, send %d, up %d, cur %d", self.get_address(), self.total_down, self.total_send, self.total_up, self.cur_sendqueue)
-        self._thread_break = True
+        self._thread_stop_event.set()
         self._thread.join()
         self._swift.remove_download(self, True, True)
         for _, h in self.file_hashes:
@@ -232,6 +232,11 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))
     
     def get_hash(self, filename):
+        """
+        Determine the roothash of this file
+        
+        @param filename: The absolute path of the file
+        """
         if isfile(filename):
             sdef = SwiftDef()
             sdef.add_content(filename)
@@ -242,6 +247,9 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     def add_file(self, filename, roothash):
         """
         This method lets the swiftprocess know that an additional file is available.
+        
+        @param filename: The absolute path of the file
+        @param roothash: The roothash of this file
         """
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         self._d.set_def(SwiftDef(roothash=roothash))
@@ -253,7 +261,10 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         
     def add_peer(self, addr, roothash=None):
         """
-        Call with unhexlified roothash
+        Send message to the swift process to add a peer.
+        
+        @param addr: address of the peer: (ip, port)
+        @param roothash: Must be unhexlified roothash
         """
         if roothash is not None:
             if not (addr, roothash) in self.added_peers:
@@ -286,10 +297,8 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         return self._d.network_get_stats(None)
     
     def _loop(self):
-        while True:
-            time.sleep(1)
-            if self._thread_break:
-                break
+        while not self._thread_stop_event.is_set():
+            self._thread_stop_event.wait(self.LOOP_WAIT)
             (status, stats, seeding_stats, _) = self.get_stats()
             logger.info("INFO: %s\r\nSEEDERS: %s\r\nPEERS: %s \r\nUPLOADED: %s\r\nDOWNLOADED: %s\r\nSEEDINGSTATS: %s" + 
                         "\r\nUPSPEED: %s\r\nDOWNSPEED: %s\r\nFRACTION: %s\r\nSPEW: %s", 
