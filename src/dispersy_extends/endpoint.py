@@ -10,14 +10,17 @@ from datetime import datetime
 from threading import Thread, Event
 from sets import Set
 import binascii
+import random
 
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
 from Tribler.Core.Swift.SwiftDef import SwiftDef
+from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
 
+from src.swift.swift_process import MySwiftProcess
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download
-from src.definitions import SLEEP_TIME
+from src.definitions import SLEEP_TIME, RANDOM_PORTS
 
 import logging
 logger = logging.getLogger()
@@ -185,6 +188,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     def __init__(self, swift_process, binpath):
         super(SwiftEndpoint, self).__init__(swift_process)
         EndpointStatistics.__init__(self)
+        self._swift.set_on_swift_restart_callback(self.restart_swift)
         
         self._swift_path = binpath
         
@@ -203,13 +207,19 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         logger.info("TOTAL %s: down %d, send %d, up %d, cur %d", self.get_address(), self.total_down, self.total_send, self.total_up, self.cur_sendqueue)
         self._thread_stop_event.set()
         self._thread.join()
+        self.is_alive = False
         self._swift.remove_download(self, True, True)
         self._swift.early_shutdown()
         super(TunnelEndpoint, self).close(timeout)
-        self.is_alive = False
         
     def clean_up_files(self, roothash, rm_state, rm_download):
-        logger.info("REMOVE DOWNLOAD: %s %s %s", roothash, rm_state, rm_download)
+        """
+        Remove download
+        
+        @param roothash: roothash to find the correct DownloadImpl
+        @param rm_state: Remove state boolean
+        @param rm_download: Remove download file boolean
+        """
         d = self.retrieve_download_impl(roothash)
         if d is not None:
             self._swift.remove_download(d, rm_state, rm_download)
@@ -223,8 +233,9 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             TunnelEndpoint.get_address(self)
     
     def send(self, candidates, packets):
-        TunnelEndpoint.send(self, candidates, packets)
-        self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))
+        if self._swift.is_alive():
+            TunnelEndpoint.send(self, candidates, packets)
+            self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))
     
     def get_hash(self, filename):
         """
@@ -252,7 +263,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._swift.start_download(d)
         self._swift.set_moreinfo_stats(d, True)
         
-        self.downloads[roothash] = Download(roothash, filename, seed=True) # Know about all hashes that go through this endpoint
+        self.downloads[roothash] = Download(roothash, filename, d, seed=True) # Know about all hashes that go through this endpoint
         
     def add_peer(self, addr, roothash=None):
         """
@@ -261,6 +272,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param addr: address of the peer: (ip, port)
         @param roothash: Must be unhexlified roothash
         """
+        logger.info("ADDPEER: %s %s ", addr, roothash)
         if roothash is not None:
             d = self.retrieve_download_impl(roothash)
             if not (addr, roothash) in self.added_peers and d is not None:
@@ -284,9 +296,14 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._swift.start_download(d)
         self._swift.set_moreinfo_stats(d, True)
         
-        self.downloads[roothash] = Download(roothash, d.get_dest_dir(), download=True) # Know about all hashes that go through this endpoint
+        self.downloads[roothash] = Download(roothash, d.get_dest_dir(), d, download=True) # Know about all hashes that go through this endpoint
         
     def download_is_ready_callback(self, roothash):
+        """
+        This method is called when a download is ready
+        
+        @param roothash: Identifier of the download
+        """
         download = self.downloads[roothash]
         if download.set_finished() and not download.seeder():
             self.clean_up_files(roothash, True, False)
@@ -297,6 +314,11 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
     
     def create_download_impl(self, roothash):
+        """
+        Create DownloadImpl
+        
+        @param roothash: Roothash of a file
+        """
         sdef = SwiftDef(roothash=roothash)
         # This object must have: get_def, get_selected_files, get_max_speed, get_swift_meta_dir
         d = FakeSessionSwiftDownloadImpl(FakeSession(), sdef, self._swift)
@@ -308,6 +330,11 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         return d
         
     def retrieve_download_impl(self, roothash):
+        """
+        Retrieve DownloadImpl with roothash
+        
+        @return: DownloadImpl, otherwise None
+        """
         self._swift.splock.acquire()
         d = None
         try:
@@ -318,13 +345,32 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             self._swift.splock.release()
         return d
     
+    def restart_swift(self):
+        if self.is_alive:
+            self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
+            self._swift.network_shutdown()
+            
+            # Make sure not to make the same mistake as what let to this
+            # Any roothash added twice will create an error, leading to this. 
+            # If so, that roothash will not cause another problem because only hashes that make it are in the downloads dictionary
+            port = random.randint(*RANDOM_PORTS)
+            self._swift = MySwiftProcess(self._swift_path, self._swift.workdir, None, self._swift.listenport, None, None, None)
+            self._swift.set_on_swift_restart_callback(self.restart_swift) # Normally in init
+            self._swift.add_download(self) # Normally in open
+            self._swift.start_cmd_connection() # Normally in open
+            for h, d in self.downloads.iteritems():
+                logger.info("STARTING DOWNLOAD %s", h)
+                self._swift.start_download(d.downloadimpl)
+                for addr in self.known_addresses:
+                    self._swift.add_peer(d.downloadimpl, addr)
+                    self.added_peers.add((addr, h))   
+    
     def _loop(self):
         while not self._thread_stop_event.is_set():
             self._thread_stop_event.wait(SLEEP_TIME)
-            for h, d in self.downloads.iteritems():
-                d = self.retrieve_download_impl(h)
-                if d is not None:
-                    (status, stats, seeding_stats, _) = d.network_get_stats(None)
+            for _, D in self.downloads.iteritems():
+                if D.downloadimpl is not None:
+                    (status, stats, seeding_stats, _) = D.downloadimpl.network_get_stats(None)
                     logger.info("INFO: %s\r\nSEEDERS: %s\r\nPEERS: %s \r\nUPLOADED: %s\r\nDOWNLOADED: %s\r\nSEEDINGSTATS: %s" + 
                                 "\r\nUPSPEED: %s\r\nDOWNSPEED: %s\r\nFRACTION: %s\r\nSPEW: %s", 
                                 self.get_address(), stats["stats"].numSeeds, stats["stats"].numPeers, stats["stats"].upTotal, 

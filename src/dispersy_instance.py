@@ -12,8 +12,8 @@ import time
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 from dispersy.candidate import WalkCandidate
-from Tribler.Core.Swift.SwiftProcess import SwiftProcess
 
+from src.swift.swift_process import MySwiftProcess
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_extends.endpoint import MultiEndpoint, SwiftEndpoint
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
@@ -121,10 +121,11 @@ class DispersyInstance(object):
         """
         if port is None:
             port = random.randint(*RANDOM_PORTS)
+        # TODO: Make sure that the port is not already in use!
         httpgwport = None
         cmdgwport = None
         spmgr = None
-        swift_process = SwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, port, 
+        swift_process = MySwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, port, 
                                      httpgwport, cmdgwport, spmgr)
         return SwiftEndpoint(swift_process, self._swift_binpath)
     

@@ -136,5 +136,5 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         
     def network_create_engine_wrapper(self, lm_network_engine_wrapper_created_callback, pstate, lm_network_vod_event_callback, initialdlstatus=None):
         SwiftDownloadImpl.network_create_engine_wrapper(self, lm_network_engine_wrapper_created_callback, pstate, lm_network_vod_event_callback, initialdlstatus=initialdlstatus)
-        
+        # If this is used, most likely self.sp will be None. 
         # self.sp.start_download(self)

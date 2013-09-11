@@ -11,7 +11,7 @@ class Download(object):
     This class is represents a Download object
     '''
 
-    def __init__(self, roothash, filename, directories="", seed=False, download=False):
+    def __init__(self, roothash, filename, downloadimpl, directories="", seed=False, download=False):
         '''
         Constructor
         '''
@@ -20,6 +20,7 @@ class Download(object):
         self._directories = directories
         self._seed = seed
         self._download = download
+        self._downloadimpl = downloadimpl
         
         self._start_time = datetime.now()
         self._finished_time = None
@@ -33,6 +34,10 @@ class Download(object):
     @property
     def filename(self):
         return self._filename
+    
+    @property
+    def downloadimpl(self):
+        return self._downloadimpl
     
     def is_finished(self):
         return self._finished_time is not None
