@@ -14,16 +14,8 @@ logger = logging.getLogger()
 
 class MySwiftProcess(SwiftProcess):
     '''
-    classdocs
+    Probably not necessary!
     '''
 
     def i2ithread_readlinecallback(self, ic, cmd):
-        words = cmd.split()
-        if words[0] == "INFO" or words[0] == "MOREINFO":
-            roothash = binascii.unhexlify(words[1])
-            try:
-                d = self.roothash2dl[roothash]
-                d.set_def(SwiftDef(roothash=roothash))
-            except:
-                logger.error("Could not get FakeSessionSwiftDownloadImpl, INFO might be wrongly attributed")
         return SwiftProcess.i2ithread_readlinecallback(self, ic, cmd)

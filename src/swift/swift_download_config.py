@@ -4,6 +4,10 @@ Created on Sep 3, 2013
 @author: Vincent Ketelaars
 '''
 
+import os
+import binascii
+import pickle
+
 from Tribler.Core.DownloadConfig import DownloadStartupConfig, DownloadConfigInterface
 from Tribler.Core.Swift.SwiftDownloadImpl import SwiftDownloadImpl
 from Tribler.Core.Swift.SwiftDef import SwiftDef
@@ -20,19 +24,90 @@ class SwiftDownloadConfig(DownloadStartupConfig):
     def set_def(self, swift_def):
         self._sdef = swift_def
         
-class FakeSession(object):
+class FakeRawServer(object):
     
     def __init__(self):
         pass
     
+    def add_task(self, get_state, delay):
+        return None    
+        
+class FakeSwiftProcessMgr(object):
+    
+    def __init__(self):
+        pass
+    
+    def release_sp(self, sp):
+        return None
+    
+    def get_or_create_sp(self, a, b, c, d, e):
+        return None
+        
+class FakeLaunchManyCore(object):
+    
+    def __init__(self):
+        self.rawserver = FakeRawServer()
+        self.spm = FakeSwiftProcessMgr()
+        
+    def network_engine_wrapper_created_callback(self, d, pstate):
+        """ Called by network thread """
+        try:
+            if pstate is None:
+                # Checkpoint at startup
+                (infohash, pstate) = d.network_checkpoint()
+                self.save_download_pstate(infohash, pstate)
+        except:
+            pass
+        
+    def save_download_pstate(self, infohash, pstate):
+        """ Called by network thread """
+        basename = binascii.hexlify(infohash) + '.pickle'
+        filename = os.path.join(self.session.get_downloads_pstate_dir(), basename)
+
+        f = open(filename, "wb")
+        pickle.dump(pstate, f)
+        f.close()
+
+    def network_vod_event_callback(self, videoinfo, event, params):
+        return None
+
+class FakeUserCallBack(object):
+    
+    def __init__(self):
+        pass
+    
+    def perform_vod_usercallback(self, downimpl, callback, event, params):
+        return None
+    
+    def perform_getstate_usercallback(self, usercallback, ds, returncallback):
+        return None
+    
+    def perform_removestate_callback(self, a, b, c):
+        return None
+        
+class FakeSession(object):
+    
+    def __init__(self):
+        self.lm = FakeLaunchManyCore()
+        pass
+    
     def get_swift_meta_dir(self):
         return None
+    
+    def get_swift_working_dir(self):
+        return None
+    
+    def get_torrent_collecting_dir(self):
+        return None
+        
+    
         
 class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     
-    def __init__(self, session):
+    def __init__(self, session, sdef, sp):
         self._download_ready_callback = None
-        SwiftDownloadImpl.__init__(self, session, SwiftDef())   
+        SwiftDownloadImpl.__init__(self, session, sdef)
+        self.sp = sp
         
     def set_def(self, sdef):
         self.sdef = sdef
@@ -54,7 +129,12 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     def i2ithread_info_callback(self, dlstatus, progress, dynasize, dlspeed, ulspeed, numleech, numseeds, contentdl, contentul):
         SwiftDownloadImpl.i2ithread_info_callback(self, dlstatus, progress, dynasize, dlspeed, ulspeed, numleech, numseeds, contentdl, contentul)
         if dlstatus == DLSTATUS_SEEDING and self._download_ready_callback is not None:
-            self._download_ready_callback(self.get_def().get_roothash()) # Relies on the fact that currently the right SwiftDef is used!!!!
+            self._download_ready_callback(self.get_def().get_roothash())
       
     def i2ithread_vod_event_callback(self, event, httpurl):
         SwiftDownloadImpl.i2ithread_vod_event_callback(self, event, httpurl)
+        
+    def network_create_engine_wrapper(self, lm_network_engine_wrapper_created_callback, pstate, lm_network_vod_event_callback, initialdlstatus=None):
+        SwiftDownloadImpl.network_create_engine_wrapper(self, lm_network_engine_wrapper_created_callback, pstate, lm_network_vod_event_callback, initialdlstatus=initialdlstatus)
+        
+        # self.sp.start_download(self)

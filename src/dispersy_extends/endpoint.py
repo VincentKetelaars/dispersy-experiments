@@ -173,7 +173,6 @@ class MultiEndpoint(Endpoint):
     def distribute_all_hashes_to_peer(self, addr):
         for e in self._endpoints:
             for h, _ in e.downloads.iteritems():
-                e._d.set_def(SwiftDef(roothash=h))
                 e.add_peer(addr, h)
             
     def start_download(self, filename, directories, roothash, dest_dir):
@@ -188,15 +187,6 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         EndpointStatistics.__init__(self)
         
         self._swift_path = binpath
-        
-        # This object must have: get_def, get_selected_files, get_max_speed, get_swift_meta_dir
-        d = FakeSessionSwiftDownloadImpl(FakeSession())
-        d.setup()
-        # get_selected_files is initialized to empty list
-        # get_max_speed for UPLOAD and DOWNLOAD are set to 0 initially (infinite)
-        d.set_swift_meta_dir(None)
-        d.set_download_ready_callback(self.download_is_ready_callback)
-        self._d = d
         
         self._thread_stop_event = Event()
             
@@ -219,8 +209,10 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self.is_alive = False
         
     def clean_up_files(self, roothash, rm_state, rm_download):
-        self._d.set_def(SwiftDef(roothash=roothash))
-        self._swift.remove_download(self._d, rm_state, rm_download)
+        logger.info("REMOVE DOWNLOAD: %s %s %s", roothash, rm_state, rm_download)
+        d = self.retrieve_download_impl(roothash)
+        if d is not None:
+            self._swift.remove_download(d, rm_state, rm_download)
         # TODO: Remove roothash added_peers
     
     def get_address(self):
@@ -255,10 +247,10 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param roothash: The roothash of this file
         """
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
-        self._d.set_def(SwiftDef(roothash=roothash))
-        self._d.set_dest_dir(filename)
-        self._swift.start_download(self._d)
-        self._swift.set_moreinfo_stats(self._d, True)
+        d = self.create_download_impl(roothash)
+        d.set_dest_dir(filename)
+        self._swift.start_download(d)
+        self._swift.set_moreinfo_stats(d, True)
         
         self.downloads[roothash] = Download(roothash, filename, seed=True) # Know about all hashes that go through this endpoint
         
@@ -270,8 +262,9 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param roothash: Must be unhexlified roothash
         """
         if roothash is not None:
-            if not (addr, roothash) in self.added_peers:
-                self._swift.add_peer(self._d, addr)
+            d = self.retrieve_download_impl(roothash)
+            if not (addr, roothash) in self.added_peers and d is not None:
+                self._swift.add_peer(d, addr)
                 self.added_peers.add((addr, roothash))            
     
     def start_download(self, filename, directories, roothash, dest_dir):
@@ -286,12 +279,12 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         dir = dest_dir + "/" + directories
         if not exists(dir):
             makedirs(dir)
-        self._d.set_dest_dir(dir + filename)
-        self._d.set_def(SwiftDef(roothash=roothash))
-        self._swift.start_download(self._d)
-        self._swift.set_moreinfo_stats(self._d, True)
+        d = self.create_download_impl(roothash)
+        d.set_dest_dir(dir + filename)
+        self._swift.start_download(d)
+        self._swift.set_moreinfo_stats(d, True)
         
-        self.downloads[roothash] = Download(roothash, self._d.get_dest_dir(), download=True) # Know about all hashes that go through this endpoint
+        self.downloads[roothash] = Download(roothash, d.get_dest_dir(), download=True) # Know about all hashes that go through this endpoint
         
     def download_is_ready_callback(self, roothash):
         download = self.downloads[roothash]
@@ -302,16 +295,38 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         if isinstance(sock_addr, tuple):
             self.known_addresses.update([sock_addr])
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
+    
+    def create_download_impl(self, roothash):
+        sdef = SwiftDef(roothash=roothash)
+        # This object must have: get_def, get_selected_files, get_max_speed, get_swift_meta_dir
+        d = FakeSessionSwiftDownloadImpl(FakeSession(), sdef, self._swift)
+        d.setup()
+        # get_selected_files is initialized to empty list
+        # get_max_speed for UPLOAD and DOWNLOAD are set to 0 initially (infinite)
+        d.set_swift_meta_dir(None)
+        d.set_download_ready_callback(self.download_is_ready_callback)
+        return d
         
-    def get_stats(self):
-        return self._d.network_get_stats(None)
+    def retrieve_download_impl(self, roothash):
+        self._swift.splock.acquire()
+        d = None
+        try:
+            d = self._swift.roothash2dl[roothash]
+        except:
+            logger.error("COULD NOT RETRIEVE DOWNLOADIMPL")
+        finally:
+            self._swift.splock.release()
+        return d
     
     def _loop(self):
         while not self._thread_stop_event.is_set():
             self._thread_stop_event.wait(SLEEP_TIME)
-            (status, stats, seeding_stats, _) = self.get_stats()
-            logger.info("INFO: %s\r\nSEEDERS: %s\r\nPEERS: %s \r\nUPLOADED: %s\r\nDOWNLOADED: %s\r\nSEEDINGSTATS: %s" + 
-                        "\r\nUPSPEED: %s\r\nDOWNSPEED: %s\r\nFRACTION: %s\r\nSPEW: %s", 
-                        self.get_address(), stats["stats"].numSeeds, stats["stats"].numPeers, stats["stats"].upTotal, 
-                        stats["stats"].downTotal, seeding_stats, stats["up"], stats["down"], stats["frac"], stats["spew"])
+            for h, d in self.downloads.iteritems():
+                d = self.retrieve_download_impl(h)
+                if d is not None:
+                    (status, stats, seeding_stats, _) = d.network_get_stats(None)
+                    logger.info("INFO: %s\r\nSEEDERS: %s\r\nPEERS: %s \r\nUPLOADED: %s\r\nDOWNLOADED: %s\r\nSEEDINGSTATS: %s" + 
+                                "\r\nUPSPEED: %s\r\nDOWNSPEED: %s\r\nFRACTION: %s\r\nSPEW: %s", 
+                                self.get_address(), stats["stats"].numSeeds, stats["stats"].numPeers, stats["stats"].upTotal, 
+                                stats["stats"].downTotal, seeding_stats, stats["up"], stats["down"], stats["frac"], stats["spew"])
     
