@@ -15,12 +15,12 @@ from dispersy.distribution import FullSyncDistribution
 from dispersy.destination import CommunityDestination
 
 from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConversion
-from src.dispersy_extends.payload import SimpleFileCarrier, SimpleFilePayload, FileHashPayload
+from src.dispersy_extends.payload import SimpleFilePayload, FileHashPayload
 
 from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, FILE_HASH_MESSAGE, SIMPLE_MESSAGE_NAME
 
 import logging
-logger = logging.getLogger()    
+logger = logging.getLogger(__name__)    
     
 class MyCommunity(Community):
     '''

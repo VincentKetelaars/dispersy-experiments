@@ -3,18 +3,17 @@ Created on Sep 10, 2013
 
 @author: Vincent Ketelaars
 '''
-from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_SHUTDOWN, \
-    DONE_STATE_WORKING
-from collections import defaultdict
-from threading import RLock, currentThread, Thread, Event
 import binascii
-import logging
 import random
 import subprocess
 import sys
+from collections import defaultdict
+from threading import RLock, currentThread, Thread, Event
 
+from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING
 
-logger = logging.getLogger()
+import logging
+logger = logging.getLogger(__name__)
 
 class MySwiftProcess(SwiftProcess):
     '''
@@ -130,7 +129,7 @@ class MySwiftProcess(SwiftProcess):
         self.swift_restart_callback = callback
     
     def i2ithread_readlinecallback(self, ic, cmd):
-        logger.info("CMD: %s", cmd)
+        logger.debug("CMD: %s", cmd)
         words = cmd.split()
         if words[0] == "ERROR":
             self.connection_lost(self.get_cmdport(), error=True)
@@ -141,7 +140,7 @@ class MySwiftProcess(SwiftProcess):
             SwiftProcess.write(self, msg)
             
     def connection_lost(self, port, error=False):
-        logger.info("CONNECTION LOST")
+        logger.debug("CONNECTION LOST")
         if error:
             self.swift_restart_callback()        
             

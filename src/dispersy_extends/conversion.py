@@ -12,7 +12,7 @@ from dispersy.conversion import DropPacket
 from src.definitions import SEPARATOR, SIMPLE_MESSAGE_NAME, FILE_HASH_MESSAGE
 
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 class SimpleFileConversion(BinaryConversion):
     '''

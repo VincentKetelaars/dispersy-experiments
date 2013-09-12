@@ -8,6 +8,8 @@ import random
 import sys
 import argparse
 import time
+import os
+import logging
 
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
@@ -18,9 +20,8 @@ from src.dispersy_extends.community import MyCommunity
 from src.dispersy_extends.endpoint import MultiEndpoint, SwiftEndpoint
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
-from src.definitions import *
-
-import logging.config
+from src.definitions import DISPERSY_WORK_DIR, SQLITE_DATABASE, TOTAL_RUN_TIME, MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, \
+DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS
 
 class DispersyInstance(object):
     '''
@@ -106,7 +107,7 @@ class DispersyInstance(object):
                 self._filepusher.stop()
             self._dispersy.stop()
         except:
-            logger.info("STOPPING HAS FAILED!")
+            logger.error("STOPPING HAS FAILED!")
         
     @property
     def dest_dir(self):
@@ -160,18 +161,17 @@ if __name__ == '__main__':
         
     if args.sqlite_database:
         SQLITE_DATABASE = args.sqlite_database
-        
+    
+    logger = logging.getLogger(__name__)
     if args.logging:
-        logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
-        logging.config.fileConfig(logger_conf)
-        logger = logging.getLogger(__name__)
-        logger.info("Logger using configuration file: " + logger_conf)
+#         logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
+#         logging.config.fileConfig(logger_conf)
+        logging.basicConfig(level=logging.DEBUG)
+#         logger.info("Logger using configuration file: " + logger_conf)
         # redirect swift output:
         sys.stderr = open(DEST_DIR+"/"+str(os.getpid()) + ".err", "w")
         # redirect standard output: 
         sys.stdout = open(DEST_DIR+"/"+str(os.getpid()) + ".out", "w")
-    else:
-        logger = logging.getLogger(__name__)
         
     addresses = []
     if args.addresses:

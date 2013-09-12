@@ -23,7 +23,7 @@ from src.download import Download
 from src.definitions import SLEEP_TIME, RANDOM_PORTS
 
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 class NoEndpointAvailableException(Exception):
     pass
@@ -273,7 +273,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param addr: address of the peer: (ip, port)
         @param roothash: Must be unhexlified roothash
         """
-        logger.info("ADDPEER: %s %s ", addr, roothash)
+        logger.debug("Add peer %s with roothash %s ", addr, roothash)
         if roothash is not None:
             d = self.retrieve_download_impl(roothash)
             if not (addr, roothash) in self.added_peers and d is not None:
@@ -288,7 +288,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param roothash: hash to locate swarm
         @param dest_dir: The folder the file will be put
         """
-        logger.info("START DOWNLOAD: %s", roothash)
+        logger.info("Start download of %s with roothash %s", filename, roothash)
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         dir = dest_dir + "/" + directories
         if not exists(dir):
@@ -350,13 +350,14 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         try:
             d = self._swift.roothash2dl[roothash]
         except:
-            logger.error("COULD NOT RETRIEVE DOWNLOADIMPL")
+            logger.error("Could not retrieve downloadimpl from roothash2dl")
         finally:
             self._swift.splock.release()
         return d
     
     def restart_swift(self):
         if self.is_alive:
+            logger.info("Resetting swift")
             # Make sure that the current swift instance is gone
             self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
             self._swift.network_shutdown()
@@ -371,7 +372,6 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             # We have to make sure that swift has already started, otherwise the tcp binding might fail
             self._swift.start_cmd_connection() # Normally in open
             for h, d in self.downloads.iteritems():
-                logger.info("STARTING DOWNLOAD %s", h)
                 self._swift.start_download(d.downloadimpl)
                 for addr in self.known_addresses:
                     self._swift.add_peer(d.downloadimpl, addr)
@@ -383,7 +383,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             for _, D in self.downloads.iteritems():
                 if D.downloadimpl is not None:
                     (status, stats, seeding_stats, _) = D.downloadimpl.network_get_stats(None)
-                    logger.info("INFO: %s\r\nSEEDERS: %s\r\nPEERS: %s \r\nUPLOADED: %s\r\nDOWNLOADED: %s\r\nSEEDINGSTATS: %s" + 
+                    logger.debug("INFO: %s\r\nSEEDERS: %s\r\nPEERS: %s \r\nUPLOADED: %s\r\nDOWNLOADED: %s\r\nSEEDINGSTATS: %s" + 
                                 "\r\nUPSPEED: %s\r\nDOWNSPEED: %s\r\nFRACTION: %s\r\nSPEW: %s", 
                                 self.get_address(), stats["stats"].numSeeds, stats["stats"].numPeers, stats["stats"].upTotal, 
                                 stats["stats"].downTotal, seeding_stats, stats["up"], stats["down"], stats["frac"], stats["spew"])

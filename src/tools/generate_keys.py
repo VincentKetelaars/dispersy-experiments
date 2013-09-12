@@ -1,3 +1,5 @@
+#!/usr/bin/python2.7 
+
 '''
 Created on Aug 7, 2013
 
@@ -20,9 +22,12 @@ A6LfbbW5Rf81iSJ9aG1r9ZOxNyd27OKDqw0=
 '''
 
 import argparse
+import time
 
-from dispersy.crypto import *
-
+from dispersy.crypto import ec_generate_key, ec_to_private_bin, \
+    ec_to_private_pem, ec_to_public_bin, ec_to_public_pem, curve, \
+    ec_signature_length
+from hashlib import sha1
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generates a new public / private key pair.')

@@ -14,7 +14,7 @@ from Tribler.Core.Swift.SwiftDef import SwiftDef
 from Tribler.Core.simpledefs import DLSTATUS_STOPPED, DLSTATUS_SEEDING
 
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 class SwiftDownloadConfig(DownloadStartupConfig):
         

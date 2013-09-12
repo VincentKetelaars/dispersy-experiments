@@ -14,7 +14,7 @@ from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.definitions import SLEEP_TIME
 
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 class FilePusher(object):
     '''
