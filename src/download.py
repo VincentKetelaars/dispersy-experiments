@@ -26,6 +26,8 @@ class Download(object):
         self._finished_time = None
         if not download:
             self._finished_time = self._start_time
+            
+        self.moreinfo = True
         
     @property
     def roothash(self):

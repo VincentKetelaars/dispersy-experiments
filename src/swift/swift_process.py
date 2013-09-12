@@ -130,6 +130,7 @@ class MySwiftProcess(SwiftProcess):
         self.swift_restart_callback = callback
     
     def i2ithread_readlinecallback(self, ic, cmd):
+        logger.info("CMD: %s", cmd)
         words = cmd.split()
         if words[0] == "ERROR":
             self.connection_lost(self.get_cmdport(), error=True)

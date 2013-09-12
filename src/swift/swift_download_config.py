@@ -106,6 +106,7 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     
     def __init__(self, session, sdef, sp):
         self._download_ready_callback = None
+        self._moreinfo_callback = None
         SwiftDownloadImpl.__init__(self, session, sdef)
         self.sp = sp
         
@@ -124,12 +125,19 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         SwiftDownloadImpl.setup(self, dcfg, pstate, initialdlstatus, lm_network_engine_wrapper_created_callback, lm_network_vod_event_callback)
     
     def set_download_ready_callback(self, callback):
-        self._download_ready_callback = callback
+        self._download_ready_callback = callback        
+            
+    def set_moreinfo_callback(self, callback):
+        self._moreinfo_callback = callback
         
     def i2ithread_info_callback(self, dlstatus, progress, dynasize, dlspeed, ulspeed, numleech, numseeds, contentdl, contentul):
         SwiftDownloadImpl.i2ithread_info_callback(self, dlstatus, progress, dynasize, dlspeed, ulspeed, numleech, numseeds, contentdl, contentul)
         if dlstatus == DLSTATUS_SEEDING and self._download_ready_callback is not None:
             self._download_ready_callback(self.get_def().get_roothash())
+    
+    def i2ithread_moreinfo_callback(self, midict):
+        SwiftDownloadImpl.i2ithread_moreinfo_callback(self, midict)
+        self._moreinfo_callback(self.get_def().get_roothash())
       
     def i2ithread_vod_event_callback(self, event, httpurl):
         SwiftDownloadImpl.i2ithread_vod_event_callback(self, event, httpurl)

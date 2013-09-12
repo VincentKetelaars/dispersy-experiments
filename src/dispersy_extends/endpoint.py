@@ -264,6 +264,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._swift.set_moreinfo_stats(d, True)
         
         self.downloads[roothash] = Download(roothash, filename, d, seed=True) # Know about all hashes that go through this endpoint
+        self.downloads[roothash].moreinfo = True
         
     def add_peer(self, addr, roothash=None):
         """
@@ -298,6 +299,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._swift.set_moreinfo_stats(d, True)
         
         self.downloads[roothash] = Download(roothash, d.get_dest_dir(), d, download=True) # Know about all hashes that go through this endpoint
+        self.downloads[roothash].moreinfo = True
         
     def download_is_ready_callback(self, roothash):
         """
@@ -307,6 +309,12 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         """
         download = self.downloads[roothash]
         if download.set_finished() and not download.seeder():
+            if not download.moreinfo:
+                self.clean_up_files(roothash, True, False)
+                
+    def moreinfo_callback(self, roothash):
+        download = self.downloads[roothash]
+        if download.is_finished() and not download.seeder():
             self.clean_up_files(roothash, True, False)
         
     def i2ithread_data_came_in(self, session, sock_addr, data):
@@ -328,6 +336,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         # get_max_speed for UPLOAD and DOWNLOAD are set to 0 initially (infinite)
         d.set_swift_meta_dir(None)
         d.set_download_ready_callback(self.download_is_ready_callback)
+        d.set_moreinfo_callback(self.moreinfo_callback)
         return d
         
     def retrieve_download_impl(self, roothash):
@@ -366,7 +375,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
                 self._swift.start_download(d.downloadimpl)
                 for addr in self.known_addresses:
                     self._swift.add_peer(d.downloadimpl, addr)
-                    self.added_peers.add((addr, h))   
+                    self.added_peers.add((addr, h))
     
     def _loop(self):
         while not self._thread_stop_event.is_set():
