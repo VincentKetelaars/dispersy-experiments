@@ -287,6 +287,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param roothash: hash to locate swarm
         @param dest_dir: The folder the file will be put
         """
+        logger.info("START DOWNLOAD: %s", roothash)
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         dir = dest_dir + "/" + directories
         if not exists(dir):
@@ -347,6 +348,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
     def restart_swift(self):
         if self.is_alive:
+            # Make sure that the current swift instance is gone
             self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
             self._swift.network_shutdown()
             
@@ -357,6 +359,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             self._swift = MySwiftProcess(self._swift_path, self._swift.workdir, None, self._swift.listenport, None, None, None)
             self._swift.set_on_swift_restart_callback(self.restart_swift) # Normally in init
             self._swift.add_download(self) # Normally in open
+            # We have to make sure that swift has already started, otherwise the tcp binding might fail
             self._swift.start_cmd_connection() # Normally in open
             for h, d in self.downloads.iteritems():
                 logger.info("STARTING DOWNLOAD %s", h)
