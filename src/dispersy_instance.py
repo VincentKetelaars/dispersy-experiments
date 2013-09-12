@@ -21,7 +21,7 @@ from src.dispersy_extends.endpoint import MultiEndpoint, SwiftEndpoint
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
 from src.definitions import DISPERSY_WORK_DIR, SQLITE_DATABASE, TOTAL_RUN_TIME, MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, \
-DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS
+DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH
 
 class DispersyInstance(object):
     '''
@@ -166,7 +166,7 @@ if __name__ == '__main__':
     if args.logging:
 #         logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
 #         logging.config.fileConfig(logger_conf)
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.INFO)
 #         logger.info("Logger using configuration file: " + logger_conf)
         # redirect swift output:
         sys.stderr = open(DEST_DIR+"/"+str(os.getpid()) + ".err", "w")
