@@ -3,13 +3,11 @@ Created on Aug 29, 2013
 
 @author: Vincent Ketelaars
 '''
-
+import os
 import random
 import sys
 import argparse
 import time
-import os
-import logging
 
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
@@ -22,6 +20,9 @@ from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
 from src.definitions import DISPERSY_WORK_DIR, SQLITE_DATABASE, TOTAL_RUN_TIME, MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, \
 DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH
+
+import logging.config
+logger = logging.getLogger(__name__)
 
 class DispersyInstance(object):
     '''
@@ -161,17 +162,16 @@ if __name__ == '__main__':
         
     if args.sqlite_database:
         SQLITE_DATABASE = args.sqlite_database
-    
-    logger = logging.getLogger(__name__)
+
     if args.logging:
-#         logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
-#         logging.config.fileConfig(logger_conf)
-        logging.basicConfig(level=logging.INFO)
-#         logger.info("Logger using configuration file: " + logger_conf)
-        # redirect swift output:
-        sys.stderr = open(DEST_DIR+"/"+str(os.getpid()) + ".err", "w")
-        # redirect standard output: 
-        sys.stdout = open(DEST_DIR+"/"+str(os.getpid()) + ".out", "w")
+        logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
+        logging.config.fileConfig(logger_conf, disable_existing_loggers=False)    
+        logger.info("Logger using configuration file: " + logger_conf)
+        
+    # redirect swift output:
+    sys.stderr = open(DEST_DIR+"/"+str(os.getpid()) + ".err", "w")
+    # redirect standard output: 
+    sys.stdout = open(DEST_DIR+"/"+str(os.getpid()) + ".out", "w")
         
     addresses = []
     if args.addresses:
