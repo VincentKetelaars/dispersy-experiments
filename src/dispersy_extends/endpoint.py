@@ -199,14 +199,14 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._swift.start_cmd_connection()
         self.is_alive = True
         
-        self._thread = Thread(target=self._loop)
-        self._thread.daemon = True
-        self._thread.start()
+        self._thread_loop = Thread(target=self._loop)
+        self._thread_loop.daemon = True
+        self._thread_loop.start()
         
     def close(self, timeout=0.0):
         logger.info("TOTAL %s: down %d, send %d, up %d, cur %d", self.get_address(), self.total_down, self.total_send, self.total_up, self.cur_sendqueue)
         self._thread_stop_event.set()
-        self._thread.join()
+        self._thread_loop.join()
         self.is_alive = False
         self._swift.remove_download(self, True, True)
         self._swift.early_shutdown()

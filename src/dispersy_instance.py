@@ -78,9 +78,9 @@ class DispersyInstance(object):
             self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, directory=self._directory, files=self._files)
             self._filepusher.start()
         
-        self._thread = Thread(target=self._loop)
-        self._thread.daemon = True
-        self._thread.start()
+        self._thread_loop = Thread(target=self._loop)
+        self._thread_loop.daemon = True
+        self._thread_loop.start()
         
     def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
         logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)

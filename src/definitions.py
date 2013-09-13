@@ -56,6 +56,11 @@ HASH_LENGTH = 40
 SIMPLE_MESSAGE_NAME = u"simple_message"
 FILE_HASH_MESSAGE = u"file_hash_message"
 
+MAX_FILE_SIZE = 2**16-60
+
+FILETYPES_NOT_TO_SEND = [".mhash",".mbinmap"]
+FILENAMES_NOT_TO_SEND = ["swifturl-"]
+
 """
 Swift
 """
