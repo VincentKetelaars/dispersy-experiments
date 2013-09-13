@@ -81,7 +81,7 @@ class FilePusher(object):
                         self._queue.put((self.send_file_hash_message, (absfilename, None)))
                     else:
                         dirs = absfilename[len(self._dir) + 1:-len(basename(absfilename))]
-                        self._queue.put((self.send_file_hash_message, (absfilename, dirs)))
+                        self._queue.put((self.send_file_hash_message, (absfilename, ), {"dirs":dirs}))
                 else:
                     with file(absfilename) as f:
                         s = f.read()
@@ -143,7 +143,7 @@ class FilePusher(object):
     
 class CallFunctionThread(Thread):
     """
-    Call callback to send file_hash_message with roothash included
+    Call function in separate thread. Arguments are unpacked.
     """
     def __init__(self, event, queue):
         Thread.__init__(self)
@@ -153,8 +153,8 @@ class CallFunctionThread(Thread):
     def run(self):
         while not self.event.is_set():
             try:
-                f, a = self.queue.get(True, 1)
-                f(*a)
+                f, a, d = self.queue.get(True, 1)
+                f(*a, **d)
                 self.queue.task_done()
             except:
                 pass
