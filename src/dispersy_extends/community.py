@@ -94,14 +94,14 @@ class MyCommunity(Community):
         if isfile(file_hash_message.filename):
             # Let Swift know that it should seed this file
             # Get a hash of the file 
-            roothash = self.dispersy.endpoint.get_hash(file_hash_message.filename)
-            self.dispersy.endpoint.add_file(file_hash_message.filename, roothash)
+            self.dispersy.endpoint.add_file(file_hash_message.filename, file_hash_message.roothash)
             
-            if roothash is not None and len(roothash) == HASH_LENGTH:
+            if file_hash_message.roothash is not None and len(file_hash_message.roothash) == HASH_LENGTH:
                 # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
                 meta = self.get_meta_message(FILE_HASH_MESSAGE)
                 messages = [meta.impl(authentication=(self.my_member,), distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
-                                      payload=(basename(file_hash_message.filename), file_hash_message.directories, roothash, self._address())) for _ in xrange(count)]
+                                      payload=(basename(file_hash_message.filename), file_hash_message.directories, file_hash_message.roothash, self._address())) 
+                            for _ in xrange(count)]
                 self.dispersy.store_update_forward(messages, True, False, True)
         
     @property

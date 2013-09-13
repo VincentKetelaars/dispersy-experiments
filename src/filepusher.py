@@ -4,6 +4,7 @@ Created on Aug 30, 2013
 @author: Vincent Ketelaars
 '''
 
+import Queue
 from threading import Thread, Event
 
 from string import find
@@ -11,6 +12,7 @@ from os import listdir
 from os.path import exists, isfile, isdir, getmtime, join, getsize, basename
 
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
+from src.dispersy_extends.endpoint import get_hash
 from src.definitions import SLEEP_TIME
 
 import logging
@@ -25,7 +27,7 @@ class FilePusher(object):
     
     FILE_SIZE = 2**16-60
 
-    def __init__(self, callback, directory=None, files=[], file_size=FILE_SIZE):
+    def __init__(self, callback, swift_path, directory=None, files=[], file_size=FILE_SIZE):
         '''
         @param callback: The function that will be called with a FileHashCarrier or SimpleFileCarrier object
         @param directory: The directory to search for files
@@ -46,6 +48,8 @@ class FilePusher(object):
         self._recent_files = []
         self._callback = callback
         self._file_size = file_size
+        self.swift_path = swift_path
+        self._queue = Queue.Queue()
         
     def start(self):
         """
@@ -54,6 +58,10 @@ class FilePusher(object):
         self._thread = Thread(target=self._loop)
         self._thread.daemon = True
         self._thread.start()
+        
+        self._threada = CallFunctionThread(self._stop_event, self._queue)
+        self._threada.daemon = True
+        self._threada.start()
         
     def _loop(self):
         """
@@ -66,13 +74,14 @@ class FilePusher(object):
                             
             diff = self._list_files_to_send()
             for absfilename in diff:
+                logger.debug("New file to be sent: %s", absfilename)
                 if getsize(absfilename) > self._file_size:
                     loc = find(absfilename, self._dir)
                     if loc == -1:
-                        self._callback(message=FileHashCarrier(absfilename, None, None, None))
+                        self._queue.put((self.send_file_hash_message, (absfilename, None)))
                     else:
                         dirs = absfilename[len(self._dir) + 1:-len(basename(absfilename))]
-                        self._callback(message=FileHashCarrier(absfilename, dirs, None, None))
+                        self._queue.put((self.send_file_hash_message, (absfilename, dirs)))
                 else:
                     with file(absfilename) as f:
                         s = f.read()
@@ -80,12 +89,18 @@ class FilePusher(object):
                 
             self._stop_event.wait(SLEEP_TIME)
             
+    def send_file_hash_message(self, absfilename, dirs=None):
+        roothash = get_hash(absfilename, self.swift_path)
+        logger.debug("Determined roothash %s, for %s, with dirs %s", roothash, absfilename, dirs)
+        self._callback(message=FileHashCarrier(absfilename, dirs, roothash, None))
+            
     def stop(self):
         """
         Stop thread
         """
         self._stop_event.set()
         self._thread.join()
+        self._threada.join()
             
     def _list_files_to_send(self):
         """
@@ -125,4 +140,22 @@ class FilePusher(object):
         self._recent_files = file_updates
         return diff
     
+    
+class CallFunctionThread(Thread):
+    """
+    Call callback to send file_hash_message with roothash included
+    """
+    def __init__(self, event, queue):
+        Thread.__init__(self)
+        self.event = event
+        self.queue = queue
+  
+    def run(self):
+        while not self.event.is_set():
+            try:
+                f, a = self.queue.get(True, 1)
+                f(*a)
+                self.queue.task_done()
+            except:
+                pass
     

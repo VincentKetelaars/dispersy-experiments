@@ -7,7 +7,7 @@ import os
 import random
 import sys
 import argparse
-import time
+from threading import Thread, Event
 
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
@@ -75,12 +75,12 @@ class DispersyInstance(object):
             
         # Start Filepusher if directory or files available
         if self._directory or self._files:
-            self._filepusher = FilePusher(self._register_some_message, directory=self._directory, files=self._files)
+            self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, directory=self._directory, files=self._files)
             self._filepusher.start()
-            
-        self._loop()
         
-        self._stop()
+        self._thread = Thread(target=self._loop)
+        self._thread.daemon = True
+        self._thread.start()
         
     def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
         logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)
@@ -93,16 +93,18 @@ class DispersyInstance(object):
         
     def _loop(self):
         # Perhaps this should be a separate thread?
-        self._continue = True
+        logger.debug("Start loop")
+        self._loop_event = Event()
         for _ in range(int(self._run_time / SLEEP_TIME)):
-            if not self._continue:
-                break
-            time.sleep(SLEEP_TIME)
+            if not self._loop_event.is_set():
+                self._loop_event.wait(SLEEP_TIME)
+        self._stop()
     
-    def stop(self, continue_):
-        self._continue = continue_
+    def stop(self):
+        self._loop_event.set()
     
     def _stop(self):
+        logger.debug("Stop instance")
         try:
             if self._filepusher is not None:
                 self._filepusher.stop()

@@ -236,19 +236,6 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         if self._swift.is_alive():
             TunnelEndpoint.send(self, candidates, packets)
             self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))
-    
-    def get_hash(self, filename):
-        """
-        Determine the roothash of this file
-        
-        @param filename: The absolute path of the file
-        """
-        if isfile(filename):
-            sdef = SwiftDef()
-            sdef.add_content(filename)
-            sdef.finalize(self._swift_path, destdir=dirname(filename))
-            # returning get_roothash() gives an error somewhere (perhaps message?)
-            return sdef.get_roothash_as_hex()     
         
     def add_file(self, filename, roothash):
         """
@@ -387,4 +374,19 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
                                 "\r\nUPSPEED: %s\r\nDOWNSPEED: %s\r\nFRACTION: %s\r\nSPEW: %s", 
                                 self.get_address(), stats["stats"].numSeeds, stats["stats"].numPeers, stats["stats"].upTotal, 
                                 stats["stats"].downTotal, seeding_stats, stats["up"], stats["down"], stats["frac"], stats["spew"])
+                    
+                    
+def get_hash(filename, swift_path):
+    """
+    Determine the roothash of this file
+    
+    @param filename: The absolute path of the file
+    @param swift_path: The absolute path to the swift binary file
+    """
+    if isfile(filename):
+        sdef = SwiftDef()
+        sdef.add_content(filename)
+        sdef.finalize(swift_path, destdir=dirname(filename))
+        # returning get_roothash() gives an error somewhere (perhaps message?)
+        return sdef.get_roothash_as_hex()
     
