@@ -3,7 +3,7 @@ Created on Sep 10, 2013
 
 @author: Vincent Ketelaars
 '''
-
+import binascii
 from datetime import datetime
 
 class Download(object):
@@ -40,6 +40,9 @@ class Download(object):
     @property
     def downloadimpl(self):
         return self._downloadimpl
+    
+    def roothash_as_hex(self):
+        return binascii.hexlify(self.roothash)
     
     def is_finished(self):
         return self._finished_time is not None

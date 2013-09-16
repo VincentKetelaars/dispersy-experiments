@@ -50,7 +50,7 @@ SEPARATOR = ";;"
 
 DISTRIBUTION_DIRECTION = u"ASC" # "ASC" or "DESC"
 DISTRIBUTION_PRIORITY = 127
-NUMBER_OF_PEERS_TO_SYNC = 3
+NUMBER_OF_PEERS_TO_SYNC = 1
 HASH_LENGTH = 40
 
 SIMPLE_MESSAGE_NAME = u"simple_message"
@@ -58,6 +58,7 @@ FILE_HASH_MESSAGE = u"file_hash_message"
 
 MAX_FILE_SIZE = 2**16-60
 
+# Filepusher
 FILETYPES_NOT_TO_SEND = [".mhash",".mbinmap"]
 FILENAMES_NOT_TO_SEND = ["swifturl-"]
 

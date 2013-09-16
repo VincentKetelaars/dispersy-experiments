@@ -1,6 +1,6 @@
 Check whether a port is actually available, for dispersy (and swift), and check the tcp cmd port.
 When sending anything over the tcp cmd port, make sure that it is functional.
 
-When is a download ready?
-Then the download should be cleaned up.
+Stored messages are sent immediately when a dispersy introduction response is sent. If multiple endpoints have the same peer, 
+this will result in duplicate messages sent.
 

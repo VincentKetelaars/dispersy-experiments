@@ -20,7 +20,7 @@ from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
 from src.swift.swift_process import MySwiftProcess
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download
-from src.definitions import SLEEP_TIME, RANDOM_PORTS
+from src.definitions import SLEEP_TIME, RANDOM_PORTS, FILE_HASH_MESSAGE
 
 import logging
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ class MultiEndpoint(Endpoint):
     
     def send(self, candidates, packets):
         name = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False).name
-        if name == "file_hash_message":
+        if name == FILE_HASH_MESSAGE:
             for candidate in candidates:
                 addr = candidate.get_destination_address(self._dispersy.wan_address)
                 self.distribute_all_hashes_to_peer(addr)
@@ -370,9 +370,9 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             for _, D in self.downloads.iteritems():
                 if D.downloadimpl is not None:
                     (status, stats, seeding_stats, _) = D.downloadimpl.network_get_stats(None)
-                    logger.debug("INFO: %s\r\nSEEDERS: %s\r\nPEERS: %s \r\nUPLOADED: %s\r\nDOWNLOADED: %s\r\nSEEDINGSTATS: %s" + 
+                    logger.debug("INFO: %s, %s\r\nSEEDERS: %s\r\nPEERS: %s \r\nUPLOADED: %s\r\nDOWNLOADED: %s\r\nSEEDINGSTATS: %s" + 
                                 "\r\nUPSPEED: %s\r\nDOWNSPEED: %s\r\nFRACTION: %s\r\nSPEW: %s", 
-                                self.get_address(), stats["stats"].numSeeds, stats["stats"].numPeers, stats["stats"].upTotal, 
+                                self.get_address(), D.roothash_as_hex(), stats["stats"].numSeeds, stats["stats"].numPeers, stats["stats"].upTotal, 
                                 stats["stats"].downTotal, seeding_stats, stats["up"], stats["down"], stats["frac"], stats["spew"])
                     
                     

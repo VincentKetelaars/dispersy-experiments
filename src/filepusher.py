@@ -48,6 +48,7 @@ class FilePusher(object):
         self._file_size = file_size
         self.swift_path = swift_path
         self._queue = Queue.Queue()
+        self._stop_event = Event()
         
     def start(self):
         """
@@ -68,13 +69,14 @@ class FilePusher(object):
         Determine list of files that have are new or have changed since previous iteration.
         Call _callback with each of these files.
         """
-        self._stop_event = Event()
         while not self._stop_event.is_set():                            
             diff = self._list_files_to_send()
             for absfilename in diff:
                 logger.debug("New file to be sent: %s", absfilename)
                 if getsize(absfilename) > self._file_size:
-                    loc = find(absfilename, self._dir)
+                    loc = -1
+                    if self._dir is not None:
+                        loc = find(absfilename, self._dir)
                     dirs = None
                     if loc != -1:
                         dirs = absfilename[len(self._dir) + 1:-len(basename(absfilename))]
@@ -118,7 +120,7 @@ class FilePusher(object):
             return all_files
         
         all_files = []
-        if self._dir: # Get all files in the directory and subdirectories
+        if self._dir is not None: # Get all files in the directory and subdirectories
             all_files = recur(self._dir)
             
         if self._files:
