@@ -45,6 +45,7 @@ DEST_DIR = "/home/vincent/Desktop/tests_dest"
 SWIFT_BINPATH = "/home/vincent/svn/libswift/ppsp/swift"
 DISPERSY_WORK_DIR = os.path.expanduser("~") + u"/Music/"+ datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(os.getpid()) + "/"
 SQLITE_DATABASE = u":memory:"
+LOG_CONFIG_FILE = "logger.conf"
 
 SEPARATOR = ";;"
 
@@ -54,7 +55,7 @@ NUMBER_OF_PEERS_TO_SYNC = 1
 HASH_LENGTH = 40
 
 SIMPLE_MESSAGE_NAME = u"simple_message"
-FILE_HASH_MESSAGE = u"file_hash_message"
+FILE_HASH_MESSAGE_NAME = u"file_hash_message"
 
 MAX_FILE_SIZE = 2**16-60
 

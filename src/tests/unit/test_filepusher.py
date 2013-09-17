@@ -36,12 +36,13 @@ class TestFilePusher(unittest.TestCase):
         self._filepusher = None
 
     def tearDown(self):
-        self._filepusher.stop()
+        if self._filepusher is not None:
+            self._filepusher.stop()
         
         def rm(dirp):
             for p in os.listdir(dirp):
                 path = os.path.join(dirp, p)
-                if p.endswith(".mbinmap") or p.endswith(".mhash"):
+                if p.endswith(".mbinmap") or p.endswith(".mhash") or p.find("swifturl-") >= 0:
                     os.remove(path)
                 if os.path.isdir(path):
                     rm(path)
@@ -82,9 +83,9 @@ class TestFilePusher(unittest.TestCase):
         
         self.assertEqual(all_files, Set())
     
-    @unittest.skipIf(all_success, "test_dir_and_files already succeeded")
-    def test_directory(self):
-        print "\r\n", str(all_success), "\n"
+    def test_directory(self):        
+        if all_success:
+            raise unittest.SkipTest("The combined test case test_dir_and_files has already been succesful")
         all_files = Set(self.get_files_from_directory_recur(self._directory))
 
         def callback(message):
@@ -98,11 +99,9 @@ class TestFilePusher(unittest.TestCase):
         
         self.wait_and_asses(all_files)
     
-    @unittest.skipIf(all_success, "test_dir_and_files already succeeded")
     def test_files(self):
-        print "\r\n", str(all_success), "\n"
         if all_success:
-            raise unittest.SkipTest
+            raise unittest.SkipTest("The combined test case test_dir_and_files has already been succesful")
         all_files = Set(self.get_files_from_directory_recur(self._directory))
 
         def callback(message):
@@ -131,15 +130,5 @@ class TestFilePusher(unittest.TestCase):
         
         self.wait_and_asses(all_files)
 
-        
-def suite():
-    suite = unittest.TestSuite()
-    suite.addTest(TestFilePusher('test_dir_and_files'))
-    suite.addTest(TestFilePusher('test_files'))
-    suite.addTest(TestFilePusher('test_directory'))
-    return suite
-
 if __name__ == "__main__":
-    runner = unittest.TextTestRunner()
-    test_suite = suite()
-    runner.run(test_suite)
+    unittest.main()

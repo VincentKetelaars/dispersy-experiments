@@ -142,5 +142,6 @@ class MySwiftProcess(SwiftProcess):
     def connection_lost(self, port, error=False):
         logger.debug("CONNECTION LOST")
         if error:
-            self.swift_restart_callback()        
+            self.swift_restart_callback()      
+
             

@@ -9,7 +9,7 @@ import struct
 from dispersy.conversion import BinaryConversion
 from dispersy.conversion import DropPacket
 
-from src.definitions import SEPARATOR, SIMPLE_MESSAGE_NAME, FILE_HASH_MESSAGE
+from src.definitions import SEPARATOR, SIMPLE_MESSAGE_NAME, FILE_HASH_MESSAGE_NAME
 
 import logging
 logger = logging.getLogger(__name__)
@@ -54,11 +54,11 @@ class FileHashConversion(BinaryConversion):
         Constructor
         '''
         super(FileHashConversion, self).__init__(community, "\x13")
-        self.define_meta_message(chr(13), community.get_meta_message(FILE_HASH_MESSAGE), self.encode_payload, self.decode_payload)
+        self.define_meta_message(chr(13), community.get_meta_message(FILE_HASH_MESSAGE_NAME), self.encode_payload, self.decode_payload)
         
     def encode_payload(self, message):
         m = message.payload.filename + SEPARATOR + message.payload.directories + SEPARATOR + str(message.payload.roothash) + SEPARATOR + str(message.payload.address)
-        return struct.pack("!L", len(m)), m            
+        return struct.pack("!L", len(m)), m
 
     def decode_payload(self, placeholder, offset, data):
         if len(data) < offset + 4:
@@ -79,18 +79,22 @@ class FileHashConversion(BinaryConversion):
         data = data_payload[file_offset + len(SEPARATOR):]
         
         address_offset = data.find(SEPARATOR)
-        hash = data[:address_offset]        
+        roothash = data[:address_offset]        
         address_str = data[address_offset + len(SEPARATOR):]
         address = self._address_string_to_tuple(address_str)
         
         offset += data_length
-        
-        return offset, placeholder.meta.payload.implement(filename, directories, hash, address)
+        return offset, placeholder.meta.payload.implement(filename, directories, roothash, address)
     
     def _address_string_to_tuple(self, address_str):
+        """
+        Convert address string to tuple of ip and port
+        
+        @param address_str: Has form ('0.0.0.0', 12345) 
+        """
         port_offset = address_str.find(",")
         ip = address_str[2:port_offset-1]
-        port = address_str[port_offset+2:-1]
+        port = int(address_str[port_offset+2:-1])
         return (ip, port)
         
         

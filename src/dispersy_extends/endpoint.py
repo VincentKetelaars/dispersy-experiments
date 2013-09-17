@@ -20,7 +20,7 @@ from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
 from src.swift.swift_process import MySwiftProcess
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download
-from src.definitions import SLEEP_TIME, RANDOM_PORTS, FILE_HASH_MESSAGE
+from src.definitions import SLEEP_TIME, RANDOM_PORTS, FILE_HASH_MESSAGE_NAME
 
 import logging
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ class MultiEndpoint(Endpoint):
     
     def send(self, candidates, packets):
         name = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False).name
-        if name == FILE_HASH_MESSAGE:
+        if name == FILE_HASH_MESSAGE_NAME:
             for candidate in candidates:
                 addr = candidate.get_destination_address(self._dispersy.wan_address)
                 self.distribute_all_hashes_to_peer(addr)
@@ -102,8 +102,7 @@ class MultiEndpoint(Endpoint):
             x.open(dispersy)
     
     def close(self, timeout=0.0):
-        for x in self._endpoints:
-            x.close(timeout)
+        return all([x.close(timeout) for x in self._endpoints])
             
     def _lowest_sendqueue(self):
         """
@@ -210,7 +209,8 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self.is_alive = False
         self._swift.remove_download(self, True, True)
         self._swift.early_shutdown()
-        super(TunnelEndpoint, self).close(timeout)
+        self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
+        return super(TunnelEndpoint, self).close(timeout)
         
     def clean_up_files(self, roothash, rm_state, rm_download):
         """
@@ -223,7 +223,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         d = self.retrieve_download_impl(roothash)
         if d is not None:
             self._swift.remove_download(d, rm_state, rm_download)
-        # TODO: Remove roothash added_peers
+        self.added_peers = Set([p for p in self.added_peers if p[1] != roothash])
     
     def get_address(self):
         # Dispersy retrieves the local ip

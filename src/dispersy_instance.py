@@ -19,7 +19,7 @@ from src.dispersy_extends.endpoint import MultiEndpoint, SwiftEndpoint
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
 from src.definitions import DISPERSY_WORK_DIR, SQLITE_DATABASE, TOTAL_RUN_TIME, MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, \
-DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH
+DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH, LOG_CONFIG_FILE
 
 import logging.config
 logger = logging.getLogger(__name__)
@@ -29,8 +29,8 @@ class DispersyInstance(object):
     Instance of Dispersy that runs on its own process
     '''
 
-    def __init__(self, dest_dir, swift_binpath, work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE, swift_work_dir=None, 
-                 swift_zerostatedir=None, ports=[], addresses=[], directory=None, files=[], run_time=TOTAL_RUN_TIME):
+    def __init__(self, dest_dir, swift_binpath, work_dir=u".", sqlite_database=u":memory:", swift_work_dir=None, 
+                 swift_zerostatedir=None, ports=[], addresses=[], directory=None, files=[], run_time=-1, log_config_file=None):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
         self._work_dir = work_dir
@@ -43,8 +43,22 @@ class DispersyInstance(object):
         self._files = files
         self._filepusher = None
         self._run_time = run_time
+        self._log_config_file = log_config_file
+        
+        self._loop_event = Event()
+        
+        if log_config_file is not None:
+            logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", log_config_file))
+            logging.config.fileConfig(logger_conf, disable_existing_loggers=False)    
+            logger.info("Logger using configuration file: " + logger_conf)
+        
+        # redirect swift output:
+        sys.stderr = open(self._dest_dir+"/"+str(os.getpid()) + ".err", "w")
+        # redirect standard output: 
+        sys.stdout = open(self._dest_dir+"/"+str(os.getpid()) + ".out", "w")
+        
 
-    def _create_mycommunity(self):    
+    def create_mycommunity(self):    
         master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
         my_member = self._dispersy.get_new_member(SECURITY)
         return MyCommunity.join_community(self._dispersy, master_member, my_member)
@@ -65,8 +79,8 @@ class DispersyInstance(object):
         self._dispersy.start()
         print "Dispersy is listening on port %d" % self._dispersy.lan_address[1]
         
-        self._community = self._callback.call(self._create_mycommunity)
-        self._community.dest_dir = self.dest_dir
+        self._community = self._callback.call(self.create_mycommunity)
+        self._community.dest_dir = self.dest_dir # Will be used to put swift downloads
                 
         for address in self._addresses:
             self._callback.call(self._dispersy.create_introduction_request, 
@@ -85,19 +99,20 @@ class DispersyInstance(object):
     def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
         logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)
         if isinstance(message, SimpleFileCarrier):
-            self._callback.register(self._community.create_simple_messages, (count,message), delay=delay)
+            self._callback.register(self._community.create_simple_messages, (count,message), kargs={"update":False}, delay=delay)
         elif isinstance(message, FileHashCarrier):
-            self._callback.register(self._community.create_file_hash_messages, (count,message), delay=delay)
+            self._callback.register(self._community.create_file_hash_messages, (count,message), kargs={"update":False}, delay=delay)
         else:
-            self._callback.register(self._community.create_simple_messages, (count,None), delay=delay)
+            self._callback.register(self._community.create_simple_messages, (count,None), kargs={"update":False}, delay=delay)
         
     def _loop(self):
         # Perhaps this should be a separate thread?
         logger.debug("Start loop")
-        self._loop_event = Event()
         for _ in range(int(self._run_time / SLEEP_TIME)):
             if not self._loop_event.is_set():
                 self._loop_event.wait(SLEEP_TIME)
+        while self._run_time == -1 and not self._loop_event.is_set():
+            self._loop_event.wait(SLEEP_TIME)
         self._stop()
     
     def stop(self):
@@ -140,7 +155,7 @@ if __name__ == '__main__':
     parser.add_argument("-d", "--directory",help="List directory of files to send")
     parser.add_argument("-D", "--destination", help="List directory to put downloads")
     parser.add_argument("-f", "--files", nargs="+", help="List files to send")
-    parser.add_argument("-i", "--logging", action="store_true", help="If set, logs will be shown in the cmd")
+    parser.add_argument("-l", "--log_config_file", help="If set, logs will be shown in the cmd")
     parser.add_argument("-p", "--ports", type=int, nargs="+", help="List ports to assign to endpoints, space separated")
     parser.add_argument("-P", "--peer_ports", type=int, nargs="+", help="List ports of local dispersy instances, space separated")
     parser.add_argument("-q", "--sqlite_database", default=u":memory:", help="SQLite Database directory")
@@ -164,16 +179,9 @@ if __name__ == '__main__':
         
     if args.sqlite_database:
         SQLITE_DATABASE = args.sqlite_database
-
-    if args.logging:
-        logger_conf = os.path.abspath(os.environ.get("LOGGER_CONF", "logger.conf"))
-        logging.config.fileConfig(logger_conf, disable_existing_loggers=False)    
-        logger.info("Logger using configuration file: " + logger_conf)
         
-    # redirect swift output:
-    sys.stderr = open(DEST_DIR+"/"+str(os.getpid()) + ".err", "w")
-    # redirect standard output: 
-    sys.stdout = open(DEST_DIR+"/"+str(os.getpid()) + ".out", "w")
+    if args.log_config_file:
+        LOG_CONFIG_FILE = args.log_config_file
         
     addresses = []
     if args.addresses:
@@ -194,6 +202,6 @@ if __name__ == '__main__':
         
     d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE, 
                          swift_work_dir=args.swift_work_dir, addresses=addresses, ports=ports, directory=args.directory, 
-                         files=args.files, run_time=TOTAL_RUN_TIME)
+                         files=args.files, run_time=TOTAL_RUN_TIME, log_config_file=LOG_CONFIG_FILE)
     d.run()
     
