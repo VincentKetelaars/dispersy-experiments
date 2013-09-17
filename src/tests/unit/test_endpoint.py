@@ -47,11 +47,18 @@ class TestSwiftEndpoint(unittest.TestCase):
         self._dispersy = Dispersy(callback, self._endpoint, u".", u":memory:")
         self._dispersy.start()
         self._filename = None
+        self._directories = "testcase_swift_seed_and_down/"
+        self._dest_dir = os.getenv("HOME")+ "/Downloads"
 
     def tearDown(self):
         self._dispersy.stop()
         if self._filename is not None:
             remove_files(self._filename)
+        dir_ = os.path.join(self._dest_dir, self._directories)
+        if os.path.isdir(dir_):
+            for f in os.listdir(dir_):
+                os.remove(os.path.join(dir_, f))
+            os.removedirs(dir_)
 
     def test_address(self):
         address = self._endpoint.get_address()
@@ -72,9 +79,7 @@ class TestSwiftEndpoint(unittest.TestCase):
         self._endpoint.add_file(self._filename, roothash)
         roothash_unhex=binascii.unhexlify(roothash)
         self._endpoint.add_peer(("127.0.0.1",port), roothash_unhex)
-        directories = "testcase_swift_seed_and_down/"
-        dest_dir = os.getenv("HOME")+ "/Downloads"
-        endpoint.start_download(os.path.basename(self._filename), directories, roothash, dest_dir)
+        endpoint.start_download(os.path.basename(self._filename), self._directories, roothash, self._dest_dir)
         
         while True:
             check = True
@@ -86,7 +91,7 @@ class TestSwiftEndpoint(unittest.TestCase):
             time.sleep(0.5)
             
         dispersy.stop()
-        self.assertTrue(os.path.exists(os.path.join(dest_dir, directories, os.path.basename(self._filename))))
+        self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))
 
 class TestMultiEndpoint(unittest.TestCase):
 
