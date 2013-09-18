@@ -7,10 +7,12 @@ import binascii
 import random
 import subprocess
 import sys
+import time
 from collections import defaultdict
 from threading import RLock, currentThread, Thread, Event
 
-from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING
+from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING,\
+    DONE_STATE_SHUTDOWN
 
 import logging
 logger = logging.getLogger(__name__)
@@ -122,7 +124,7 @@ class MySwiftProcess(SwiftProcess):
             
     def start_cmd_connection(self):
         while not self._swift_running.is_set():
-            self._swift_running.wait(0.01)
+            self._swift_running.wait()
         SwiftProcess.start_cmd_connection(self)
     
     def set_on_swift_restart_callback(self, callback):
@@ -136,12 +138,14 @@ class MySwiftProcess(SwiftProcess):
         return SwiftProcess.i2ithread_readlinecallback(self, ic, cmd)
     
     def write(self, msg):
-        if self.fastconn is not None:
-            SwiftProcess.write(self, msg)
+        if self.fastconn is not None or self.donestate == DONE_STATE_SHUTDOWN or not self._swift_running.is_set():
+            try:
+                SwiftProcess.write(self, msg)
+            except:
+                logger.warning("FastConnection is down")
             
     def connection_lost(self, port, error=False):
         logger.debug("CONNECTION LOST")
-        if error:
-            self.swift_restart_callback()      
+        self.swift_restart_callback()
 
             

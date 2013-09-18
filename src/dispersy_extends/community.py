@@ -72,7 +72,7 @@ class MyCommunity(Community):
     def file_hash_handle(self, messages):
         for x in messages:
             if len(x.payload.filename) >= 1 and x.payload.directories is not None and len(x.payload.roothash) == HASH_LENGTH:
-                self.dispersy.endpoint.start_download(x.payload.filename, x.payload.directories, x.payload.roothash, self._dest_dir)
+                self.dispersy.endpoint.start_download(x.payload.filename, x.payload.directories, x.payload.roothash, self._dest_dir, addr=x.payload.address)
             
     def _short_member_id(self):
         return str(self.my_member.mid.encode("HEX"))[0:5]     

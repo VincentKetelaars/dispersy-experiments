@@ -64,5 +64,10 @@ FILETYPES_NOT_TO_SEND = [".mhash",".mbinmap"]
 FILENAMES_NOT_TO_SEND = ["swifturl-"]
 
 """
+Tests
+"""
+TIMEOUT = 10 # Seconds
+
+"""
 Swift
 """

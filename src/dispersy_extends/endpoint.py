@@ -5,12 +5,11 @@ Created on Aug 27, 2013
 '''
 
 from os import urandom, makedirs
-from os.path import isfile, dirname, exists
+from os.path import isfile, dirname, exists, basename
 from datetime import datetime
 from threading import Thread, Event
 from sets import Set
 import binascii
-import random
 
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
@@ -20,7 +19,7 @@ from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
 from src.swift.swift_process import MySwiftProcess
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download
-from src.definitions import SLEEP_TIME, RANDOM_PORTS, FILE_HASH_MESSAGE_NAME
+from src.definitions import SLEEP_TIME, FILE_HASH_MESSAGE_NAME, HASH_LENGTH
 
 import logging
 logger = logging.getLogger(__name__)
@@ -67,11 +66,10 @@ class MultiEndpoint(Endpoint):
         assert isinstance(endpoint, Endpoint), type(endpoint)
         for e in self._endpoints:
             if e == endpoint:
-                if e.is_alive:
-                    e.close()
+                e.close()
                 self._endpoints.remove(e)
-                if len(self._endpoints) == 0:
-                    self._endpoint = None
+                if self._endpoint == e:
+                    self.determine_endpoint()
                 break
     
     def get_address(self):
@@ -157,30 +155,33 @@ class MultiEndpoint(Endpoint):
             return endpoint  
         
         if (len(self._endpoints) == 0):
-            raise NoEndpointAvailableException()
+            self._endpoint = None
         elif (len(self._endpoints) > 1):
             self._endpoint = recur(Set(self._endpoints), swift, known_addresses, subset)
         else:
-            pass # Number of endpoints is 1, self._endpoint stays employed!
-        
-    def get_hash(self, filename):
-        self.determine_endpoint(swift=True)
-        return self._endpoint.get_hash(filename)
+            self._endpoint = self._endpoints[0]
     
     def add_file(self, filename, roothash):
+        """
+        All endpoints are called with add_file
+        """
         for e in self._endpoints:
-            if isinstance(e, SwiftEndpoint):
-                e.add_file(filename, roothash)
+            e.add_file(filename, roothash)
         
     def distribute_all_hashes_to_peer(self, addr):
+        """
+        All endpoints are called with add_peer
+        """
         for e in self._endpoints:
-            for h, _ in e.downloads.iteritems():
+            for h in e.downloads.keys():
                 e.add_peer(addr, h)
             
-    def start_download(self, filename, directories, roothash, dest_dir):
+    def start_download(self, filename, directories, roothash, dest_dir, addr=None):
+        """
+        All endpoints are called with start_download
+        """
         for e in self._endpoints:
-            if isinstance(e, SwiftEndpoint):
-                e.start_download(filename, directories, roothash, dest_dir)   
+            e.start_download(filename, directories, roothash, dest_dir, addr)   
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
@@ -192,7 +193,8 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self._swift_path = binpath
         
         self._thread_stop_event = Event()
-            
+        self._resetting = False
+        
     def open(self, dispersy):
         super(SwiftEndpoint, self).open(dispersy)
         self._swift.start_cmd_connection()
@@ -245,13 +247,16 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param roothash: The roothash of this file
         """
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
-        d = self.create_download_impl(roothash)
-        d.set_dest_dir(filename)
-        self._swift.start_download(d)
-        self._swift.set_moreinfo_stats(d, True)
-        
-        self.downloads[roothash] = Download(roothash, filename, d, seed=True) # Know about all hashes that go through this endpoint
-        self.downloads[roothash].moreinfo = True
+        if not roothash in self.downloads.keys() and len(roothash) == HASH_LENGTH / 2: # Check if not already added, and if the unhexlified roothash has the proper length
+            d = self.create_download_impl(roothash)
+            d.set_dest_dir(filename)
+
+            self.downloads[roothash] = Download(roothash, filename, d, seed=True) # Know about all hashes that go through this endpoint
+            self.downloads[roothash].moreinfo = True
+            
+            self._swift.start_download(d)
+            self._swift.set_moreinfo_stats(d, True)
+            
         
     def add_peer(self, addr, roothash=None):
         """
@@ -261,13 +266,14 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param roothash: Must be unhexlified roothash
         """
         logger.debug("Add peer %s with roothash %s ", addr, roothash)
-        if roothash is not None:
+        if roothash is not None and not (addr, roothash) in self.added_peers:
             d = self.retrieve_download_impl(roothash)
-            if not (addr, roothash) in self.added_peers and d is not None:
+            if d is not None:
+                self.downloads[roothash].add_peer(addr)
                 self._swift.add_peer(d, addr)
-                self.added_peers.add((addr, roothash))            
+                self.added_peers.add((addr, roothash))
     
-    def start_download(self, filename, directories, roothash, dest_dir):
+    def start_download(self, filename, directories, roothash, dest_dir, addr=None):
         """
         This method lets the swift instance know that it should download the file that comes with this roothash.
         
@@ -277,16 +283,18 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         """
         logger.info("Start download of %s with roothash %s", filename, roothash)
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
-        dir = dest_dir + "/" + directories
-        if not exists(dir):
-            makedirs(dir)
-        d = self.create_download_impl(roothash)
-        d.set_dest_dir(dir + filename)
-        self._swift.start_download(d)
-        self._swift.set_moreinfo_stats(d, True)
-        
-        self.downloads[roothash] = Download(roothash, d.get_dest_dir(), d, download=True) # Know about all hashes that go through this endpoint
-        self.downloads[roothash].moreinfo = True
+        if not roothash in self.downloads.keys():
+            dir = dest_dir + "/" + directories
+            if not exists(dir):
+                makedirs(dir)
+            d = self.create_download_impl(roothash)
+            d.set_dest_dir(dir + basename(filename))
+            self._swift.start_download(d)
+            self._swift.set_moreinfo_stats(d, True)
+            
+            self.downloads[roothash] = Download(roothash, d.get_dest_dir(), d, download=True) # Know about all hashes that go through this endpoint
+            self.downloads[roothash].moreinfo = True
+            self.downloads[roothash].add_peer(addr)
         
     def download_is_ready_callback(self, roothash):
         """
@@ -300,6 +308,12 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
                 self.clean_up_files(roothash, True, False)
                 
     def moreinfo_callback(self, roothash):
+        """
+        This method is called whenever more info comes in.
+        In case the download is finished and not supposed to seed, clean up the files
+        
+        @param roothash: The roothash to which the more info is related
+        """
         download = self.downloads[roothash]
         if download.is_finished() and not download.seeder():
             self.clean_up_files(roothash, True, False)
@@ -343,16 +357,21 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         return d
     
     def restart_swift(self):
-        if self.is_alive:
+        """
+        Restart swift if the endpoint is still alive, generally called when an Error occurred in the swift instance
+        After swift has been terminated, a new process starts and previous downloads and their peers are added.
+        """
+        if self.is_alive and not self._resetting:
+            self._resetting = True
             logger.info("Resetting swift")
             # Make sure that the current swift instance is gone
             self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
             self._swift.network_shutdown()
+            self.added_peers = Set() # Reset the peers added before shutdown
             
             # Make sure not to make the same mistake as what let to this
             # Any roothash added twice will create an error, leading to this. 
             # If so, that roothash will not cause another problem because only hashes that make it are in the downloads dictionary
-            port = random.randint(*RANDOM_PORTS)
             self._swift = MySwiftProcess(self._swift_path, self._swift.workdir, None, self._swift.listenport, None, None, None)
             self._swift.set_on_swift_restart_callback(self.restart_swift) # Normally in init
             self._swift.add_download(self) # Normally in open
@@ -360,9 +379,11 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             self._swift.start_cmd_connection() # Normally in open
             for h, d in self.downloads.iteritems():
                 self._swift.start_download(d.downloadimpl)
-                for addr in self.known_addresses:
-                    self._swift.add_peer(d.downloadimpl, addr)
-                    self.added_peers.add((addr, h))
+                for addr in d.peers():
+                    if not (addr, h) in self.added_peers:
+                        self._swift.add_peer(d.downloadimpl, addr)
+                        self.added_peers.add((addr, h))
+            self._resetting = False
     
     def _loop(self):
         while not self._thread_stop_event.is_set():

@@ -5,6 +5,7 @@ Created on Sep 10, 2013
 '''
 import binascii
 from datetime import datetime
+from sets import Set
 
 class Download(object):
     '''
@@ -21,6 +22,7 @@ class Download(object):
         self._seed = seed
         self._download = download
         self._downloadimpl = downloadimpl
+        self._peers = Set()
         
         self._start_time = datetime.now()
         self._finished_time = None
@@ -60,4 +62,11 @@ class Download(object):
     def path(self):
         return self._directories + self._filename
         
+    def add_peer(self, addr):
+        if addr is not None:
+            # TODO: Make sure that it is a proper address
+            self._peers.add(addr)
+        
+    def peers(self):
+        return self._peers
         

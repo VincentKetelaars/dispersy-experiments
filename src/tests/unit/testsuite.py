@@ -11,7 +11,7 @@ import test_endpoint
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestFilePusher('test_dir_and_files'))
+    suite.addTest(TestFilePusher('test_dir_and_files')) # If this one succeeds, test_directory does not have to run
     suite.addTest(TestFilePusher('test_files'))
     suite.addTest(TestFilePusher('test_directory'))
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_community))

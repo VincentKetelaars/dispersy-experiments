@@ -100,8 +100,6 @@ class TestFilePusher(unittest.TestCase):
         self.wait_and_asses(all_files)
     
     def test_files(self):
-        if all_success:
-            raise unittest.SkipTest("The combined test case test_dir_and_files has already been succesful")
         all_files = Set(self.get_files_from_directory_recur(self._directory))
 
         def callback(message):
