@@ -62,6 +62,14 @@ class DispersyInstance(object):
         master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
         my_member = self._dispersy.get_new_member(SECURITY)
         return MyCommunity.join_community(self._dispersy, master_member, my_member)
+    
+    def start(self):
+        try:
+            self.run()
+        except:
+            logger.warning("Dispersy instance failed to run properly")
+        finally:
+            self._stop()
         
     def run(self):        
         # Create Dispersy object
@@ -84,7 +92,7 @@ class DispersyInstance(object):
                 
         for address in self._addresses:
             self._callback.call(self._dispersy.create_introduction_request, 
-                                (self._community, WalkCandidate(address, False, address, address, u"unknown"),
+                                (self._community, WalkCandidate(address, True, address, address, u"unknown"),
                                  True,True))
             
         # Start Filepusher if directory or files available
@@ -92,9 +100,7 @@ class DispersyInstance(object):
             self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, directory=self._directory, files=self._files)
             self._filepusher.start()
         
-        self._thread_loop = Thread(target=self._loop)
-        self._thread_loop.daemon = True
-        self._thread_loop.start()
+        self._loop()
         
     def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
         logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)
@@ -111,9 +117,10 @@ class DispersyInstance(object):
         for _ in range(int(self._run_time / SLEEP_TIME)):
             if not self._loop_event.is_set():
                 self._loop_event.wait(SLEEP_TIME)
+                
         while self._run_time == -1 and not self._loop_event.is_set():
-            self._loop_event.wait(SLEEP_TIME)
-        self._stop()
+            logger.debug("Start infinite loop")
+            self._loop_event.wait()
     
     def stop(self):
         self._loop_event.set()
@@ -203,5 +210,5 @@ if __name__ == '__main__':
     d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE, 
                          swift_work_dir=args.swift_work_dir, addresses=addresses, ports=ports, directory=args.directory, 
                          files=args.files, run_time=TOTAL_RUN_TIME, log_config_file=LOG_CONFIG_FILE)
-    d.run()
+    d.start()
     

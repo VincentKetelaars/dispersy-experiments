@@ -13,7 +13,7 @@ class TestConversion(unittest.TestCase):
     
     def setUp(self):
         self._di = DispersyInstance(DEST_DIR, SWIFT_BINPATH, run_time=5)
-        self._di.run()
+        self._di.start()
         self._conversions = self._di._community._conversions
 
     def tearDown(self):

@@ -1,0 +1,21 @@
+2013-09-18 13:43:23,945 INFO        dispersy:409  update LAN address 193.156.108.78:0 -> 193.156.108.78:11111
+2013-09-18 13:43:23,945 INFO        dispersy:415  update WAN address 0.0.0.0:0 -> 193.156.108.78:11111
+2013-09-18 13:43:23,973 DEBUG        endpoint:380   dispersy-introduction-request ->  193.156.108.78:12345  201 bytes
+2013-09-18 13:43:23,993 DEBUG        endpoint:399       dispersy-missing-identity <-  193.156.108.78:12345   51 bytes
+2013-09-18 13:43:24,007 DEBUG        endpoint:380               dispersy-identity ->  193.156.108.78:12345  265 bytes
+2013-09-18 13:43:24,172 DEBUG        endpoint:399  dispersy-introduction-response <-  193.156.108.78:12345  188 bytes
+2013-09-18 13:43:24,173 DEBUG        endpoint:399               file_hash_message <-  193.156.108.78:12345  246 bytes
+2013-09-18 13:43:24,174 DEBUG        endpoint:399                  simple_message <-  193.156.108.78:12345  282 bytes
+2013-09-18 13:43:24,175 DEBUG        endpoint:399                  simple_message <-  193.156.108.78:12345  254 bytes
+2013-09-18 13:43:24,175 DEBUG        endpoint:399                  simple_message <-  193.156.108.78:12345  229 bytes
+2013-09-18 13:43:24,176 DEBUG        endpoint:399                  simple_message <-  193.156.108.78:12345  227 bytes
+2013-09-18 13:43:24,228 DEBUG        endpoint:380       dispersy-missing-identity ->  193.156.108.78:12345   51 bytes
+2013-09-18 13:43:24,256 DEBUG        endpoint:399               dispersy-identity <-  193.156.108.78:12345  265 bytes
+2013-09-18 13:43:24,274 DEBUG        timeline:190  ACCEPT time:2 user:3 -> permit^dispersy-identity (public resolution)
+2013-09-18 13:43:24,282 DEBUG       community:1206 updating global time 2 -> 7
+2013-09-18 13:43:25,081 DEBUG        endpoint:399               file_hash_message <-  193.156.108.78:12345  261 bytes
+2013-09-18 13:43:25,134 DEBUG       community:1206 updating global time 7 -> 8
+2013-09-18 13:43:26,100 DEBUG        endpoint:399               file_hash_message <-  193.156.108.78:12345  258 bytes
+2013-09-18 13:43:26,110 DEBUG       community:1206 updating global time 8 -> 9
+2013-09-18 13:43:27,128 DEBUG        endpoint:399               file_hash_message <-  193.156.108.78:12345  248 bytes
+2013-09-18 13:43:27,135 DEBUG       community:1206 updating global time 9 -> 10

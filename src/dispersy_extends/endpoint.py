@@ -87,12 +87,8 @@ class MultiEndpoint(Endpoint):
             for candidate in candidates:
                 addr = candidate.get_destination_address(self._dispersy.wan_address)
                 self.distribute_all_hashes_to_peer(addr)
-        if name == "dispersy-introduction-request":
-            for e in self._endpoints:
-                e.send(candidates, packets)
-        else:
-            self.determine_endpoint(known_addresses=list(c.sock_addr for c in candidates), subset=True)
-            self._endpoint.send(candidates, packets)
+        self.determine_endpoint(known_addresses=list(c.sock_addr for c in candidates), subset=True)
+        self._endpoint.send(candidates, packets)
             
     def open(self, dispersy):
         self._dispersy = dispersy
@@ -245,7 +241,8 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         
         @param filename: The absolute path of the file
         @param roothash: The roothash of this file
-        """
+        """        
+        logger.debug("Add file %s with roothash %s")
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys() and len(roothash) == HASH_LENGTH / 2: # Check if not already added, and if the unhexlified roothash has the proper length
             d = self.create_download_impl(roothash)

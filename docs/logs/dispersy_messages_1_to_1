@@ -1,0 +1,17 @@
+2013-09-18 13:43:23,947 INFO        dispersy:409  update LAN address 193.156.108.78:0 -> 193.156.108.78:12345
+2013-09-18 13:43:23,947 INFO        dispersy:415  update WAN address 0.0.0.0:0 -> 193.156.108.78:12345
+2013-09-18 13:43:23,974 DEBUG        endpoint:399   dispersy-introduction-request <-  193.156.108.78:11111  201 bytes
+2013-09-18 13:43:23,992 DEBUG        endpoint:380       dispersy-missing-identity ->  193.156.108.78:11111   51 bytes
+2013-09-18 13:43:24,089 DEBUG        endpoint:399               dispersy-identity <-  193.156.108.78:11111  265 bytes
+2013-09-18 13:43:24,123 DEBUG        timeline:190  ACCEPT time:2 user:3 -> permit^dispersy-identity (public resolution)
+2013-09-18 13:43:24,133 DEBUG        endpoint:380  dispersy-introduction-response ->  193.156.108.78:11111  188 bytes
+2013-09-18 13:43:24,134 DEBUG        endpoint:380               file_hash_message ->  193.156.108.78:11111  246 bytes
+2013-09-18 13:43:24,134 DEBUG        endpoint:380                  simple_message ->  193.156.108.78:11111  282 bytes
+2013-09-18 13:43:24,135 DEBUG        endpoint:380                  simple_message ->  193.156.108.78:11111  254 bytes
+2013-09-18 13:43:24,135 DEBUG        endpoint:380                  simple_message ->  193.156.108.78:11111  229 bytes
+2013-09-18 13:43:24,135 DEBUG        endpoint:380                  simple_message ->  193.156.108.78:11111  227 bytes
+2013-09-18 13:43:24,229 DEBUG        endpoint:399       dispersy-missing-identity <-  193.156.108.78:11111   51 bytes
+2013-09-18 13:43:24,255 DEBUG        endpoint:380               dispersy-identity ->  193.156.108.78:11111  265 bytes
+2013-09-18 13:43:25,040 DEBUG        endpoint:380               file_hash_message ->  193.156.108.78:11111  261 bytes
+2013-09-18 13:43:26,021 DEBUG        endpoint:380               file_hash_message ->  193.156.108.78:11111  258 bytes
+2013-09-18 13:43:27,050 DEBUG        endpoint:380               file_hash_message ->  193.156.108.78:11111  248 bytes
