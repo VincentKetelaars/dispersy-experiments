@@ -13,6 +13,7 @@ import binascii
 
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
+from dispersy.candidate import WalkCandidate
 from Tribler.Core.Swift.SwiftDef import SwiftDef
 from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
 
@@ -82,13 +83,12 @@ class MultiEndpoint(Endpoint):
         return list(endpoint.get_address() for endpoint in self._endpoints)
     
     def send(self, candidates, packets):
-        name = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False).name
-        if name == FILE_HASH_MESSAGE_NAME:
-            for candidate in candidates:
-                addr = candidate.get_destination_address(self._dispersy.wan_address)
-                self.distribute_all_hashes_to_peer(addr)
+        meta = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False)
+        if meta.name == FILE_HASH_MESSAGE_NAME:
+            self.distribute_all_hashes_to_peers()
         self.determine_endpoint(known_addresses=list(c.sock_addr for c in candidates), subset=True)
         self._endpoint.send(candidates, packets)
+        self._send_introduction_requests_to_unknown(candidates, packets)
             
     def open(self, dispersy):
         self._dispersy = dispersy
@@ -164,20 +164,33 @@ class MultiEndpoint(Endpoint):
         for e in self._endpoints:
             e.add_file(filename, roothash)
         
-    def distribute_all_hashes_to_peer(self, addr):
+    def distribute_all_hashes_to_peers(self):
         """
         All endpoints are called with add_peer
         """
         for e in self._endpoints:
-            for h in e.downloads.keys():
-                e.add_peer(addr, h)
+            for roothash in e.downloads.keys():
+                for addr in e.known_addresses:
+                    e.add_peer(addr, roothash)
             
     def start_download(self, filename, directories, roothash, dest_dir, addr=None):
         """
         All endpoints are called with start_download
         """
         for e in self._endpoints:
-            e.start_download(filename, directories, roothash, dest_dir, addr)   
+            e.start_download(filename, directories, roothash, dest_dir, addr)
+            
+    def _send_introduction_requests_to_unknown(self, candidates, packets):
+        meta = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False)
+        addrs = Set([c.get_destination_address(self._dispersy.wan_address) for c in candidates])
+        for e in self._endpoints:
+            if meta.name.find("dispersy") == -1 or e != self._endpoint:
+                diff = addrs.difference(e.known_addresses)
+                for a in diff:
+                    logger.debug("%s sends introduction request to %s", e.get_address(), a)
+                    e.known_addresses.add(a)
+                    self._dispersy._callback.call(self._dispersy.create_introduction_request, 
+                                    (meta._community, WalkCandidate(a, True, a, a, u"unknown"),True,True))
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
@@ -242,9 +255,9 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param filename: The absolute path of the file
         @param roothash: The roothash of this file
         """        
-        logger.debug("Add file %s with roothash %s")
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys() and len(roothash) == HASH_LENGTH / 2: # Check if not already added, and if the unhexlified roothash has the proper length
+            logger.debug("Add file %s with roothash %s", filename, roothash)
             d = self.create_download_impl(roothash)
             d.set_dest_dir(filename)
 
@@ -262,10 +275,10 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param addr: address of the peer: (ip, port)
         @param roothash: Must be unhexlified roothash
         """
-        logger.debug("Add peer %s with roothash %s ", addr, roothash)
         if roothash is not None and not (addr, roothash) in self.added_peers:
             d = self.retrieve_download_impl(roothash)
             if d is not None:
+                logger.debug("Add peer %s with roothash %s ", addr, roothash)
                 self.downloads[roothash].add_peer(addr)
                 self._swift.add_peer(d, addr)
                 self.added_peers.add((addr, roothash))
@@ -278,14 +291,14 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         @param roothash: hash to locate swarm
         @param dest_dir: The folder the file will be put
         """
-        logger.info("Start download of %s with roothash %s", filename, roothash)
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys():
-            dir = dest_dir + "/" + directories
-            if not exists(dir):
-                makedirs(dir)
+            logger.info("Start download of %s with roothash %s", filename, roothash)
+            dir_ = dest_dir + "/" + directories
+            if not exists(dir_):
+                makedirs(dir_)
             d = self.create_download_impl(roothash)
-            d.set_dest_dir(dir + basename(filename))
+            d.set_dest_dir(dir_ + basename(filename))
             self._swift.start_download(d)
             self._swift.set_moreinfo_stats(d, True)
             
@@ -387,7 +400,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             self._thread_stop_event.wait(SLEEP_TIME)
             for _, D in self.downloads.iteritems():
                 if D.downloadimpl is not None:
-                    (status, stats, seeding_stats, _) = D.downloadimpl.network_get_stats(None)
+                    (_, stats, seeding_stats, _) = D.downloadimpl.network_get_stats(None)
                     logger.debug("INFO: %s, %s\r\nSEEDERS: %s\r\nPEERS: %s \r\nUPLOADED: %s\r\nDOWNLOADED: %s\r\nSEEDINGSTATS: %s" + 
                                 "\r\nUPSPEED: %s\r\nDOWNSPEED: %s\r\nFRACTION: %s\r\nSPEW: %s", 
                                 self.get_address(), D.roothash_as_hex(), stats["stats"].numSeeds, stats["stats"].numPeers, stats["stats"].upTotal, 
