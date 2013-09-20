@@ -10,41 +10,61 @@ cmdgw.cpp
 #include <sstream>
 //#include <pthread.h>
 
+Line 677:
 
-Line 851:
+struct map_and_store {
+	MmapHashTree *mmap;
+	Storage *st;
+	map_and_store() {}
+	map_and_store(MmapHashTree *m, Storage *s) : mmap(m), st(s) {}
+};
 
-//        // Create separate thread to update status from files
-//        pthread_t mythread;
-//        SwarmData *sd = SwarmManager::GetManager().FindSwarm(req->td);
-//        if (sd == NULL) {
-//        	fprintf(stderr, "No SwarmData\n");
-//        } else {
-//			FileTransfer *ft = (*sd).GetTransfer(true);
-//			if (ft == NULL) {
-//				fprintf(stderr, "No FileTransfer\n");
-//			} else {
-//				MmapHashTree *mmap = (MmapHashTree *) (*ft).hashtree();
-//				if (mmap == NULL) {
-//					fprintf(stderr, "No HashTree\n");
-//				} else {
-//					int rc = pthread_create(&mythread, NULL, &MmapHashTree::LoopHelper, &mmap);
-//					if (rc){
-//					   fprintf(stderr, "Helas, Pthread could not be created.\n");
-//					}
-//				}
-//			}
-//        }
+
+static void *LoopHelper(void *mas) {
+	map_and_store *ms = (map_and_store *) mas;
+	MmapHashTree *m = ms->mmap;
+	Storage *s = ms->st;
+	return m->Loop(s);
+}
+
+
+Line 863:
+
+	// Create separate thread to update status from files
+	    pthread_t mythread;
+	    SwarmData *sd = SwarmManager::GetManager().FindSwarm(req->td);
+	    if (sd == NULL) {
+	    	fprintf(stderr, "No SwarmData\n");
+	    } else {
+			FileTransfer *ft = (*sd).GetTransfer(true);
+			if (ft == NULL) {
+				fprintf(stderr, "No FileTransfer\n");
+			} else {
+				MmapHashTree *mmap = (MmapHashTree *) (*ft).hashtree();
+				if (mmap == NULL) {
+					fprintf(stderr, "No HashTree\n");
+				} else {
+					Storage *st = mmap->get_storage();
+					map_and_store ms = map_and_store(mmap, st);
+					int rc = pthread_create(&mythread, NULL, LoopHelper, (&ms));
+					if (rc){
+					   fprintf(stderr, "Helas, Pthread could not be created.\n");
+					}
+				}
+			}
+	    }
 
 
 ---------------------------------------------------------------------------------------
 
 hashtree.cpp
 
-void *MmapHashTree::Loop() {
+void *MmapHashTree::Loop(Storage *storage) {
 	while (true) {
-//		fprintf(stderr, "Submitting!\n");
-//		Submit();
 		sleep(1);
+		fprintf(stderr, "Submitting!\n");
+		storage_ = storage;
+		Submit();
 	}
 	return 0;
 }
@@ -53,10 +73,6 @@ void *MmapHashTree::Loop() {
 
 hashtree.h
 
-protected:
-
-	void 			*Loop();
-
 public:
 
-	static void *LoopHelper(void *context) { return ((MmapHashTree *)context)->Loop(); }
+    void 			*Loop(Storage *storage);

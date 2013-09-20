@@ -220,6 +220,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self.is_alive = False
         self._swift.remove_download(self, True, True)
         self._swift.early_shutdown()
+        # TODO: Try clean and fast shutdown
         self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
         return super(TunnelEndpoint, self).close(timeout)
         

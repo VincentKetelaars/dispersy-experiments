@@ -4,3 +4,4 @@ When sending anything over the tcp cmd port, make sure that it is functional.
 Stored messages are sent immediately when a dispersy introduction response is sent. If multiple endpoints have the same peer, 
 this will result in duplicate messages sent.
 
+Perhaps it would be better to close a SwiftEndpoint cleaner.

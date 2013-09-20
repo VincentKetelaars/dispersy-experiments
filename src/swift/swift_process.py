@@ -54,6 +54,7 @@ class MySwiftProcess(SwiftProcess):
         # Arno, 2012-05-29: Hack. Win32 getopt code eats first arg when Windows app
         # instead of CONSOLE app.
         args.append("-j")
+        args.append("-B") # Set Channel debug_file
         args.append("-l")  # listen port
         args.append("0.0.0.0:" + str(self.listenport))
         args.append("-c")  # command port
