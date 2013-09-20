@@ -14,6 +14,7 @@ import binascii
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
 from dispersy.candidate import WalkCandidate
+from dispersy.logger import get_logger
 from Tribler.Core.Swift.SwiftDef import SwiftDef
 from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
 
@@ -22,8 +23,7 @@ from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloa
 from src.download import Download
 from src.definitions import SLEEP_TIME, FILE_HASH_MESSAGE_NAME, HASH_LENGTH
 
-import logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class NoEndpointAvailableException(Exception):
     pass

@@ -15,8 +15,8 @@ from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.dispersy_extends.endpoint import get_hash
 from src.definitions import SLEEP_TIME, MAX_FILE_SIZE, FILENAMES_NOT_TO_SEND, FILETYPES_NOT_TO_SEND
 
-import logging
-logger = logging.getLogger(__name__)
+from dispersy.logger import get_logger
+logger = get_logger(__name__)
 
 class FilePusher(object):
     '''

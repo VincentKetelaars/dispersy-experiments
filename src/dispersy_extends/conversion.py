@@ -8,11 +8,11 @@ import struct
 
 from dispersy.conversion import BinaryConversion
 from dispersy.conversion import DropPacket
+from dispersy.logger import get_logger
 
 from src.definitions import SEPARATOR, SIMPLE_MESSAGE_NAME, FILE_HASH_MESSAGE_NAME
 
-import logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class SimpleFileConversion(BinaryConversion):
     '''

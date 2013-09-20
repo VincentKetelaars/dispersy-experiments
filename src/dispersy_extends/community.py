@@ -13,14 +13,14 @@ from dispersy.authentication import MemberAuthentication
 from dispersy.resolution import PublicResolution
 from dispersy.distribution import FullSyncDistribution
 from dispersy.destination import CommunityDestination
+from dispersy.logger import get_logger
 
 from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConversion
 from src.dispersy_extends.payload import SimpleFilePayload, FileHashPayload
 
 from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME
 
-import logging
-logger = logging.getLogger(__name__)    
+logger = get_logger(__name__)    
     
 class MyCommunity(Community):
     '''

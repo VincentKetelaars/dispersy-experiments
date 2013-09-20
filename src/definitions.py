@@ -42,10 +42,9 @@ DEFAULT_MESSAGE_DELAY = 0.0
 SLEEP_TIME = 0.5
 TOTAL_RUN_TIME = 10
 DEST_DIR = "/home/vincent/Desktop/tests_dest"
-SWIFT_BINPATH = "/home/vincent/svn/libswift/ppsp/swift"
+SWIFT_BINPATH = "/home/vincent/svn/libswift/ppsp/swift" # "/home/vincent/git/dispersy-experiments/tribler/Tribler/SwiftEngine/swift"
 DISPERSY_WORK_DIR = os.path.expanduser("~") + u"/Music/"+ datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(os.getpid()) + "/"
 SQLITE_DATABASE = u":memory:"
-LOG_CONFIG_FILE = "logger.conf"
 
 SEPARATOR = ";;"
 

@@ -10,11 +10,10 @@ import pickle
 
 from Tribler.Core.DownloadConfig import DownloadStartupConfig, DownloadConfigInterface
 from Tribler.Core.Swift.SwiftDownloadImpl import SwiftDownloadImpl
-from Tribler.Core.Swift.SwiftDef import SwiftDef
+from dispersy.logger import get_logger
 from Tribler.Core.simpledefs import DLSTATUS_STOPPED, DLSTATUS_SEEDING
 
-import logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class SwiftDownloadConfig(DownloadStartupConfig):
         
