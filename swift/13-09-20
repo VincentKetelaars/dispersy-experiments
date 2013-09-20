@@ -1,0 +1,62 @@
+cmdgw.cpp
+
+#include "swift.h"
+//#include "swarmmanager.h"
+#include <event2/buffer.h>
+#include <event2/bufferevent.h>
+#include <event2/listener.h>
+
+#include <iostream>
+#include <sstream>
+//#include <pthread.h>
+
+
+Line 851:
+
+//        // Create separate thread to update status from files
+//        pthread_t mythread;
+//        SwarmData *sd = SwarmManager::GetManager().FindSwarm(req->td);
+//        if (sd == NULL) {
+//        	fprintf(stderr, "No SwarmData\n");
+//        } else {
+//			FileTransfer *ft = (*sd).GetTransfer(true);
+//			if (ft == NULL) {
+//				fprintf(stderr, "No FileTransfer\n");
+//			} else {
+//				MmapHashTree *mmap = (MmapHashTree *) (*ft).hashtree();
+//				if (mmap == NULL) {
+//					fprintf(stderr, "No HashTree\n");
+//				} else {
+//					int rc = pthread_create(&mythread, NULL, &MmapHashTree::LoopHelper, &mmap);
+//					if (rc){
+//					   fprintf(stderr, "Helas, Pthread could not be created.\n");
+//					}
+//				}
+//			}
+//        }
+
+
+---------------------------------------------------------------------------------------
+
+hashtree.cpp
+
+void *MmapHashTree::Loop() {
+	while (true) {
+//		fprintf(stderr, "Submitting!\n");
+//		Submit();
+		sleep(1);
+	}
+	return 0;
+}
+
+----------------------------------------------------------------------------------------
+
+hashtree.h
+
+protected:
+
+	void 			*Loop();
+
+public:
+
+	static void *LoopHelper(void *context) { return ((MmapHashTree *)context)->Loop(); }
