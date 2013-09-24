@@ -1,0 +1,78 @@
+Created random_picker.cpp in ext/
+
+
+-----------------------------------------------------------
+
+In transfer.cpp
+
+
+        if (ENABLE_VOD_PIECEPICKER) {
+            // Ric: init availability
+            availability_ = new Availability();
+            // Ric: TODO assign picker based on input params...
+            picker_ = new VodPiecePicker(this);
+		}
+	else
+		picker_ = new SeqPiecePicker(this);
+		
+		------------->
+		
+		availability_ = new Availability();
+		picker_ = new RandomPiecePicker(this);
+		
+--------------------------------------------------------------------
+
+In hashtree.h
+
+public:
+
+    void 			*Loop();
+		
+-------------------------------------------------------------------
+
+In hashtree.cpp
+
+void *MmapHashTree::Loop() {
+	while (true) {
+		sleep(1);
+		fprintf(stderr, "Submitting! %d, %s, %d\n", size_, storage_->GetDestDir().c_str(), peak_count_);
+		RecoverProgress();
+	}
+	return 0;
+}
+
+
+-----------------------------------------------------------------------
+
+In cmdgw.cpp
+
+static void *LoopHelper(void *mmap) {
+	MmapHashTree *m = (MmapHashTree *) mmap;
+	return m->Loop();
+}
+
+// Create separate thread to update status from files
+        pthread_t mythread;
+        SwarmData *sd = SwarmManager::GetManager().FindSwarm(req->td);
+        if (sd == NULL) {
+        	fprintf(stderr, "No SwarmData\n");
+        } else {
+			FileTransfer *ft = (*sd).GetTransfer(true);
+			if (ft == NULL) {
+				fprintf(stderr, "No FileTransfer\n");
+			} else {
+				MmapHashTree *mmap = (MmapHashTree *) (*ft).hashtree();
+				if (mmap == NULL) {
+					fprintf(stderr, "No HashTree\n");
+				} else {
+					int rc = pthread_create(&mythread, NULL, LoopHelper, mmap);
+					if (rc){
+					   fprintf(stderr, "Helas, Pthread could not be created.\n");
+					}
+				}
+			}
+        }
+        
+        
+------------------------------------------------------------------------------
+
