@@ -132,6 +132,13 @@ class DispersyInstance(object):
     def dest_dir(self):
         return self._dest_dir
     
+    def create_swift_instance(self, ports):        
+        httpgwport = None
+        cmdgwport = None
+        spmgr = None
+        return MySwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, port, 
+                                     httpgwport, cmdgwport, spmgr)
+    
     def create_endpoint(self, port=None):
         """
         Create single SwiftEndpoint
@@ -142,11 +149,7 @@ class DispersyInstance(object):
         if port is None:
             port = random.randint(*RANDOM_PORTS)
         # TODO: Make sure that the port is not already in use!
-        httpgwport = None
-        cmdgwport = None
-        spmgr = None
-        swift_process = MySwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, port, 
-                                     httpgwport, cmdgwport, spmgr)
+
         return SwiftEndpoint(swift_process, self._swift_binpath)
     
     

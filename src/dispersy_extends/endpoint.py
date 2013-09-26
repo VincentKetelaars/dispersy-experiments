@@ -49,7 +49,8 @@ class MultiEndpoint(Endpoint):
     data will be send via those as to provide the fastest means of delivering data. 
     '''
 
-    def __init__(self):
+    def __init__(self, swift):
+        self._swift = swift
         self._endpoints = []
         self._endpoint = None
         super(MultiEndpoint, self).__init__()

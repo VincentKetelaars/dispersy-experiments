@@ -1,0 +1,82 @@
+In sendrecv.cpp
+	In AddHint, after Pick
+
+	        struct timespec t;
+        	clock_gettime(CLOCK_MONOTONIC, &t);
+        	fprintf(stderr, "HINT YEAH: %s %ld\n", hint.str().c_str(), (long int) t.tv_nsec / 1000000 + t.tv_sec * 1000);
+        	
+        	
+-------------------------------------------------------
+
+Everything has been reset. This experiment is over. From now on multiple sockets will be the new objective.
+Version control will shortly be started.
+
+-------------------------------------------------------------
+
+In swift.cpp:
+
+    std::vector<Address *> bindaddrs;
+    Address bindaddr;
+
+---------------
+
+case 'l':
+            {
+            	std::vector<std::string> addrs;
+            	std::string str(optarg);
+            	split(optarg, ',', addrs);
+            	for (int i = 0; i < addrs.size(); i++) {
+					bindaddr = Address(addrs[i].c_str());
+					if (bindaddr==Address())
+						quit("address must be hostname:port, ip:port or just port\n");
+					wait_time = TINT_NEVER;
+					bindaddrs.push_back(&bindaddr);
+            	}
+                break;
+            }
+            
+---------------
+
+for (int i = 0; i < bindaddrs.size(); i++) {
+    	bindaddr = *bindaddrs[i];
+		if (bindaddr!=Address()) { // seeding
+			if (Listen(bindaddr)<=0)
+				quit("cant listen to %s\n",bindaddr.str().c_str())
+		} else if (tracker!=Address() || httpgw_enabled || cmdgw_enabled) { // leeching
+			evutil_socket_t sock = INVALID_SOCKET;
+			for (int i=0; i<=10; i++) {
+				bindaddr = Address((uint32_t)INADDR_ANY,0);
+				sock = Listen(bindaddr);
+				if (sock>0)
+					break;
+				if (i==10)
+					quit("cant listen on %s\n",bindaddr.str().c_str());
+			}
+			if (!quiet)
+				fprintf(stderr,"swift: My listen port is %d\n", BoundAddress(sock).port() );
+		}
+    }
+    
+    
+------------------------------------------------------------------------
+
+In compat.cpp
+
+std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
+    std::stringstream ss(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        elems.push_back(item);
+    }
+    return elems;
+}
+
+
+------------------------------------------------------------------------
+
+In compat.h
+
+#include <vector>
+
+
+std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems);

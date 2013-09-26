@@ -4,3 +4,6 @@
 [submodule "tribler"]
 	path = tribler
 	url = git://github.com/VincentKetelaars/tribler.git
+[submodule "libswift"]
+	path = libswift
+	url = git://github.com/VincentKetelaars/libswift.git

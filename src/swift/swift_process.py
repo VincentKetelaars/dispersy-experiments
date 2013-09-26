@@ -21,19 +21,22 @@ class MySwiftProcess(SwiftProcess):
     
     '''
     
-    def __init__(self, binpath, workdir, zerostatedir, listenport, httpgwport, cmdgwport, spmgr):
+    def __init__(self, binpath, workdir, zerostatedir, listenports, httpgwport, cmdgwport, spmgr):
         # Called by any thread, assume sessionlock is held
         self.splock = RLock()
         self.binpath = binpath
         self.workdir = workdir
         self.zerostatedir = zerostatedir
         self.spmgr = spmgr
+        self.listenports = []
 
         # Main UDP listen socket
-        if listenport is None:
+        if listenports is None:
             self.listenport = random.randint(10001, 10999)
         else:
-            self.listenport = listenport
+            self.listenports = listenports
+            self.listenport = listenports[0]
+        
         # NSSA control socket
         if cmdgwport is None:
             self.cmdport = random.randint(11001, 11999)
@@ -56,7 +59,10 @@ class MySwiftProcess(SwiftProcess):
         args.append("-j")
 #         args.append("-B") # Set Channel debug_file
         args.append("-l")  # listen port
-        args.append("0.0.0.0:" + str(self.listenport))
+        ports = ""
+        for l in self.listenports:
+            ports += "0.0.0.0:" + str(l) +","
+        args.append(ports[:-1]) # Remove last comma
         args.append("-c")  # command port
         args.append("127.0.0.1:" + str(self.cmdport))
         args.append("-g")  # HTTP gateway port
