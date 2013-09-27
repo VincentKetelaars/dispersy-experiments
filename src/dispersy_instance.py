@@ -16,7 +16,7 @@ from dispersy.logger import get_logger
 
 from src.swift.swift_process import MySwiftProcess
 from src.dispersy_extends.community import MyCommunity
-from src.dispersy_extends.endpoint import MultiEndpoint, SwiftEndpoint
+from src.dispersy_extends.endpoint import MultiEndpoint
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
 from src.definitions import DISPERSY_WORK_DIR, SQLITE_DATABASE, TOTAL_RUN_TIME, MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, \
@@ -60,8 +60,8 @@ class DispersyInstance(object):
     def start(self):
         try:
             self.run()
-        except:
-            logger.warning("Dispersy instance failed to run properly")
+        except Exception:
+            logger.exception("Dispersy instance failed to run properly")
         finally:
             self._stop()
         
@@ -69,12 +69,8 @@ class DispersyInstance(object):
         # Create Dispersy object
         self._callback = Callback("Dispersy-Callback")
         
-        endpoint = MultiEndpoint()
-        if self._ports:
-            for p in self._ports:
-                endpoint.add_endpoint(self.create_endpoint(p))
-        else:
-            endpoint.add_endpoint(self.create_endpoint())
+        self._swift = self.create_swift_instance(self._ports)
+        endpoint = MultiEndpoint(self._swift)
 
         self._dispersy = Dispersy(self._callback, endpoint, self._work_dir, self._sqlite_database)
         
@@ -132,26 +128,17 @@ class DispersyInstance(object):
     def dest_dir(self):
         return self._dest_dir
     
-    def create_swift_instance(self, ports):        
+    def create_swift_instance(self, ports):
+        if ports is None or not ports:
+            ports = [random.randint(*RANDOM_PORTS)]
+        
+        # TODO: Make sure that the ports are not already in use!
+        
         httpgwport = None
         cmdgwport = None
         spmgr = None
-        return MySwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, port, 
-                                     httpgwport, cmdgwport, spmgr)
-    
-    def create_endpoint(self, port=None):
-        """
-        Create single SwiftEndpoint
-        
-        @param port: If set use port to create SwiftProcess, otherwise choose random port
-        @return: SwiftEndpoint
-        """
-        if port is None:
-            port = random.randint(*RANDOM_PORTS)
-        # TODO: Make sure that the port is not already in use!
-
-        return SwiftEndpoint(swift_process, self._swift_binpath)
-    
+        return MySwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, ports, 
+                                     httpgwport, cmdgwport, spmgr)   
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance')

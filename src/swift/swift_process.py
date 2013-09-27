@@ -10,8 +10,7 @@ import sys
 from collections import defaultdict
 from threading import RLock, currentThread, Thread, Event
 
-from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING,\
-    DONE_STATE_SHUTDOWN
+from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING, DONE_STATE_SHUTDOWN
 
 from dispersy.logger import get_logger
 logger = get_logger(__name__)

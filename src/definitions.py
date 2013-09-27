@@ -42,7 +42,7 @@ DEFAULT_MESSAGE_DELAY = 0.0
 SLEEP_TIME = 0.5
 TOTAL_RUN_TIME = 10
 DEST_DIR = os.getenv("HOME") + "/Desktop/tests_dest"
-SWIFT_BINPATH = os.getenv("HOME") + "/svn/libswift/ppsp/swift" # "/git/dispersy-experiments/tribler/Tribler/SwiftEngine/swift"
+SWIFT_BINPATH = "/home/vincent/git/dispersy-experiments/libswift/swift" #os.getenv("HOME") + "/svn/libswift/ppsp/swift" # "/git/dispersy-experiments/tribler/Tribler/SwiftEngine/swift"
 DISPERSY_WORK_DIR = os.getenv("HOME") + u"/Music/"+ datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(os.getpid()) + "/"
 SQLITE_DATABASE = u":memory:"
 

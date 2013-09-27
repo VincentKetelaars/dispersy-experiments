@@ -13,16 +13,10 @@ from dispersy.dispersy import Dispersy
 from dispersy.endpoint import NullEndpoint
 
 from src.definitions import SWIFT_BINPATH, HASH_LENGTH, TIMEOUT, SLEEP_TIME
-from src.dispersy_extends.endpoint import MultiEndpoint, SwiftEndpoint, get_hash
+from src.dispersy_extends.endpoint import MultiEndpoint, get_hash
 from src.swift.swift_process import MySwiftProcess
 
-def get_file(num=0):
-    dir_ = os.getenv("HOME")+ "/Downloads"
-    files = [os.path.join(dir_, f) for f in os.listdir(dir_) if os.path.isfile(os.path.join(dir_, f))]
-    if not files or len(files) < num:
-        dir_ = os.getenv("HOME")+ "/Documents"
-        files = [os.path.join(dir_, f) for f in os.listdir(dir_) if os.path.isfile(os.path.join(dir_, f))]
-    return files[num]
+from src.tests.unit.test_definitions import DIRECTORY, FILES, DISPERSY_WORKDIR
 
 def remove_files(filename):
     dir_ = os.path.dirname(filename)
@@ -30,18 +24,18 @@ def remove_files(filename):
         if f.endswith(".mhash") or f.endswith(".mbinmap") or f.find("swifturl-") != -1:
             os.remove(os.path.join(dir_, f))
 
-class TestSwiftEndpoint(unittest.TestCase):
+class TestMultiSwiftEndpoint(unittest.TestCase):
 
     def setUp(self):
         callback = Callback("TestCallback")
-        self._port = 11223
-        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._port, None, None, None)
-        self._endpoint = SwiftEndpoint(swift_process, SWIFT_BINPATH)
-        self._dispersy = Dispersy(callback, self._endpoint, u".", u":memory:")
+        self._ports = [12344]
+        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._ports, None, None, None)
+        self._endpoint = MultiEndpoint(swift_process)
+        self._dispersy = Dispersy(callback, self._endpoint, DISPERSY_WORKDIR, u":memory:")
         self._dispersy.start()
         self._directories = "testcase_swift_seed_and_down/"
-        self._dest_dir = os.getenv("HOME")+ "/Downloads"
-        self._filename = get_file()
+        self._dest_dir = DIRECTORY
+        self._filename = FILES[0]
         self._roothash = get_hash(self._filename, SWIFT_BINPATH)
 
     def tearDown(self):
@@ -56,20 +50,20 @@ class TestSwiftEndpoint(unittest.TestCase):
 
     def test_address(self):
         address = self._endpoint.get_address()
-        self.assertEqual(address[1], self._port)
+        self.assertEqual(address[1], self._ports[0])
         self.assertNotEqual(address[0], "0.0.0.0")
           
     def test_seed_and_download(self):
         callback = Callback("TestCallback2")
-        port = 34254
-        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, port, None, None, None)
-        endpoint = SwiftEndpoint(swift_process, SWIFT_BINPATH)
+        ports = [34254]
+        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, ports, None, None, None)
+        endpoint = MultiEndpoint(swift_process)
         dispersy = Dispersy(callback, endpoint, u".", u":memory:")
         dispersy.start()
            
         self._endpoint.add_file(self._filename, self._roothash)
         roothash_unhex=binascii.unhexlify(self._roothash)
-        self._endpoint.add_peer(("127.0.0.1",port), roothash_unhex)
+        self._endpoint.add_peer(("127.0.0.1",ports[0]), roothash_unhex)
         endpoint.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
            
         for _ in range(int(TIMEOUT / SLEEP_TIME)):
@@ -86,13 +80,13 @@ class TestSwiftEndpoint(unittest.TestCase):
          
     def test_duplicate_roothash_and_clean_up(self):
         callback = Callback("TestCallback2")
-        port = 34254
-        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, port, None, None, None)
-        endpoint = SwiftEndpoint(swift_process, SWIFT_BINPATH)
+        ports = [34254]
+        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, ports, None, None, None)
+        endpoint = MultiEndpoint(swift_process)
         dispersy = Dispersy(callback, endpoint, u".", u":memory:")
         dispersy.start()
            
-        addr = ("127.0.0.1", port)
+        addr = ("127.0.0.1", ports[0])
         self._endpoint.add_file(self._filename, self._roothash)
         roothash_unhex=binascii.unhexlify(self._roothash)
         self._endpoint.add_peer(addr, roothash_unhex)
@@ -100,7 +94,7 @@ class TestSwiftEndpoint(unittest.TestCase):
         self._endpoint.add_peer(addr, roothash_unhex)
         endpoint.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
         endpoint.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
-        file2 = get_file(1)
+        file2 = FILES[1]
         roothash2 = get_hash(file2, SWIFT_BINPATH)
         roothash_unhex=binascii.unhexlify(roothash2)
         self._endpoint.add_file(file2, roothash2)
@@ -133,15 +127,15 @@ class TestSwiftEndpoint(unittest.TestCase):
          
     def test_restart(self):
         callback = Callback("TestCallback2")
-        port = 34254
-        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, port, None, None, None)
-        endpoint = SwiftEndpoint(swift_process, SWIFT_BINPATH)
+        ports = [34254]
+        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, ports, None, None, None)
+        endpoint = MultiEndpoint(swift_process)
         dispersy = Dispersy(callback, endpoint, u".", u":memory:")
         dispersy.start()
          
         # Send fake message over cmdgw, which will lead to an error 
         self._endpoint._swift.write("START stuff to do..;)")
-        addr = ("127.0.0.1", port)
+        addr = ("127.0.0.1", ports[0])
         self._endpoint.add_file(self._filename, self._roothash)
         roothash_unhex=binascii.unhexlify(self._roothash)
         self._endpoint.add_peer(addr, roothash_unhex)
@@ -160,10 +154,12 @@ class TestSwiftEndpoint(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))
 
 class TestMultiEndpoint(unittest.TestCase):
-
+    """
+    Should MultiEndpoint still have this functionality?
+    """
 
     def setUp(self):
-        self._me = MultiEndpoint()
+        self._me = MultiEndpoint(None)
 
     def tearDown(self):
         self._me = None
@@ -173,15 +169,15 @@ class TestMultiEndpoint(unittest.TestCase):
         ne = NullEndpoint(23456)
         ne.open(dispersy)
         self._me.add_endpoint(ne)
-        self.assertEqual(len(self._me._endpoints), 1)
+        self.assertEqual(len(self._me.swift_endpoints), 1)
         self.assertEqual(self._me._endpoint, ne) 
         ne2 = NullEndpoint(23457)
         ne2.open(dispersy)
         self._me.add_endpoint(ne2)
-        self.assertEqual(len(self._me._endpoints), 2)
+        self.assertEqual(len(self._me.swift_endpoints), 2)
         self.assertEqual(self._me._endpoint, ne) # Still the first endpoint at point
         self._me.remove_endpoint(ne)
-        self.assertEqual(len(self._me._endpoints), 1)
+        self.assertEqual(len(self._me.swift_endpoints), 1)
         self.assertEqual(self._me._endpoint, ne2) # The one left should now take over
         self._me.add_endpoint(ne)
         ne.open(dispersy)
@@ -189,7 +185,7 @@ class TestMultiEndpoint(unittest.TestCase):
         self._me.remove_endpoint(ne)
         self.assertEqual(self._me._endpoint, ne2)
         self._me.remove_endpoint(ne2)
-        self.assertEqual(len(self._me._endpoints), 0)
+        self.assertEqual(len(self._me.swift_endpoints), 0)
         self.assertEqual(self._me._endpoint, None)
         
     def test_address(self):
@@ -201,7 +197,7 @@ class TestMultiEndpoint(unittest.TestCase):
 class TestStaticMethods(unittest.TestCase):
 
     def setUp(self):
-        self.filename = get_file()
+        self.filename = FILES[0]
 
     def tearDown(self):
         remove_files(self.filename)

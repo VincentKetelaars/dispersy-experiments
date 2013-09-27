@@ -11,6 +11,8 @@ from src.filepusher import FilePusher
 from src.definitions import SWIFT_BINPATH, MAX_FILE_SIZE, HASH_LENGTH, FILENAMES_NOT_TO_SEND, FILETYPES_NOT_TO_SEND
 from sets import Set
 
+from src.tests.unit.test_definitions import DIRECTORY, FILES
+
 all_success = False
         
 def success_decorater(func):
@@ -30,9 +32,9 @@ class TestFilePusher(unittest.TestCase):
         all_success = True
 
     def setUp(self):
-        self._directory = os.getenv("HOME") + "/Downloads"
-        self._files = Set([os.getenv("HOME") + "/.bashrc", os.getenv("HOME") + "/.profile"])
-        self._copy_files = Set.copy(self._files)
+        self._directory = DIRECTORY
+        self._files = FILES
+        self._copy_files = Set(self._files)
         self._filepusher = None
 
     def tearDown(self):
