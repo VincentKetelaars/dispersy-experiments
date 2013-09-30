@@ -37,9 +37,18 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
         self._dest_dir = DIRECTORY
         self._filename = FILES[0]
         self._roothash = get_hash(self._filename, SWIFT_BINPATH)
+        
+        callback2 = Callback("TestCallback2")
+        self._ports2 = [34254]
+        swift_process2 = MySwiftProcess(SWIFT_BINPATH, ".", None, self._ports2, None, None, None)
+        self._endpoint2 = MultiEndpoint(swift_process2)
+        self._dispersy2 = Dispersy(callback2, self._endpoint2, u".", u":memory:")
+        self._dispersy2.start()
+        self._addr = ("127.0.0.1",self._ports2[0])
 
     def tearDown(self):
         self._dispersy.stop()
+        self._dispersy2.stop()
         if self._filename is not None:
             remove_files(self._filename)
         dir_ = os.path.join(self._dest_dir, self._directories)
@@ -47,112 +56,69 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
             for f in os.listdir(dir_):
                 os.remove(os.path.join(dir_, f))
             os.removedirs(dir_)
-
-    def test_address(self):
-        address = self._endpoint.get_address()
-        self.assertEqual(address[1], self._ports[0])
-        self.assertNotEqual(address[0], "0.0.0.0")
           
-    def test_seed_and_download(self):
-        callback = Callback("TestCallback2")
-        ports = [34254]
-        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, ports, None, None, None)
-        endpoint = MultiEndpoint(swift_process)
-        dispersy = Dispersy(callback, endpoint, u".", u":memory:")
-        dispersy.start()
-           
+    def test_seed_and_download(self):           
         self._endpoint.add_file(self._filename, self._roothash)
         roothash_unhex=binascii.unhexlify(self._roothash)
-        self._endpoint.add_peer(("127.0.0.1",ports[0]), roothash_unhex)
-        endpoint.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
+        self._endpoint.add_peer(self._addr, roothash_unhex)
+        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
            
-        for _ in range(int(TIMEOUT / SLEEP_TIME)):
-            check = True
-            for d in endpoint.downloads.values():
-                if not d.is_finished():
-                    check = False
-            if check:
-                break
-            time.sleep(SLEEP_TIME)
-               
-        dispersy.stop()
+        self._wait()
+        
         self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))
-         
-    def test_duplicate_roothash_and_clean_up(self):
-        callback = Callback("TestCallback2")
-        ports = [34254]
-        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, ports, None, None, None)
-        endpoint = MultiEndpoint(swift_process)
-        dispersy = Dispersy(callback, endpoint, u".", u":memory:")
-        dispersy.start()
-           
-        addr = ("127.0.0.1", ports[0])
+          
+    def test_duplicate_roothash_and_clean_up(self):           
         self._endpoint.add_file(self._filename, self._roothash)
         roothash_unhex=binascii.unhexlify(self._roothash)
-        self._endpoint.add_peer(addr, roothash_unhex)
+        self._endpoint.add_peer(self._addr, roothash_unhex)
         self._endpoint.add_file(self._filename, self._roothash)
-        self._endpoint.add_peer(addr, roothash_unhex)
-        endpoint.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
-        endpoint.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
+        self._endpoint.add_peer(self._addr, roothash_unhex)
+        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
+        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
         file2 = FILES[1]
         roothash2 = get_hash(file2, SWIFT_BINPATH)
         roothash_unhex=binascii.unhexlify(roothash2)
         self._endpoint.add_file(file2, roothash2)
-        self._endpoint.add_peer(addr, roothash_unhex)
-        endpoint.start_download(file2, self._directories, roothash2, self._dest_dir)
-       
-        for _ in range(int(TIMEOUT / SLEEP_TIME)):
-            check = True
-            for d in endpoint.downloads.values():
-                if not d.is_finished():
-                    check = False
-            if check:
-                break
-            time.sleep(SLEEP_TIME)
-               
-        dispersy.stop()
+        self._endpoint.add_peer(self._addr, roothash_unhex)
+        self._endpoint2.start_download(file2, self._directories, roothash2, self._dest_dir)
+                
+        self._wait()
          
         absfilename1 = os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))
         absfilename2 = os.path.join(self._dest_dir, self._directories, os.path.basename(file2))
-         
+          
         # Check that files have been downloaded
         self.assertTrue(os.path.exists(absfilename1))
         self.assertTrue(os.path.exists(absfilename2))
-         
+          
         # Check that files created for download have been removed
         self.assertFalse(os.path.exists(absfilename1 + ".mhash"))
         self.assertFalse(os.path.exists(absfilename1 + ".mbinmap"))
         self.assertFalse(os.path.exists(absfilename2 + ".mhash"))
         self.assertFalse(os.path.exists(absfilename2 + ".mbinmap"))
-         
-    def test_restart(self):
-        callback = Callback("TestCallback2")
-        ports = [34254]
-        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, ports, None, None, None)
-        endpoint = MultiEndpoint(swift_process)
-        dispersy = Dispersy(callback, endpoint, u".", u":memory:")
-        dispersy.start()
-         
+          
+    def test_restart(self): 
         # Send fake message over cmdgw, which will lead to an error 
         self._endpoint._swift.write("START stuff to do..;)")
-        addr = ("127.0.0.1", ports[0])
         self._endpoint.add_file(self._filename, self._roothash)
         roothash_unhex=binascii.unhexlify(self._roothash)
-        self._endpoint.add_peer(addr, roothash_unhex)
-        endpoint.start_download(self._filename, self._directories, self._roothash, self._dest_dir, addr)
- 
+        self._endpoint.add_peer(self._addr, roothash_unhex)
+        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir, self._addr)
+  
+        self._wait()
+           
+        self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))
+
+    def _wait(self):
         for _ in range(int(TIMEOUT / SLEEP_TIME)):
             check = True
-            for d in endpoint.downloads.values():
+            for d in self._endpoint2.downloads.values():
                 if not d.is_finished():
                     check = False
             if check:
                 break
             time.sleep(SLEEP_TIME)
-               
-        dispersy.stop()
-        self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))
-
+    
 class TestMultiEndpoint(unittest.TestCase):
     """
     Should MultiEndpoint still have this functionality?
@@ -207,6 +173,36 @@ class TestStaticMethods(unittest.TestCase):
         roothash = get_hash(self.filename, SWIFT_BINPATH)
         self.assertTrue(roothash is not None)
         self.assertEqual(len(roothash), HASH_LENGTH)
+
+    
+
+class TestSocketAvailable(unittest.TestCase):
+            
+    class FakeDispersy(object):
+    
+        def __init__(self):
+            self._lan_address = ("0.0.0.0", 0)
+        
+        @property
+        def lan_address(self):
+            return self._lan_address
+        
+    def setUp(self):
+        self._ports = [12345, 12346, 12347]
+        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._ports, None, None, None)
+        self._endpoint = MultiEndpoint(swift_process)
+        self._endpoint.open(self.FakeDispersy())
+        
+    def tearDown(self):
+        self._endpoint.close()
+        
+    def test_multiple_sockets_in_use(self):
+        self.assertFalse(self._endpoint.try_sockets(self._ports, timeout=1.0))
+        
+    def test_multiple_sockets_not_in_use(self):
+        self._endpoint.close() # Socket should be released within a second
+        self.assertTrue(self._endpoint.try_sockets(self._ports, timeout=1.0))
+
 
 if __name__ == "__main__":
     unittest.main()

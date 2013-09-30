@@ -109,7 +109,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         # TODO: Try clean and fast shutdown
         self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
         # Try the sockets to see if they are in use
-        if not self.try_sockets(self._swift.listenports):
+        if not self.try_sockets(self._swift.listenports, timeout=1.0):
             logger.warning("Socket(s) is/are still in use")
         return all([x.close(timeout) for x in self.swift_endpoints]) and super(TunnelEndpoint, self).close(timeout)
     
@@ -362,33 +362,34 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             
     def try_sockets(self, ports, timeout=1.0):
         """
-        This method returns when all sockets are free to use, or if the timeout is reached
+        This method returns when all UDP sockets are free to use, or if the timeout is reached
         
         @param ports: List of local socket ports
         @param timeout: Try until timeout time has been exceeded
         @return: True if the sockets are free
         """
         event = Event()
-        t = time.time()
-        while not event.is_set() or t + timeout < time.time():
+        t = time.time()        
+        while not event.is_set() and t + timeout > time.time():
             if all([self.try_socket(p) for p in ports]):
                 event.set()
-            event.wait(0.01)
+            event.wait(0.1)
             
         return all([self.try_socket(p) for p in ports])
     
     def try_socket(self, port):
         """
-        This methods tries to bind to a socket.
+        This methods tries to bind to an UDP socket.
         
         @param port: Local socket port
         @return: True if socket is free to use
         """
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.bind(("", port))
             return True
-        except:
+        except Exception:
+            logger.exception("Bummer, socket is still in use!")
             return False
         finally:
             s.close()
