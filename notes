@@ -1,12 +1,24 @@
-Check whether a port is actually available, for dispersy (and swift), and check the tcp cmd port.
-When sending anything over the tcp cmd port, make sure that it is functional.
+DISPERSY:
 
 Stored messages are sent immediately when a dispersy introduction response is sent. If multiple endpoints have the same peer, 
-this will result in duplicate messages sent.
+this will result in duplicate messages sent. Are multiple introduction messages necessary? (NAT problems?) 
+Perhaps send puncture requests instead.
 
 Perhaps it would be better to close a SwiftEndpoint cleaner.
 
 Check if get_hash could be more efficient in case the status files are already there.
 
+Hold data on sockets from swift separate
+
+Get roothashes from .mbinmap files if available.. But how would I know the file has not changed since then..? 
+Compare last time edited..
 
 LIBSWIFT:
+
+AddPeer in content.cpp now connects all sockets to all peers
+
+
+
+GENERAL:
+
+Tests are necessary to see if multiple channels really perform better. And if improvements can be made.

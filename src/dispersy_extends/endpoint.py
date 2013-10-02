@@ -12,6 +12,7 @@ from sets import Set
 import binascii
 import socket
 import time
+import logging
 
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
@@ -464,7 +465,14 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
                     sock_addr = candidate.get_destination_address(wan_address)
                     assert self._dispersy.is_valid_address(sock_addr), sock_addr
     
-                    for data in packets:    
+                    for data in packets:
+                        if logger.isEnabledFor(logging.DEBUG):
+                            try:
+                                name = self._dispersy.convert_packet_to_meta_message(data, load=False, auto_load=False).name
+                            except:
+                                name = "???"
+                            logger.debug("%30s -> %15s:%-5d %4d bytes", name, sock_addr[0], sock_addr[1], len(data))
+                            self._dispersy.statistics.dict_inc(self._dispersy.statistics.endpoint_send, name)
                         self._swift.send_tunnel(self._session, sock_addr, data, self.port)
     
                 # return True when something has been send
@@ -476,7 +484,6 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))      
         
     def i2ithread_data_came_in(self, session, sock_addr, data):
-        logger.debug("I2IThread, came in on this port..: %d", self.port)
         if isinstance(sock_addr, tuple):
             self.known_addresses.update([sock_addr])
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
