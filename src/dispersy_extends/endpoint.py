@@ -294,12 +294,13 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
     def i2ithread_data_came_in(self, session, sock_addr, data, incoming_port=0):
         if isinstance(sock_addr, tuple):
             self.known_addresses.update([sock_addr])
-        if incoming_port == 0:
-            TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
-        else:
-            for e in self.swift_endpoints:
-                if e.port == incoming_port:
-                    e.i2ithread_data_came_in(session, sock_addr, data)
+            
+        for e in self.swift_endpoints:
+            if e.port == incoming_port:
+                e.i2ithread_data_came_in(session, sock_addr, data)
+                return
+        # In case the incoming_port number does not match any of the endpoints
+        TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
         
     def create_download_impl(self, roothash):
         """

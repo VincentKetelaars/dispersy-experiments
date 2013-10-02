@@ -147,7 +147,9 @@ class MySwiftProcess(SwiftProcess):
             port = int(port)
             session = session.decode("HEX")
             length = int(words[2])
-            incoming_port = int(words[3])
+            incoming_port = 0 # None port numbers are ignored
+            if len(words) > 3:
+                incoming_port = int(words[3])
 
             # require LENGTH bytes
             if len(ic.buffer) < length:
