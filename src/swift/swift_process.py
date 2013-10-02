@@ -124,6 +124,7 @@ class MySwiftProcess(SwiftProcess):
         self._warn_missing_endpoint = True
         
     def read_and_print_out(self, line):
+        # As soon as a TCP connection has been made, will the FastI2I be allowed to start
         if line.find("TCP") != -1:
             self._swift_running.set()
             

@@ -1,7 +1,7 @@
 export PYTHONPATH=${PYTHONPATH}:${PWD}:${PWD}/tribler
 
-python -O -m src.dispersy_instance -d /home/vincent/Desktop/test_large -t 8 -p 12345   &> ~/Desktop/logs1 &
-python -O -m src.dispersy_instance -D /home/vincent/Desktop/tests_dest -t 8 -P 12345 -p 11111 &> ~/Desktop/logs2 &
+python -O -m src.dispersy_instance -d /home/vincent/Desktop/test_large -t 8 -p 12345 12346  &> ~/Desktop/logs1 &
+python -O -m src.dispersy_instance -D /home/vincent/Desktop/tests_dest -t 8 -P 12345 12346 -p 11111 &> ~/Desktop/logs2 &
 
 #sleep 10
 

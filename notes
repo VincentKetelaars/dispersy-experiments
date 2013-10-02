@@ -7,3 +7,6 @@ this will result in duplicate messages sent.
 Perhaps it would be better to close a SwiftEndpoint cleaner.
 
 Check if get_hash could be more efficient in case the status files are already there.
+
+
+LIBSWIFT:
