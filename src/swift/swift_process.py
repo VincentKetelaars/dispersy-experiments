@@ -141,6 +141,28 @@ class MySwiftProcess(SwiftProcess):
         words = cmd.split()
         if words[0] == "ERROR":
             self.connection_lost(self.get_cmdport(), error=True)
+        elif words[0] == "TUNNELRECV":
+            address, session = words[1].split("/")
+            host, port = address.split(":")
+            port = int(port)
+            session = session.decode("HEX")
+            length = int(words[2])
+            incoming_port = int(words[3])
+
+            # require LENGTH bytes
+            if len(ic.buffer) < length:
+                return length - len(ic.buffer)
+
+            data = ic.buffer[:length]
+            ic.buffer = ic.buffer[length:]
+
+            try:
+                self.roothash2dl["dispersy-endpoint"].i2ithread_data_came_in(session, (host, port), data, incoming_port)
+            except KeyError:
+                if self._warn_missing_endpoint:
+                    self._warn_missing_endpoint = False
+                    print >> sys.stderr, "sp: Dispersy endpoint is not available"
+            return
         return SwiftProcess.i2ithread_readlinecallback(self, ic, cmd)
     
     def write(self, msg):
@@ -153,5 +175,12 @@ class MySwiftProcess(SwiftProcess):
     def connection_lost(self, port, error=False):
         logger.debug("CONNECTION LOST")
         self.swift_restart_callback()
+        
+    def send_tunnel(self, session, address, data, port=0):
+        if port <= 0:
+            SwiftProcess.send_tunnel(self, session, address, data)
+        else:
+            self.write("TUNNELSEND %s:%d/%s %d %d\r\n" % (address[0], address[1], session.encode("HEX"), len(data), port))
+            self.write(data)
 
             

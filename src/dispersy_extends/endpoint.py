@@ -91,6 +91,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             
     def open(self, dispersy):
         TunnelEndpoint.open(self, dispersy)
+        self._swift.start_cmd_connection()
         for x in self.swift_endpoints:
             x.open(dispersy)
         self.is_alive = True   
@@ -290,10 +291,15 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         if download.is_finished() and not download.seeder():
             self.clean_up_files(roothash, True, False)
         
-    def i2ithread_data_came_in(self, session, sock_addr, data):
+    def i2ithread_data_came_in(self, session, sock_addr, data, incoming_port=0):
         if isinstance(sock_addr, tuple):
             self.known_addresses.update([sock_addr])
-        TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
+        if incoming_port == 0:
+            TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
+        else:
+            for e in self.swift_endpoints:
+                if e.port == incoming_port:
+                    e.i2ithread_data_came_in(session, sock_addr, data)
         
     def create_download_impl(self, roothash):
         """
@@ -427,8 +433,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self.port = port
         
     def open(self, dispersy):
-        super(SwiftEndpoint, self).open(dispersy)
-        self._swift.start_cmd_connection()
+        Endpoint.open(self, dispersy)
         self.is_alive = True
         
     def close(self, timeout=0.0):
@@ -445,10 +450,32 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
     def send(self, candidates, packets):
         if self._swift.is_alive():
-            TunnelEndpoint.send(self, candidates, packets)
+            if any(len(packet) > 2**16 - 60 for packet in packets):
+                raise RuntimeError("UDP does not support %d byte packets" % len(max(len(packet) for packet in packets)))
+
+            self._total_up += sum(len(data) for data in packets) * len(candidates)
+            self._total_send += (len(packets) * len(candidates))
+            wan_address = self._dispersy.wan_address
+    
+            self._swift.splock.acquire()
+            try:
+                for candidate in candidates:
+                    sock_addr = candidate.get_destination_address(wan_address)
+                    assert self._dispersy.is_valid_address(sock_addr), sock_addr
+    
+                    for data in packets:    
+                        self._swift.send_tunnel(self._session, sock_addr, data, self.port)
+    
+                # return True when something has been send
+                return candidates and packets
+    
+            finally:
+                self._swift.splock.release()
+                
             self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))      
         
     def i2ithread_data_came_in(self, session, sock_addr, data):
+        logger.debug("I2IThread, came in on this port..: %d", self.port)
         if isinstance(sock_addr, tuple):
             self.known_addresses.update([sock_addr])
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
