@@ -5,7 +5,7 @@ Created on Aug 27, 2013
 '''
 
 from os import urandom, makedirs
-from os.path import isfile, dirname, exists, basename
+from os.path import isfile, dirname, exists, basename, getmtime
 from datetime import datetime
 from threading import Thread, Event
 from sets import Set
@@ -68,9 +68,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         if swift_process:
             self._swift.set_on_swift_restart_callback(self.restart_swift)
             for p in self._swift.listenports:
-                self.add_endpoint(SwiftEndpoint(swift_process, p))
-                
-
+                self.add_endpoint(SwiftEndpoint(swift_process, p))      
     
     def get_address(self):
         if self._endpoint is None:
@@ -82,10 +80,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         return list(endpoint.get_address() for endpoint in self.swift_endpoints)
     
     def send(self, candidates, packets):
-        meta = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False)
-        if meta.name == FILE_HASH_MESSAGE_NAME:
-            self.distribute_all_hashes_to_peers()
-        self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))      
+        self.update_known_addresses(candidates, packets)
         self.determine_endpoint(known_addresses=self.known_addresses, subset=True)
         self._endpoint.send(candidates, packets)
         self._send_introduction_requests_to_unknown(candidates, packets)
@@ -111,8 +106,9 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         # TODO: Try clean and fast shutdown
         self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
         # Try the sockets to see if they are in use
-        if not self.try_sockets(self._swift.listenports, timeout=1.0):
+        if not try_sockets(self._swift.listenports, timeout=1.0):
             logger.warning("Socket(s) is/are still in use")
+        # Note that the swift_endpoints are still available after return, although closed
         return all([x.close(timeout) for x in self.swift_endpoints]) and super(TunnelEndpoint, self).close(timeout)
     
     def add_endpoint(self, endpoint):
@@ -206,11 +202,12 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             d = self.create_download_impl(roothash)
             d.set_dest_dir(filename)
 
-            self.downloads[roothash] = Download(roothash, filename, d, seed=True) # Know about all hashes that go through this endpoint
-            self.downloads[roothash].moreinfo = True
+            self.update_known_downloads(roothash, filename, d, seed=True)
             
             self._swift.start_download(d)
             self._swift.set_moreinfo_stats(d, True)
+            
+            self.distribute_all_hashes_to_peers() # After adding the file, directly add the peer as well
         
     def distribute_all_hashes_to_peers(self):
         """
@@ -254,9 +251,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self._swift.start_download(d)
             self._swift.set_moreinfo_stats(d, True)
             
-            self.downloads[roothash] = Download(roothash, d.get_dest_dir(), d, download=True) # Know about all hashes that go through this endpoint
-            self.downloads[roothash].moreinfo = True
-            self.downloads[roothash].add_peer(addr)
+            self.update_known_downloads(roothash, d.get_dest_dir(), d, address=addr, download=True)
             
     def _send_introduction_requests_to_unknown(self, candidates, packets):
         meta = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False)
@@ -350,7 +345,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self.added_peers = Set() # Reset the peers added before shutdown
             
             # Try the sockets to see if they are in use
-            if not self.try_sockets(self._swift.listenports):
+            if not try_sockets(self._swift.listenports):
                 logger.warning("Socket(s) is/are still in use")
             
             # Make sure not to make the same mistake as what let to this
@@ -367,40 +362,6 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                         self._swift.add_peer(d.downloadimpl, addr)
                         self.added_peers.add((addr, h))
             self._resetting = False
-            
-    def try_sockets(self, ports, timeout=1.0):
-        """
-        This method returns when all UDP sockets are free to use, or if the timeout is reached
-        
-        @param ports: List of local socket ports
-        @param timeout: Try until timeout time has been exceeded
-        @return: True if the sockets are free
-        """
-        event = Event()
-        t = time.time()        
-        while not event.is_set() and t + timeout > time.time():
-            if all([self.try_socket(p) for p in ports]):
-                event.set()
-            event.wait(0.1)
-            
-        return all([self.try_socket(p) for p in ports])
-    
-    def try_socket(self, port):
-        """
-        This methods tries to bind to an UDP socket.
-        
-        @param port: Local socket port
-        @return: True if socket is free to use
-        """
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.bind(("", port))
-            return True
-        except Exception:
-            logger.exception("Bummer, socket is still in use!")
-            return False
-        finally:
-            s.close()
     
     def _loop(self):
         while not self._thread_stop_event.is_set():
@@ -426,16 +387,27 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self._swift.remove_download(d, rm_state, rm_download)
         self.added_peers = Set([p for p in self.added_peers if p[1] != roothash])
         
+    def update_known_addresses(self, candidates, packets):
+        ka_size = len(self.known_addresses)
+        self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))
+        if ka_size < len(self.known_addresses):
+            self.distribute_all_hashes_to_peers()
+            
+    def update_known_downloads(self, roothash, filename, download_impl, address=None, seed=False, download=False):
+        # Know about all hashes that go through this endpoint
+        self.downloads[roothash] = Download(roothash, filename, download_impl, seed=seed, download=download)
+        self.downloads[roothash].moreinfo = True
+        self.downloads[roothash].add_peer(address)
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
     def __init__(self, swift_process, port):
-        super(SwiftEndpoint, self).__init__(swift_process)
+        super(SwiftEndpoint, self).__init__(swift_process) # Dispersy and session code 
         EndpointStatistics.__init__(self)
         self.port = port
         
     def open(self, dispersy):
-        Endpoint.open(self, dispersy)
+        Endpoint.open(self, dispersy) # Dispersy, but not add_download(self)
         self.is_alive = True
         
     def close(self, timeout=0.0):
@@ -491,15 +463,65 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
                     
 def get_hash(filename, swift_path):
     """
-    Determine the roothash of this file
+    Determine the roothash of this file. If the mbinmap file already exists, 
+    and the actual file has not been edited later than this mbinmap file,
+    we can retrieve the roothash from the second line of this file.
     
     @param filename: The absolute path of the file
     @param swift_path: The absolute path to the swift binary file
+    @return roothash in readable hexadecimal numbers
     """
     if isfile(filename):
+        mbinmap = filename + ".mbinmap"
+        roothash = None
+        if isfile(mbinmap) and getmtime(filename) < getmtime(mbinmap):
+            try:
+                with file(mbinmap) as f:
+                    f.readline()
+                    hashline = f.readline()
+                    roothash = hashline.strip().split(" ")[2]
+            except Exception:
+                logger.exception("Reading mbinmap failed")
+        if roothash is not None:
+            logger.debug("Found roothash in mbinmap: %s", roothash)
+            return roothash
         sdef = SwiftDef()
         sdef.add_content(filename)
-        sdef.finalize(swift_path, destdir=dirname(filename))
+        sdef.finalize(swift_path, destdir=dirname(filename))            
         # returning get_roothash() gives an error somewhere (perhaps message?)
         return sdef.get_roothash_as_hex()
+    
+def try_sockets(ports, timeout=1.0):
+    """
+    This method returns when all UDP sockets are free to use, or if the timeout is reached
+    
+    @param ports: List of local socket ports
+    @param timeout: Try until timeout time has been exceeded
+    @return: True if the sockets are free
+    """
+    event = Event()
+    t = time.time()        
+    while not event.is_set() and t + timeout > time.time():
+        if all([try_socket(p) for p in ports]):
+            event.set()
+        event.wait(0.1)
+        
+    return all([try_socket(p) for p in ports])
+    
+def try_socket(port):
+    """
+    This methods tries to bind to an UDP socket.
+    
+    @param port: Local socket port
+    @return: True if socket is free to use
+    """
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.bind(("", port))
+        return True
+    except Exception:
+        logger.exception("Bummer, socket is still in use!")
+        return False
+    finally:
+        s.close()
     

@@ -16,7 +16,7 @@ from dispersy.logger import get_logger
 
 from src.swift.swift_process import MySwiftProcess
 from src.dispersy_extends.community import MyCommunity
-from src.dispersy_extends.endpoint import MultiEndpoint
+from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
 from src.definitions import DISPERSY_WORK_DIR, SQLITE_DATABASE, TOTAL_RUN_TIME, MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, \
@@ -79,8 +79,12 @@ class DispersyInstance(object):
         
         self._community = self._callback.call(self.create_mycommunity)
         self._community.dest_dir = self.dest_dir # Will be used to put swift downloads
-                
-        for address in self._addresses:
+        
+        # Remove all duplicate ip addresses, regardless of their ports.
+        # We assume that same ip means same dispersy instance for now.
+        addrs = self.remove_duplicate_ip(self._addresses)
+        
+        for address in addrs:
             self._callback.call(self._dispersy.create_introduction_request, 
                                 (self._community, WalkCandidate(address, True, address, address, u"unknown"),
                                  True,True))
@@ -129,16 +133,33 @@ class DispersyInstance(object):
         return self._dest_dir
     
     def create_swift_instance(self, ports):
-        if ports is None or not ports:
-            ports = [random.randint(*RANDOM_PORTS)]
         
-        # TODO: Make sure that the ports are not already in use!
+        def recur(ports, n, iteration):
+            if iteration >= 5:
+                return None
+            if ports is None or not ports:
+                ports = [random.randint(*RANDOM_PORTS) for _ in n]
+            if not try_sockets(ports):
+                recur(None, iteration + 1)
+            return ports
+        
+        ports = recur(ports, len(ports), 0)
+        
+        if ports is None:
+            logger.warning("Could not obtain free ports!")
         
         httpgwport = None
         cmdgwport = None
         spmgr = None
         return MySwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, ports, 
-                                     httpgwport, cmdgwport, spmgr)   
+                                     httpgwport, cmdgwport, spmgr)
+        
+    def remove_duplicate_ip(self, addrs):
+        faddrs = []
+        for a in addrs:
+            if all([a[0] != f[0] for f in faddrs]):
+                faddrs.append(a)
+        return faddrs
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance')

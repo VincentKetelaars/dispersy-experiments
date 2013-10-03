@@ -13,16 +13,12 @@ from dispersy.dispersy import Dispersy
 from dispersy.endpoint import NullEndpoint
 
 from src.definitions import SWIFT_BINPATH, HASH_LENGTH, TIMEOUT, SLEEP_TIME
-from src.dispersy_extends.endpoint import MultiEndpoint, get_hash
+from src.dispersy_extends.endpoint import MultiEndpoint, get_hash, try_sockets
 from src.swift.swift_process import MySwiftProcess
 
 from src.tests.unit.test_definitions import DIRECTORY, FILES, DISPERSY_WORKDIR
-
-def remove_files(filename):
-    dir_ = os.path.dirname(filename)
-    for f in os.listdir(dir_):
-        if f.endswith(".mhash") or f.endswith(".mbinmap") or f.find("swifturl-") != -1:
-            os.remove(os.path.join(dir_, f))
+from src.tests.unit.mock_classes import FakeDispersy
+            
 
 class TestMultiSwiftEndpoint(unittest.TestCase):
 
@@ -118,10 +114,11 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
             if check:
                 break
             time.sleep(SLEEP_TIME)
+            
     
 class TestMultiEndpoint(unittest.TestCase):
     """
-    Should MultiEndpoint still have this functionality?
+    MultiEndpoit might in the future specifically target SwiftEndpoints
     """
 
     def setUp(self):
@@ -160,6 +157,7 @@ class TestMultiEndpoint(unittest.TestCase):
         self._me.add_endpoint(ne)
         self.assertEqual(self._me.get_address(), addr)
     
+
 class TestStaticMethods(unittest.TestCase):
 
     def setUp(self):
@@ -173,36 +171,33 @@ class TestStaticMethods(unittest.TestCase):
         roothash = get_hash(self.filename, SWIFT_BINPATH)
         self.assertTrue(roothash is not None)
         self.assertEqual(len(roothash), HASH_LENGTH)
-
     
 
 class TestSocketAvailable(unittest.TestCase):
-            
-    class FakeDispersy(object):
-    
-        def __init__(self):
-            self._lan_address = ("0.0.0.0", 0)
-        
-        @property
-        def lan_address(self):
-            return self._lan_address
         
     def setUp(self):
         self._ports = [12345, 12346, 12347]
         swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._ports, None, None, None)
         self._endpoint = MultiEndpoint(swift_process)
-        self._endpoint.open(self.FakeDispersy())
+        self._endpoint.open(FakeDispersy())
         
     def tearDown(self):
         self._endpoint.close()
         
     def test_multiple_sockets_in_use(self):
-        self.assertFalse(self._endpoint.try_sockets(self._ports, timeout=1.0))
+        self.assertFalse(try_sockets(self._ports, timeout=1.0))
         
     def test_multiple_sockets_not_in_use(self):
         self._endpoint.close() # Socket should be released within a second
-        self.assertTrue(self._endpoint.try_sockets(self._ports, timeout=1.0))
+        self.assertTrue(try_sockets(self._ports, timeout=1.0))
 
+
+
+def remove_files(filename):
+    dir_ = os.path.dirname(filename)
+    for f in os.listdir(dir_):
+        if f.endswith(".mhash") or f.endswith(".mbinmap") or f.find("swifturl-") != -1:
+            os.remove(os.path.join(dir_, f))
 
 if __name__ == "__main__":
     unittest.main()
