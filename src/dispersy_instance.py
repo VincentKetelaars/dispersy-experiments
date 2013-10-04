@@ -138,15 +138,20 @@ class DispersyInstance(object):
             if iteration >= 5:
                 return None
             if ports is None or not ports:
-                ports = [random.randint(*RANDOM_PORTS) for _ in n]
+                ports = [random.randint(*RANDOM_PORTS) for _ in range(n)]
             if not try_sockets(ports):
                 recur(None, iteration + 1)
             return ports
         
-        ports = recur(ports, len(ports), 0)
+        if ports is None or not ports:
+            ports = recur(None, 1, 0)
+        else:
+            ports = recur(ports, len(ports), 0)
         
         if ports is None:
             logger.warning("Could not obtain free ports!")
+        else:
+            logger.debug("Swift will listen to %s", ports)
         
         httpgwport = None
         cmdgwport = None
