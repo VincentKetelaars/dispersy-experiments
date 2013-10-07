@@ -13,7 +13,6 @@ from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 from dispersy.candidate import WalkCandidate
 from dispersy.logger import get_logger
-from dispersy.endpoint import NullEndpoint
 
 from src.swift.swift_process import MySwiftProcess
 from src.dispersy_extends.community import MyCommunity
@@ -86,9 +85,7 @@ class DispersyInstance(object):
         addrs = self.remove_duplicate_ip(self._addresses)
         
         for address in addrs:
-            self._callback.call(self._dispersy.create_introduction_request, 
-                                (self._community, WalkCandidate(address, True, address, address, u"unknown"),
-                                 True,True))
+            self.send_introduction_request(address)
             
         # Start Filepusher if directory or files available
         if self._directory or self._files:
@@ -166,6 +163,11 @@ class DispersyInstance(object):
             if all([a[0] != f[0] for f in faddrs]):
                 faddrs.append(a)
         return faddrs
+    
+    def send_introduction_request(self, address):
+        self._callback.call(self._dispersy.create_introduction_request, 
+                                (self._community, WalkCandidate(address, True, address, address, u"unknown"),
+                                 True,True))
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance')
