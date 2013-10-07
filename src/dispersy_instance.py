@@ -13,6 +13,7 @@ from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 from dispersy.candidate import WalkCandidate
 from dispersy.logger import get_logger
+from dispersy.endpoint import NullEndpoint
 
 from src.swift.swift_process import MySwiftProcess
 from src.dispersy_extends.community import MyCommunity

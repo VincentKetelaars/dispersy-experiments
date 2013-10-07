@@ -12,7 +12,7 @@ from src.dispersy_extends.conversion import FileHashConversion, SimpleFileConver
 class TestConversion(unittest.TestCase):
     
     def setUp(self):
-        self._di = DispersyInstance(DEST_DIR, SWIFT_BINPATH, run_time=5)
+        self._di = DispersyInstance(DEST_DIR, SWIFT_BINPATH, run_time=0.1)
         self._di.start()
         self._conversions = self._di._community._conversions
 

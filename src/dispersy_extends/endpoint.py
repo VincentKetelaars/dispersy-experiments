@@ -24,7 +24,7 @@ from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
 from src.swift.swift_process import MySwiftProcess
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download
-from src.definitions import SLEEP_TIME, FILE_HASH_MESSAGE_NAME, HASH_LENGTH
+from src.definitions import SLEEP_TIME, HASH_LENGTH
 
 logger = get_logger(__name__)
 
@@ -86,15 +86,16 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self._send_introduction_requests_to_unknown(candidates, packets)
             
     def open(self, dispersy):
-        TunnelEndpoint.open(self, dispersy)
+        ret = TunnelEndpoint.open(self, dispersy)
         self._swift.start_cmd_connection()
-        for x in self.swift_endpoints:
-            x.open(dispersy)
+        ret = ret and all([x.open(dispersy) for x in self.swift_endpoints])
+                    
         self.is_alive = True   
         
         self._thread_loop = Thread(target=self._loop)
         self._thread_loop.daemon = True
         self._thread_loop.start()
+        return ret
     
     def close(self, timeout=0.0):
         logger.info("TOTAL %s: down %d, send %d, up %d, cur %d", self.get_address(), self.total_down, self.total_send, self.total_up, self.cur_sendqueue)
@@ -407,8 +408,8 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         self.port = port
         
     def open(self, dispersy):
-        Endpoint.open(self, dispersy) # Dispersy, but not add_download(self)
         self.is_alive = True
+        return Endpoint.open(self, dispersy) # Dispersy, but not add_download(self)
         
     def close(self, timeout=0.0):
         self.is_alive = False

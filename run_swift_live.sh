@@ -7,5 +7,5 @@ swift/run_live/client.sh ${swift} &
 sleep 1
 swift/run_live/player.sh  &
 
-sleep 15
+sleep 10
 pkill swift
