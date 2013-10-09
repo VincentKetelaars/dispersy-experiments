@@ -10,3 +10,5 @@ DIRECTORY = os.getenv("HOME") + "/Downloads"
 FILES = list([os.getenv("HOME") + "/Desktop/test_large/tutorial.pdf", os.getenv("HOME") + "/Desktop/test_large/tests/ds/test1"])
 
 DISPERSY_WORKDIR = os.getenv("HOME") + u"/Downloads"
+
+SMALL_TASK_TIMEOUT = 0.01

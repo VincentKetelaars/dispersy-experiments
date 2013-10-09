@@ -8,17 +8,19 @@ import os
 import unittest
 import time
 
+from src.swift.swift_process import MySwiftProcess
+from dispersy.logger import get_logger
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 from dispersy.endpoint import NullEndpoint
 
 from src.definitions import SWIFT_BINPATH, HASH_LENGTH, TIMEOUT, SLEEP_TIME
 from src.dispersy_extends.endpoint import MultiEndpoint, get_hash, try_sockets
-from src.swift.swift_process import MySwiftProcess
 
 from src.tests.unit.test_definitions import DIRECTORY, FILES, DISPERSY_WORKDIR
 from src.tests.unit.mock_classes import FakeDispersy
-            
+
+logger = get_logger(__name__)
 
 class TestMultiSwiftEndpoint(unittest.TestCase):
 
@@ -103,7 +105,7 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
   
         self._wait()
            
-        self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))
+        self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))   
 
     def _wait(self):
         for _ in range(int(TIMEOUT / SLEEP_TIME)):
@@ -114,7 +116,74 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
             if check:
                 break
             time.sleep(SLEEP_TIME)
-            
+   
+class TestEndpointNoConnection(unittest.TestCase):
+                
+    def turn_wlan0_on(self):
+        cmd = 'ifconfig wlan0 up'
+        os.system(cmd)
+        
+    def turn_wlan0_off(self):
+        cmd = 'ifconfig wlan0 down'
+        os.system(cmd)
+    
+    def setUp(self):
+        self.turn_wlan0_off()
+        
+        callback = Callback("TestCallback")
+        self._ports = [12344]
+        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._ports, None, None, None)
+        self._endpoint = MultiEndpoint(swift_process)
+        self._dispersy = Dispersy(callback, self._endpoint, DISPERSY_WORKDIR, u":memory:")
+        self._dispersy.start()
+        self._directories = "testcase_swift_seed_and_down/"
+        self._dest_dir = DIRECTORY
+        self._filename = FILES[0]
+        self._roothash = get_hash(self._filename, SWIFT_BINPATH)
+        
+        callback2 = Callback("TestCallback2")
+        self._ports2 = [34254]
+        swift_process2 = MySwiftProcess(SWIFT_BINPATH, ".", None, self._ports2, None, None, None)
+        self._endpoint2 = MultiEndpoint(swift_process2)
+        self._dispersy2 = Dispersy(callback2, self._endpoint2, u".", u":memory:")
+        self._dispersy2.start()
+        self._addr = ("127.0.0.1",self._ports2[0])
+        
+    def tearDown(self):
+        self._dispersy.stop()
+        self._dispersy2.stop()
+        if self._filename is not None:
+            remove_files(self._filename)
+        dir_ = os.path.join(self._dest_dir, self._directories)
+        if os.path.isdir(dir_):
+            for f in os.listdir(dir_):
+                os.remove(os.path.join(dir_, f))
+            os.removedirs(dir_)
+    
+    # @unittest.skipIf(os.geteuid() != 0, "Root privileges necessary to handle this testcase")
+    # Shutting down wifi is easy.. Getting it back up less so
+    @unittest.skip("Don't do this for now..")
+    def test_temp_no_wifi(self): 
+        self._endpoint.add_file(self._filename, self._roothash)
+        roothash_unhex=binascii.unhexlify(self._roothash)
+        self._endpoint.add_peer(self._addr, roothash_unhex)
+        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir, self._addr)
+  
+        self._wait()
+           
+        self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))
+        
+    def _wait(self):
+        for i in range(int(TIMEOUT / SLEEP_TIME)):
+            if i * SLEEP_TIME >= 1:
+                self.turn_wlan0_on()
+            check = True
+            for d in self._endpoint2.downloads.values():
+                if not d.is_finished():
+                    check = False
+            if check:
+                break
+            time.sleep(SLEEP_TIME)
     
 class TestMultiEndpoint(unittest.TestCase):
     """
@@ -167,7 +236,7 @@ class TestStaticMethods(unittest.TestCase):
         remove_files(self.filename)
      
     def test_get_hash(self):
-        self.assertTrue(os.path.exists(self.filename), "Make sure that the file you want the roothash of exists")
+        self.assertTrue(os.path.exists(self.filename), "Make sure that the file, you want the roothash of, exists")
         roothash = get_hash(self.filename, SWIFT_BINPATH)
         self.assertTrue(roothash is not None)
         self.assertEqual(len(roothash), HASH_LENGTH)

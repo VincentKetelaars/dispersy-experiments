@@ -78,7 +78,7 @@ class TestFilePusher(unittest.TestCase):
     def wait_and_asses(self, all_files):
         time.sleep(1) # First sleep a while till you are sure that files have been added to the queue
 
-        while not self._filepusher._queue.empty(): # continue while the queue still has files left
+        while not self._filepusher._thread_func.queue.empty(): # continue while the queue still has files left
             time.sleep(1)
         
         time.sleep(1) # Wait another second because empty queue does not mean finished yet.

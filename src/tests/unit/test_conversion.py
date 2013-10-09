@@ -5,6 +5,7 @@ Created on Sep 17, 2013
 '''
 import unittest
 
+from src.tests.unit.test_definitions import SMALL_TASK_TIMEOUT
 from src.dispersy_instance import DispersyInstance
 from src.definitions import SWIFT_BINPATH, DEST_DIR, FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME
 from src.dispersy_extends.conversion import FileHashConversion, SimpleFileConversion
@@ -12,7 +13,7 @@ from src.dispersy_extends.conversion import FileHashConversion, SimpleFileConver
 class TestConversion(unittest.TestCase):
     
     def setUp(self):
-        self._di = DispersyInstance(DEST_DIR, SWIFT_BINPATH, run_time=0.1)
+        self._di = DispersyInstance(DEST_DIR, SWIFT_BINPATH, run_time=SMALL_TASK_TIMEOUT)
         self._di.start()
         self._conversions = self._di._community._conversions
 

@@ -1,0 +1,2 @@
+Run single python file:
+python -m unittest src.tests.unit.test_*.Test*.test_*

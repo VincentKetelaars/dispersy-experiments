@@ -8,9 +8,9 @@ import os
 import binascii
 import pickle
 
+from dispersy.logger import get_logger
 from Tribler.Core.DownloadConfig import DownloadStartupConfig, DownloadConfigInterface
 from Tribler.Core.Swift.SwiftDownloadImpl import SwiftDownloadImpl
-from dispersy.logger import get_logger
 from Tribler.Core.simpledefs import DLSTATUS_STOPPED, DLSTATUS_SEEDING
 
 logger = get_logger(__name__)

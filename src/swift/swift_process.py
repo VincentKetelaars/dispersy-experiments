@@ -10,15 +10,12 @@ import sys
 from collections import defaultdict
 from threading import RLock, currentThread, Thread, Event
 
+from dispersy.logger import get_logger
 from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING, DONE_STATE_SHUTDOWN
 
-from dispersy.logger import get_logger
 logger = get_logger(__name__)
 
 class MySwiftProcess(SwiftProcess):
-    '''
-    
-    '''
     
     def __init__(self, binpath, workdir, zerostatedir, listenports, httpgwport, cmdgwport, spmgr):
         # Called by any thread, assume sessionlock is held

@@ -6,6 +6,7 @@ Created on Aug 7, 2013
 
 from os.path import isfile, basename
 
+from dispersy.logger import get_logger
 from dispersy.community import Community
 from dispersy.conversion import DefaultConversion
 from dispersy.message import Message
@@ -13,7 +14,6 @@ from dispersy.authentication import MemberAuthentication
 from dispersy.resolution import PublicResolution
 from dispersy.distribution import FullSyncDistribution
 from dispersy.destination import CommunityDestination
-from dispersy.logger import get_logger
 
 from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConversion
 from src.dispersy_extends.payload import SimpleFilePayload, FileHashPayload

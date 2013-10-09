@@ -9,12 +9,13 @@ import sys
 import argparse
 from threading import Event
 
-from dispersy.callback import Callback
-from dispersy.dispersy import Dispersy
-from dispersy.candidate import WalkCandidate
 from dispersy.logger import get_logger
+from src.swift.swift_process import MySwiftProcess # This should be imported first, or it will screw up the logs.
+from dispersy.candidate import WalkCandidate
+from dispersy.callback import Callback
 
-from src.swift.swift_process import MySwiftProcess
+from src.tools.runner import CallFunctionThread
+from dispersy.dispersy import Dispersy
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
@@ -165,9 +166,32 @@ class DispersyInstance(object):
         return faddrs
     
     def send_introduction_request(self, address):
-        self._callback.call(self._dispersy.create_introduction_request, 
-                                (self._community, WalkCandidate(address, True, address, address, u"unknown"),
-                                 True,True))
+        addr = [1] # Tuple is not remembered in callback. Array is.
+        addr[0] = address
+        logger.debug("Address? %s", address)
+        
+        def send_request():
+            logger.debug("SENDREQUEST: %s",addr[0])
+            self._callback.register(self._dispersy.create_introduction_request, 
+                                (self._community, WalkCandidate(addr[0], True, addr[0], addr[0], u"unknown"),
+                                 True,True),callback=callback)
+
+        thread_func = CallFunctionThread()
+        event = Event()
+        
+        def callback(result):
+            if isinstance(result, Exception):
+                # Somehow the introduction request did not work
+                event.wait(1)
+                logger.debug("resend, sons a bitches")
+                logger.debug("CALLBACK: %s",addr[0])
+                thread_func.put(send_request)
+            # Stop thread_func.. No longer necessary
+            thread_func.stop()
+        
+        thread_func.start()
+        thread_func.put(send_request)
+        
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance')
@@ -206,10 +230,13 @@ if __name__ == '__main__':
             ip = a[:i]
             port = int(a[i+1:])
             addresses.append((ip, port))
-            
+    
     if args.peer_ports:
         for p in args.peer_ports:
-            addresses.append((Dispersy._guess_lan_address(),p))
+            local_address = Dispersy._guess_lan_address()
+            if local_address is None:
+                local_address = "0.0.0.0"
+            addresses.append((local_address,p))
     
     ports = []
     if args.ports:

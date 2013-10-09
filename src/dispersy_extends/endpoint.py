@@ -14,14 +14,14 @@ import socket
 import time
 import logging
 
+from src.swift.swift_process import MySwiftProcess # This should be imported first, or it will screw up the logs.
+from dispersy.logger import get_logger
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
 from dispersy.candidate import WalkCandidate
-from dispersy.logger import get_logger
 from Tribler.Core.Swift.SwiftDef import SwiftDef
 from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
 
-from src.swift.swift_process import MySwiftProcess
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download
 from src.definitions import SLEEP_TIME, HASH_LENGTH

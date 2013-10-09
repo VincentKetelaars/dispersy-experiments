@@ -8,6 +8,7 @@ from test_filepusher import TestFilePusher
 import test_community
 import test_conversion
 import test_endpoint
+import test_runner
 
 def suite():
     suite = unittest.TestSuite()
@@ -17,6 +18,10 @@ def suite():
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_community))
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_conversion))
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_endpoint))
+    suite.addTest(unittest.TestLoader().loadTestsFromModule(test_runner))
+    
+    # For testing of tests
+#     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(test_endpoint.TestEndpointNoConnection))
     return suite
 
 if __name__ == '__main__':

@@ -11,11 +11,12 @@ from string import find
 from os import listdir
 from os.path import exists, isfile, isdir, getmtime, join, getsize, basename
 
+from dispersy.logger import get_logger
+from src.tools.runner import CallFunctionThread
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.dispersy_extends.endpoint import get_hash
 from src.definitions import SLEEP_TIME, MAX_FILE_SIZE, FILENAMES_NOT_TO_SEND, FILETYPES_NOT_TO_SEND
 
-from dispersy.logger import get_logger
 logger = get_logger(__name__)
 
 class FilePusher(object):
@@ -47,7 +48,6 @@ class FilePusher(object):
         self._callback = callback
         self._file_size = file_size
         self.swift_path = swift_path
-        self._queue = Queue.Queue()
         self._stop_event = Event()
         
     def start(self):
@@ -59,8 +59,7 @@ class FilePusher(object):
         self._thread_loop.daemon = True
         self._thread_loop.start()
         
-        self._thread_func = CallFunctionThread(self._stop_event, self._queue)
-        self._thread_func.daemon = True
+        self._thread_func = CallFunctionThread(timeout=1.0)
         self._thread_func.start()
         
     def _loop(self):
@@ -80,7 +79,7 @@ class FilePusher(object):
                     dirs = None
                     if loc != -1:
                         dirs = absfilename[len(self._dir) + 1:-len(basename(absfilename))]
-                    self._queue.put((self.send_file_hash_message, (absfilename,), {"dirs":dirs}))
+                    self._thread_func.put(self.send_file_hash_message, (absfilename,), {"dirs":dirs})
                 else:
                     with file(absfilename) as f:
                         s = f.read()
@@ -99,7 +98,7 @@ class FilePusher(object):
         """
         self._stop_event.set()
         self._thread_loop.join()
-        self._thread_func.join()
+        self._thread_func.stop()
             
     def _list_files_to_send(self):
         """
@@ -133,27 +132,4 @@ class FilePusher(object):
                     
         self._recent_files = file_updates
         return diff
-    
-    
-class CallFunctionThread(Thread):
-    """
-    Call function in separate thread. Arguments are unpacked.
-    """
-    def __init__(self, event, queue):
-        """
-        @param event: threading.Event, when set the thread will stop running
-        @param queue: The queue can hold functions and their arguments as a tuple: (function, argument_tuple, argument_dict)
-        """
-        Thread.__init__(self)
-        self.event = event
-        self.queue = queue
-  
-    def run(self):
-        while not self.event.is_set():
-            try:
-                f, a, d = self.queue.get(True, 1)
-                f(*a, **d)
-                self.queue.task_done()
-            except:
-                pass
     
