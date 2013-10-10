@@ -80,10 +80,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         return list(endpoint.get_address() for endpoint in self.swift_endpoints)
     
     def send(self, candidates, packets):
-        self.update_known_addresses(candidates, packets)
+        self.update_known_addresses_candidates(candidates, packets)
         self.determine_endpoint(known_addresses=self.known_addresses, subset=True)
         self._endpoint.send(candidates, packets)
-        self._send_introduction_requests_to_unknown(candidates, packets)
+#         self._send_introduction_requests_to_unknown(candidates, packets)
             
     def open(self, dispersy):
         ret = TunnelEndpoint.open(self, dispersy)
@@ -289,8 +289,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self.clean_up_files(roothash, True, False)
         
     def i2ithread_data_came_in(self, session, sock_addr, data, incoming_port=0):
-        if isinstance(sock_addr, tuple):
-            self.known_addresses.update([sock_addr])
+        self.update_known_addresses([sock_addr])
             
         for e in self.swift_endpoints:
             if e.port == incoming_port:
@@ -388,9 +387,13 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self._swift.remove_download(d, rm_state, rm_download)
         self.added_peers = Set([p for p in self.added_peers if p[1] != roothash])
         
-    def update_known_addresses(self, candidates, packets):
+    def update_known_addresses_candidates(self, candidates, packets):
+        self.update_known_addresses(list(c.sock_addr for c in candidates))
+        
+    def update_known_addresses(self, addresses):
+        addrs = list(a for a in addresses if isinstance(a, tuple))
         ka_size = len(self.known_addresses)
-        self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))
+        self.known_addresses.update(addrs)
         if ka_size < len(self.known_addresses):
             self.distribute_all_hashes_to_peers()
             

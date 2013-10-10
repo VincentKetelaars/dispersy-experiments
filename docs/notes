@@ -8,6 +8,7 @@ MultiEndpoint, at this point, holds all information on downloads in self.downloa
 The download_impl is stored there as well, giving it a lifetime beyond the swift instance download_impl.
 SwiftEndpoints have no access to this information for now.
 
+FIXME: MySwiftProcess causes the logs to go haywire. Temporary fix for now is to import this class earlier.
 
 LIBSWIFT:
 

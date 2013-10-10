@@ -203,7 +203,6 @@ if __name__ == '__main__':
     parser.add_argument("-P", "--peer_ports", type=int, nargs="+", help="List ports of local dispersy instances, space separated")
     parser.add_argument("-q", "--sqlite_database", default=u":memory:", help="SQLite Database directory")
     parser.add_argument("-s", "--swift", help="Swift binary path")
-    parser.add_argument("-S", "--swift_work_dir", help="Swift working directory")
     parser.add_argument("-t", "--time",type=float, help="Set runtime")
     parser.add_argument("-w", "--work_dir", help="Working directory")
     args = parser.parse_args()
@@ -244,7 +243,7 @@ if __name__ == '__main__':
             ports.append(p)
         
     d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE, 
-                         swift_work_dir=args.swift_work_dir, addresses=addresses, ports=ports, directory=args.directory, 
+                         swift_work_dir=DEST_DIR, addresses=addresses, ports=ports, directory=args.directory, 
                          files=args.files, run_time=TOTAL_RUN_TIME)
     d.start()
     
