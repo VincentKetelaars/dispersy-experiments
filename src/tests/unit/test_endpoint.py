@@ -89,11 +89,11 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
         self.assertTrue(os.path.exists(absfilename1))
         self.assertTrue(os.path.exists(absfilename2))
           
-        # Check that files created for download have been removed
-        self.assertFalse(os.path.exists(absfilename1 + ".mhash"))
-        self.assertFalse(os.path.exists(absfilename1 + ".mbinmap"))
-        self.assertFalse(os.path.exists(absfilename2 + ".mhash"))
-        self.assertFalse(os.path.exists(absfilename2 + ".mbinmap"))
+        # Check that checkpoint is created, and the mhash file is maintained.
+        self.assertTrue(os.path.exists(absfilename1 + ".mhash"))
+        self.assertTrue(os.path.exists(absfilename1 + ".mbinmap"))
+        self.assertTrue(os.path.exists(absfilename2 + ".mhash"))
+        self.assertTrue(os.path.exists(absfilename2 + ".mbinmap"))
           
     def test_restart(self): 
         # Send fake message over cmdgw, which will lead to an error 

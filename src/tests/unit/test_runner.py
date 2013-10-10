@@ -26,7 +26,6 @@ class RunnerTest(unittest.TestCase):
         res[0] = False;
         
         def callback():
-            logger.debug("I get here..")
             res[0] = True
             
         self._thread.put(callback)
@@ -52,5 +51,4 @@ class RunnerTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()
