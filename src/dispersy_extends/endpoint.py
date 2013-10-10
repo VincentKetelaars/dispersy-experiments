@@ -254,6 +254,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             
             self.update_known_downloads(roothash, d.get_dest_dir(), d, address=addr, download=True)
             
+    def do_checkpoint(self, d):
+        if d is not None:
+            self._swift.checkpoint_download(d)
+            
     def _send_introduction_requests_to_unknown(self, candidates, packets):
         meta = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False)
         addrs = Set([c.get_destination_address(self._dispersy.wan_address) for c in candidates])
@@ -275,7 +279,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         download = self.downloads[roothash]
         if download.set_finished() and not download.seeder():
             if not download.moreinfo:
-                self.clean_up_files(roothash, True, False)
+                self.clean_up_files(roothash, False, False)
                 
     def moreinfo_callback(self, roothash):
         """
@@ -286,7 +290,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         """
         download = self.downloads[roothash]
         if download.is_finished() and not download.seeder():
-            self.clean_up_files(roothash, True, False)
+            self.clean_up_files(roothash, False, False)
         
     def i2ithread_data_came_in(self, session, sock_addr, data, incoming_port=0):
         self.update_known_addresses([sock_addr])
@@ -384,6 +388,8 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         """
         d = self.retrieve_download_impl(roothash)
         if d is not None:
+            if not (rm_state or rm_download):
+                self.do_checkpoint(d)
             self._swift.remove_download(d, rm_state, rm_download)
         self.added_peers = Set([p for p in self.added_peers if p[1] != roothash])
         

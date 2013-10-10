@@ -168,10 +168,8 @@ class DispersyInstance(object):
     def send_introduction_request(self, address):
         addr = [1] # Tuple is not remembered in callback. Array is.
         addr[0] = address
-        logger.debug("Address? %s", address)
         
         def send_request():
-            logger.debug("SENDREQUEST: %s",addr[0])
             self._callback.register(self._dispersy.create_introduction_request, 
                                 (self._community, WalkCandidate(addr[0], True, addr[0], addr[0], u"unknown"),
                                  True,True),callback=callback)
@@ -183,8 +181,6 @@ class DispersyInstance(object):
             if isinstance(result, Exception):
                 # Somehow the introduction request did not work
                 event.wait(1)
-                logger.debug("resend, sons a bitches")
-                logger.debug("CALLBACK: %s",addr[0])
                 thread_func.put(send_request)
             # Stop thread_func.. No longer necessary
             thread_func.stop()
