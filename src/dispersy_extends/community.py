@@ -116,6 +116,7 @@ class MyCommunity(Community):
         
     def send_introduction_request(self, walker):
         walker.set_update_bloomfilter(self._update_bloomfilter)
+        
         def send_request():
             self._dispersy.callback.register(self._dispersy.create_introduction_request, 
                                 (self, walker, True,True),callback=callback)
@@ -125,8 +126,8 @@ class MyCommunity(Community):
                 # Somehow the introduction request did not work
                 Event().wait(1)
                 send_request()
-        
-        if self.update_bloomfilter:
+
+        if self.update_bloomfilter > 0:
             send_request()
             self._intro_request_updates.add(IntroductionRequestTimeout(walker, send_request))
             

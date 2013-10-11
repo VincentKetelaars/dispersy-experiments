@@ -170,7 +170,8 @@ class DispersyInstance(object):
     
     def send_introduction_request(self, address):
         walker = EligibleWalkCandidate(address, True, address, address, u"unknown")
-        self._community.send_introduction_request(walker) 
+        # Each new candidate will be sent an introduction request, if update_bloomfilter > 0
+        self._community.add_candidate(walker) 
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance')
