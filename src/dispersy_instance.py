@@ -11,11 +11,12 @@ from threading import Event
 
 from dispersy.logger import get_logger
 from src.swift.swift_process import MySwiftProcess # This should be imported first, or it will screw up the logs.
-from dispersy.candidate import WalkCandidate
+# from dispersy.candidate import WalkCandidate
 from dispersy.callback import Callback
+from dispersy.dispersy import Dispersy
 
 from src.tools.runner import CallFunctionThread
-from dispersy.dispersy import Dispersy
+from src.dispersy_extends.candidate import EligbleWalkCandidate
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
@@ -171,7 +172,7 @@ class DispersyInstance(object):
         
         def send_request():
             self._callback.register(self._dispersy.create_introduction_request, 
-                                (self._community, WalkCandidate(addr[0], True, addr[0], addr[0], u"unknown"),
+                                (self._community, EligbleWalkCandidate(addr[0], True, addr[0], addr[0], u"unknown"),
                                  True,True),callback=callback)
 
         thread_func = CallFunctionThread()
