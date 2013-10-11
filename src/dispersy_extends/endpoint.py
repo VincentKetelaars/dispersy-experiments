@@ -18,10 +18,11 @@ from src.swift.swift_process import MySwiftProcess # This should be imported fir
 from dispersy.logger import get_logger
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
-from dispersy.candidate import WalkCandidate
+
 from Tribler.Core.Swift.SwiftDef import SwiftDef
 from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
 
+from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download
 from src.definitions import SLEEP_TIME, HASH_LENGTH
@@ -268,7 +269,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                     logger.debug("%s sends introduction request to %s", e.get_address(), a)
                     e.known_addresses.add(a)
                     self._dispersy._callback.call(self._dispersy.create_introduction_request, 
-                                    (meta._community, WalkCandidate(a, True, a, a, u"unknown"),True,True))
+                                    (meta._community, EligibleWalkCandidate(a, True, a, a, u"unknown"),True,True))
         
     def download_is_ready_callback(self, roothash):
         """
@@ -301,6 +302,9 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                 return
         # In case the incoming_port number does not match any of the endpoints
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
+        
+    def dispersythread_data_came_in(self, sock_addr, data, timestamp):
+        self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), data)], True, timestamp)
         
     def create_download_impl(self, roothash):
         """
@@ -469,6 +473,10 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         if isinstance(sock_addr, tuple):
             self.known_addresses.update([sock_addr])
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
+        
+            
+    def dispersythread_data_came_in(self, sock_addr, data, timestamp):
+        self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), data)], True, timestamp)
                     
                     
 def get_hash(filename, swift_path):

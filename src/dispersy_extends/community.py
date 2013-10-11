@@ -3,7 +3,8 @@ Created on Aug 7, 2013
 
 @author: Vincent Ketelaars
 '''
-
+from sets import Set
+from threading import Event
 from os.path import isfile, basename
 
 from dispersy.logger import get_logger
@@ -15,6 +16,7 @@ from dispersy.resolution import PublicResolution
 from dispersy.distribution import FullSyncDistribution
 from dispersy.destination import CommunityDestination
 
+from src.tools.timeout import IntroductionRequestTimeout
 from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConversion
 from src.dispersy_extends.payload import SimpleFilePayload, FileHashPayload
 
@@ -33,6 +35,8 @@ class MyCommunity(Community):
         '''
         super(MyCommunity, self).__init__(dispersy, master_member)
         self._dest_dir = None
+        self._update_bloomfilter = -1
+        self._intro_request_updates = Set()
         
     def initiate_conversions(self):
         """
@@ -104,6 +108,28 @@ class MyCommunity(Community):
                                       payload=(basename(file_hash_message.filename), file_hash_message.directories, file_hash_message.roothash, self._address())) 
                             for _ in xrange(count)]
                 self.dispersy.store_update_forward(messages, store, update, forward)
+                
+    def add_candidate(self, candidate):
+        Community.add_candidate(self, candidate)
+        if candidate not in [i.candidate for i in self._intro_request_updates]:
+            self.send_introduction_request(candidate) 
+        
+    def send_introduction_request(self, walker):
+        walker.set_update_bloomfilter(self._update_bloomfilter)
+        def send_request():
+            self._dispersy.callback.register(self._dispersy.create_introduction_request, 
+                                (self, walker, True,True),callback=callback)
+        
+        def callback(result):
+            if isinstance(result, Exception):
+                # Somehow the introduction request did not work
+                Event().wait(1)
+                send_request()
+        
+        if self.update_bloomfilter:
+            send_request()
+            self._intro_request_updates.add(IntroductionRequestTimeout(walker, send_request))
+            
         
     @property
     def dispersy_enable_candidate_walker(self):
@@ -115,10 +141,29 @@ class MyCommunity(Community):
         return True
     
     @property
+    def dispersy_sync_skip_enable(self):
+        # Skip the creation of the bloomfilter
+        return Community.dispersy_sync_skip_enable
+    
+    @property
+    def dispersy_sync_cache_enable(self):
+        # Reuse the last bloomfilter
+        return Community.dispersy_sync_cache_enable
+    
+    @property
     def dest_dir(self):
         return self._dest_dir
     
     @dest_dir.setter
     def dest_dir(self, dest_dir):
         self._dest_dir = dest_dir
+    
+    @property
+    def update_bloomfilter(self):
+        return self._update_bloomfilter
+    
+    @update_bloomfilter.setter
+    def update_bloomfilter(self, update_bloomfilter):
+        self._update_bloomfilter = update_bloomfilter
+    
     

@@ -36,11 +36,13 @@ MASTER_MEMBER_PUBLIC_KEY = "307e301006072a8648ce3d020106052b81040024036a0004004b
 RANDOM_PORTS = (10000, 20000) # TODO: Determine exact range of available ports
 
 DEFAULT_MESSAGE_COUNT = 1
-DEFAULT_MESSAGE_DELAY = 0.0
+DEFAULT_MESSAGE_DELAY = 0.0 # Seconds
 
 # Time in seconds
 SLEEP_TIME = 0.5
 TOTAL_RUN_TIME = 10
+BLOOM_FILTER_UPDATE = 5.0
+
 DEST_DIR = os.getenv("HOME") + "/Desktop/tests_dest"
 SWIFT_BINPATH = os.getenv("HOME") + "/git/dispersy-experiments/libswift/swift" #os.getenv("HOME") + "/svn/libswift/ppsp/swift" # "/git/dispersy-experiments/tribler/Tribler/SwiftEngine/swift"
 DISPERSY_WORK_DIR = os.getenv("HOME") + u"/Music/"+ datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(os.getpid()) + "/"
@@ -65,8 +67,13 @@ FILENAMES_NOT_TO_SEND = ["swifturl-"]
 """
 Tests
 """
-TIMEOUT = 10 # Seconds
+TIMEOUT_TESTS = 10 # Seconds
 
 """
 Swift
 """
+
+"""
+Timeout
+"""
+TIMEOUT_INTRODUCTION_REQUEST = 5.0 # Seconds

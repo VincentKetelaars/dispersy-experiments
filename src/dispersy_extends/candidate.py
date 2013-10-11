@@ -4,13 +4,21 @@ Created on Oct 11, 2013
 @author: Vincent Ketelaars
 '''
 
-from dispersy.candidate import WalkCandidate, CANDIDATE_WALK_LIFETIME, CANDIDATE_STUMBLE_LIFETIME, CANDIDATE_INTRO_LIFETIME
+from dispersy.candidate import WalkCandidate
 
-class EligbleWalkCandidate(WalkCandidate):
+class EligibleWalkCandidate(WalkCandidate):
     '''
     classdocs
     '''
-
-    def is_eligible_for_walk(self, now):
-        return (self._last_walk + self._timeout_adjustment <= now < self._last_walk + CANDIDATE_WALK_LIFETIME or 
-                now < self._last_stumble + CANDIDATE_STUMBLE_LIFETIME or now < self._last_intro + CANDIDATE_INTRO_LIFETIME)
+    def __init__(self, sock_addr, tunnel, lan_address, wan_address, connection_type):
+        WalkCandidate.__init__(self, sock_addr, tunnel, lan_address, wan_address, connection_type)
+        self.update_bloomfilter = -1
+        
+    def introduction_response_received(self):
+        return self._timeout_adjustment == 0.0 and self._last_walk > 0.0
+    
+    def send_bloomfilter_update(self):
+        return self.update_bloomfilter > 0
+    
+    def set_update_bloomfilter(self, update):
+        self.update_bloomfilter = update

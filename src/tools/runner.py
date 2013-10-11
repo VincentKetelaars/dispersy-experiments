@@ -10,8 +10,9 @@ from threading import Thread, Event
 class CallFunctionThread(Thread):
     """
     Call function in separate thread.
+    In case the queue has nothing to, the timeout will determine how long it waits for something to come up.
     """
-    def __init__(self, timeout=0.0):
+    def __init__(self, timeout=0.001):
         Thread.__init__(self)
         self.timeout = timeout
         self.event = Event()

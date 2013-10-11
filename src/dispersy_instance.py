@@ -15,14 +15,14 @@ from src.swift.swift_process import MySwiftProcess # This should be imported fir
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 
-from src.tools.runner import CallFunctionThread
-from src.dispersy_extends.candidate import EligbleWalkCandidate
+from src.tools.timeout import IntroductionRequestTimeout
+from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
 from src.definitions import DISPERSY_WORK_DIR, SQLITE_DATABASE, TOTAL_RUN_TIME, MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, \
-DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH
+DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH, BLOOM_FILTER_UPDATE
 
 logger = get_logger(__name__)
 
@@ -32,7 +32,7 @@ class DispersyInstance(object):
     '''
 
     def __init__(self, dest_dir, swift_binpath, work_dir=u".", sqlite_database=u":memory:", swift_work_dir=None, 
-                 swift_zerostatedir=None, ports=[], addresses=[], directory=None, files=[], run_time=-1):
+                 swift_zerostatedir=None, ports=[], addresses=[], directory=None, files=[], run_time=-1, bloomfilter_update=-1):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
         self._work_dir = work_dir
@@ -45,6 +45,7 @@ class DispersyInstance(object):
         self._files = files
         self._filepusher = None
         self._run_time = run_time
+        self._bloomfilter_update = bloomfilter_update
         
         self._loop_event = Event()
         
@@ -81,6 +82,7 @@ class DispersyInstance(object):
         
         self._community = self._callback.call(self.create_mycommunity)
         self._community.dest_dir = self.dest_dir # Will be used to put swift downloads
+        self._community.update_bloomfilter = self._bloomfilter_update
         
         # Remove all duplicate ip addresses, regardless of their ports.
         # We assume that same ip means same dispersy instance for now.
@@ -167,32 +169,13 @@ class DispersyInstance(object):
         return faddrs
     
     def send_introduction_request(self, address):
-        addr = [1] # Tuple is not remembered in callback. Array is.
-        addr[0] = address
-        
-        def send_request():
-            self._callback.register(self._dispersy.create_introduction_request, 
-                                (self._community, EligbleWalkCandidate(addr[0], True, addr[0], addr[0], u"unknown"),
-                                 True,True),callback=callback)
-
-        thread_func = CallFunctionThread()
-        event = Event()
-        
-        def callback(result):
-            if isinstance(result, Exception):
-                # Somehow the introduction request did not work
-                event.wait(1)
-                thread_func.put(send_request)
-            # Stop thread_func.. No longer necessary
-            thread_func.stop()
-        
-        thread_func.start()
-        thread_func.put(send_request)
-        
+        walker = EligibleWalkCandidate(address, True, address, address, u"unknown")
+        self._community.send_introduction_request(walker) 
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance')
     parser.add_argument("-a", "--addresses", nargs="+", help="List addresses of other dispersy instances: 0.0.0.0:12345, space separated")
+    parser.add_argument("-b", "--bloomfilter",help="Send bloom filter every # seconds")
     parser.add_argument("-d", "--directory",help="List directory of files to send")
     parser.add_argument("-D", "--destination", help="List directory to put downloads")
     parser.add_argument("-f", "--files", nargs="+", help="List files to send")
@@ -219,6 +202,9 @@ if __name__ == '__main__':
     if args.sqlite_database:
         SQLITE_DATABASE = args.sqlite_database
         
+    if args.bloomfilter:
+        BLOOM_FILTER_UPDATE = args.bloomfilter
+        
     addresses = []
     if args.addresses:
         for a in args.addresses:
@@ -241,6 +227,6 @@ if __name__ == '__main__':
         
     d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE, 
                          swift_work_dir=DEST_DIR, addresses=addresses, ports=ports, directory=args.directory, 
-                         files=args.files, run_time=TOTAL_RUN_TIME)
+                         files=args.files, run_time=TOTAL_RUN_TIME, bloomfilter_update=BLOOM_FILTER_UPDATE)
     d.start()
     

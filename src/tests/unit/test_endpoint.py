@@ -14,7 +14,7 @@ from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 from dispersy.endpoint import NullEndpoint
 
-from src.definitions import SWIFT_BINPATH, HASH_LENGTH, TIMEOUT, SLEEP_TIME
+from src.definitions import SWIFT_BINPATH, HASH_LENGTH, TIMEOUT_TESTS, SLEEP_TIME
 from src.dispersy_extends.endpoint import MultiEndpoint, get_hash, try_sockets
 
 from src.tests.unit.test_definitions import DIRECTORY, FILES, DISPERSY_WORKDIR
@@ -108,7 +108,7 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))   
 
     def _wait(self):
-        for _ in range(int(TIMEOUT / SLEEP_TIME)):
+        for _ in range(int(TIMEOUT_TESTS / SLEEP_TIME)):
             check = True
             for d in self._endpoint2.downloads.values():
                 if not d.is_finished():
@@ -174,7 +174,7 @@ class TestEndpointNoConnection(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))
         
     def _wait(self):
-        for i in range(int(TIMEOUT / SLEEP_TIME)):
+        for i in range(int(TIMEOUT_TESTS / SLEEP_TIME)):
             if i * SLEEP_TIME >= 1:
                 self.turn_wlan0_on()
             check = True
