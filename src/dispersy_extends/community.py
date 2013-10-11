@@ -16,6 +16,7 @@ from dispersy.resolution import PublicResolution
 from dispersy.distribution import FullSyncDistribution
 from dispersy.destination import CommunityDestination
 
+from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.tools.timeout import IntroductionRequestTimeout
 from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConversion
 from src.dispersy_extends.payload import SimpleFilePayload, FileHashPayload
@@ -111,25 +112,31 @@ class MyCommunity(Community):
                 
     def add_candidate(self, candidate):
         Community.add_candidate(self, candidate)
+        # Each candidate should only create one IntroductionRequestTimeout
         if candidate not in [i.candidate for i in self._intro_request_updates]:
             self.send_introduction_request(candidate) 
         
     def send_introduction_request(self, walker):
-        walker.set_update_bloomfilter(self._update_bloomfilter)
+        if isinstance(walker, EligibleWalkCandidate):
+            walker.set_update_bloomfilter(self._update_bloomfilter)
         
-        def send_request():
-            self._dispersy.callback.register(self._dispersy.create_introduction_request, 
-                                (self, walker, True,True),callback=callback)
-        
-        def callback(result):
-            if isinstance(result, Exception):
-                # Somehow the introduction request did not work
-                Event().wait(1)
+            def send_request():
+                self._dispersy.callback.register(self._dispersy.create_introduction_request, 
+                                    (self, walker, True,True),callback=callback)
+            
+            def callback(result):
+                if isinstance(result, Exception):
+                    # Somehow the introduction request did not work
+                    Event().wait(1)
+                    send_request()
+    
+            if self.update_bloomfilter > 0:
+                # First add the IntroductionRequestTimeout to the list, then send request. 
+                # Otherwise this method is recursively called to often
+                self._intro_request_updates.add(IntroductionRequestTimeout(walker, send_request))
                 send_request()
-
-        if self.update_bloomfilter > 0:
-            send_request()
-            self._intro_request_updates.add(IntroductionRequestTimeout(walker, send_request))
+        else:
+            logger.debug("This is not a EligibleWalkCandidate: %s", walker)
             
         
     @property

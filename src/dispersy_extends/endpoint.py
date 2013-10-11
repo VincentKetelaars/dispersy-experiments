@@ -84,7 +84,6 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.update_known_addresses_candidates(candidates, packets)
         self.determine_endpoint(known_addresses=self.known_addresses, subset=True)
         self._endpoint.send(candidates, packets)
-#         self._send_introduction_requests_to_unknown(candidates, packets)
             
     def open(self, dispersy):
         ret = TunnelEndpoint.open(self, dispersy)
@@ -258,18 +257,6 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
     def do_checkpoint(self, d):
         if d is not None:
             self._swift.checkpoint_download(d)
-            
-    def _send_introduction_requests_to_unknown(self, candidates, packets):
-        meta = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False)
-        addrs = Set([c.get_destination_address(self._dispersy.wan_address) for c in candidates])
-        for e in self.swift_endpoints:
-            if meta.name.find("dispersy") == -1 or e != self._endpoint:
-                diff = addrs.difference(e.known_addresses)
-                for a in diff:
-                    logger.debug("%s sends introduction request to %s", e.get_address(), a)
-                    e.known_addresses.add(a)
-                    self._dispersy._callback.call(self._dispersy.create_introduction_request, 
-                                    (meta._community, EligibleWalkCandidate(a, True, a, a, u"unknown"),True,True))
         
     def download_is_ready_callback(self, roothash):
         """
