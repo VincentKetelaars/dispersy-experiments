@@ -81,7 +81,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         return list(endpoint.get_address() for endpoint in self.swift_endpoints)
     
     def send(self, candidates, packets):
-        logger.debug("Send %s %s", candidates, packets)
+        logger.debug("Send %s %d", candidates, len(packets))
         self.update_known_addresses_candidates(candidates, packets)
         self.determine_endpoint(known_addresses=self.known_addresses, subset=True)
         self._endpoint.send(candidates, packets)
@@ -259,10 +259,11 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                 makedirs(dir_)
             d = self.create_download_impl(roothash)
             d.set_dest_dir(dir_ + basename(filename))
+            # Add download first, because it might take while before swift process returns
+            self.update_known_downloads(roothash, d.get_dest_dir(), d, address=addr, download=True)
             self._swift.start_download(d)
             self._swift.set_moreinfo_stats(d, True)
             
-            self.update_known_downloads(roothash, d.get_dest_dir(), d, address=addr, download=True)
             
     def do_checkpoint(self, d):
         logger.debug("Do checkpoint")
@@ -367,11 +368,12 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             # We have to make sure that swift has already started, otherwise the tcp binding might fail
             self._swift.start_cmd_connection() # Normally in open
             for h, d in self.downloads.iteritems():
-                self._swift.start_download(d.downloadimpl)
-                for addr in d.peers():
-                    if not (addr, h) in self.added_peers:
-                        self._swift.add_peer(d.downloadimpl, addr)
-                        self.added_peers.add((addr, h))
+                if (not d.is_finished()) or d.seeder(): # No sense in adding a download that is finished, and not seeding
+                    self._swift.start_download(d.downloadimpl)
+                    for addr in d.peers():
+                        if not (addr, h) in self.added_peers:
+                            self._swift.add_peer(d.downloadimpl, addr)
+                            self.added_peers.add((addr, h))
             self._resetting = False
     
     def _loop(self):
