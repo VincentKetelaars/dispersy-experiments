@@ -81,6 +81,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         return list(endpoint.get_address() for endpoint in self.swift_endpoints)
     
     def send(self, candidates, packets):
+        logger.debug("Send %s %s", candidates, packets)
         self.update_known_addresses_candidates(candidates, packets)
         self.determine_endpoint(known_addresses=self.known_addresses, subset=True)
         self._endpoint.send(candidates, packets)
@@ -98,7 +99,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         return ret
     
     def close(self, timeout=0.0):
-        logger.info("TOTAL %s: down %d, send %d, up %d, cur %d", self.get_address(), self.total_down, self.total_send, self.total_up, self.cur_sendqueue)
+        logger.info("CLOSE: address %s: down %d, send %d, up %d, cur %d", self.get_address(), self.total_down, self.total_send, self.total_up, self.cur_sendqueue)
         self.is_alive = False
         self._thread_stop_event.set()
         self._thread_loop.join()
@@ -113,6 +114,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         return all([x.close(timeout) for x in self.swift_endpoints]) and super(TunnelEndpoint, self).close(timeout)
     
     def add_endpoint(self, endpoint):
+        logger.info("Add %s", endpoint)
         assert isinstance(endpoint, Endpoint), type(endpoint)
         self.swift_endpoints.append(endpoint)
         if len(self.swift_endpoints) == 1:
@@ -122,14 +124,18 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         """
         Remove endpoint.
         """
+        logger.info("Remove %s", endpoint)
         assert isinstance(endpoint, Endpoint), type(endpoint)
+        ret = False
         for e in self.swift_endpoints:
             if e == endpoint:
                 e.close()
                 self.swift_endpoints.remove(e)
                 if self._endpoint == e:
                     self.determine_endpoint()
+                ret = True
                 break
+        return ret
     
     def _lowest_sendqueue(self):
         """
@@ -196,10 +202,11 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         
         @param filename: The absolute path of the file
         @param roothash: The roothash of this file
-        """        
+        """
+        logger.debug("Add file, %s %s", filename, roothash)        
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys() and len(roothash) == HASH_LENGTH / 2: # Check if not already added, and if the unhexlified roothash has the proper length
-            logger.debug("Add file %s with roothash %s", filename, roothash)
+            logger.info("Add file %s with roothash %s", filename, roothash)
             d = self.create_download_impl(roothash)
             d.set_dest_dir(filename)
 
@@ -214,6 +221,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         """
         All known addresses and downloads are added.
         """
+        logger.debug("Distribute all hashes")
         for roothash in self.downloads.keys():
             for addr in self.known_addresses:
                 self.add_peer(addr, roothash)
@@ -225,10 +233,11 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         @param addr: address of the peer: (ip, port)
         @param roothash: Must be unhexlified roothash
         """
+        logger.debug("Add peer %s %s", addr, roothash)
         if roothash is not None and not (addr, roothash) in self.added_peers:
             d = self.retrieve_download_impl(roothash)
             if d is not None:
-                logger.debug("Add peer %s with roothash %s ", addr, roothash)
+                logger.info("Add peer %s with roothash %s ", addr, roothash)
                 self.downloads[roothash].add_peer(addr)
                 self._swift.add_peer(d, addr)
                 self.added_peers.add((addr, roothash))
@@ -241,6 +250,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         @param roothash: hash to locate swarm
         @param dest_dir: The folder the file will be put
         """
+        logger.debug("Start download %s %s %s %s %s", filename, directories, roothash, dest_dir, addr)
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys():
             logger.info("Start download of %s with roothash %s", filename, roothash)
@@ -255,6 +265,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self.update_known_downloads(roothash, d.get_dest_dir(), d, address=addr, download=True)
             
     def do_checkpoint(self, d):
+        logger.debug("Do checkpoint")
         if d is not None:
             self._swift.checkpoint_download(d)
         
@@ -264,6 +275,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         
         @param roothash: Identifier of the download
         """
+        logger.debug("Download is ready %s", roothash)
         download = self.downloads[roothash]
         if download.set_finished() and not download.seeder():
             if not download.moreinfo:
@@ -276,11 +288,13 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         
         @param roothash: The roothash to which the more info is related
         """
+        logger.debug("More info %s", roothash)
         download = self.downloads[roothash]
         if download.is_finished() and not download.seeder():
             self.clean_up_files(roothash, False, False)
         
     def i2ithread_data_came_in(self, session, sock_addr, data, incoming_port=0):
+        logger.debug("Data came in, %s %s %d", session, sock_addr, incoming_port)        
         self.update_known_addresses([sock_addr])
             
         for e in self.swift_endpoints:
@@ -299,6 +313,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         
         @param roothash: Roothash of a file
         """
+        logger.debug("Create download implementation, %s", roothash)
         sdef = SwiftDef(roothash=roothash)
         # This object must have: get_def, get_selected_files, get_max_speed, get_swift_meta_dir
         d = FakeSessionSwiftDownloadImpl(FakeSession(), sdef, self._swift)
@@ -331,6 +346,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         Restart swift if the endpoint is still alive, generally called when an Error occurred in the swift instance
         After swift has been terminated, a new process starts and previous downloads and their peers are added.
         """
+        logger.debug("Restart swift called")
         if self.is_alive and not self._resetting:
             self._resetting = True
             logger.info("Resetting swift")
@@ -377,6 +393,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         @param rm_state: Remove state boolean
         @param rm_download: Remove download file boolean
         """
+        logger.debug("Clean up files, %s, %s, %s", roothash, rm_state, rm_download)
         d = self.retrieve_download_impl(roothash)
         if d is not None:
             if not (rm_state or rm_download):
@@ -388,6 +405,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.update_known_addresses(list(c.sock_addr for c in candidates))
         
     def update_known_addresses(self, addresses):
+        logger.debug("Update known addresses, %s", addresses)
         addrs = list(a for a in addresses if isinstance(a, tuple))
         ka_size = len(self.known_addresses)
         self.known_addresses.update(addrs)
@@ -396,6 +414,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             
     def update_known_downloads(self, roothash, filename, download_impl, address=None, seed=False, download=False):
         # Know about all hashes that go through this endpoint
+        logger.debug("Update known downloads, %s, %s", roothash, filename)
         self.downloads[roothash] = Download(roothash, filename, download_impl, seed=seed, download=download)
         self.downloads[roothash].moreinfo = True
         self.downloads[roothash].add_peer(address)
