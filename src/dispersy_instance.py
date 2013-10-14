@@ -15,7 +15,6 @@ from src.swift.swift_process import MySwiftProcess # This should be imported fir
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 
-from src.tools.timeout import IntroductionRequestTimeout
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
@@ -169,9 +168,8 @@ class DispersyInstance(object):
         return faddrs
     
     def send_introduction_request(self, address):
-        walker = EligibleWalkCandidate(address, True, address, address, u"unknown")
         # Each new candidate will be sent an introduction request, if update_bloomfilter > 0
-        self._community.add_candidate(walker) 
+        self._community.create_candidate(address, True, address, address, u"unknown") 
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance')

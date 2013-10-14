@@ -110,6 +110,16 @@ class MyCommunity(Community):
                             for _ in xrange(count)]
                 self.dispersy.store_update_forward(messages, store, update, forward)
                 
+    def create_candidate(self, sock_addr, tunnel, lan_address, wan_address, connection_type):
+        """
+        Creates and returns a new WalkCandidate instance.
+        """
+        assert not sock_addr in self._candidates
+        assert isinstance(tunnel, bool)
+        candidate = EligibleWalkCandidate(sock_addr, tunnel, lan_address, wan_address, connection_type)
+        self.add_candidate(candidate)
+        return candidate
+                
     def add_candidate(self, candidate):
         Community.add_candidate(self, candidate)
         # Each candidate should only create one IntroductionRequestTimeout
@@ -117,6 +127,7 @@ class MyCommunity(Community):
             self.send_introduction_request(candidate) 
         
     def send_introduction_request(self, walker):
+        logger.debug("Send introduction request %s", walker)
         if isinstance(walker, EligibleWalkCandidate):
             walker.set_update_bloomfilter(self._update_bloomfilter)
         

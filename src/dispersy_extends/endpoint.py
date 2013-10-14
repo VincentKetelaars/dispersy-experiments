@@ -223,8 +223,9 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         """
         logger.debug("Distribute all hashes")
         for roothash in self.downloads.keys():
-            for addr in self.known_addresses:
-                self.add_peer(addr, roothash)
+            if self.downloads[roothash].seeder():
+                for addr in self.known_addresses:
+                    self.add_peer(addr, roothash)
     
     def add_peer(self, addr, roothash):                
         """
