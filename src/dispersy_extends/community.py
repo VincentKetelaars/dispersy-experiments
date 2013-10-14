@@ -17,7 +17,7 @@ from dispersy.distribution import FullSyncDistribution
 from dispersy.destination import CommunityDestination
 
 from src.dispersy_extends.candidate import EligibleWalkCandidate
-from src.tools.timeout import IntroductionRequestTimeout
+from src.timeout import IntroductionRequestTimeout
 from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConversion
 from src.dispersy_extends.payload import SimpleFilePayload, FileHashPayload
 

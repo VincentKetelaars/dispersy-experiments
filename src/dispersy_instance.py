@@ -15,7 +15,7 @@ from src.swift.swift_process import MySwiftProcess # This should be imported fir
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 
-from src.dispersy_extends.candidate import EligibleWalkCandidate
+from src.address import Address
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
@@ -31,15 +31,15 @@ class DispersyInstance(object):
     '''
 
     def __init__(self, dest_dir, swift_binpath, work_dir=u".", sqlite_database=u":memory:", swift_work_dir=None, 
-                 swift_zerostatedir=None, ports=[], addresses=[], directory=None, files=[], run_time=-1, bloomfilter_update=-1):
+                 swift_zerostatedir=None, listen=[], peers=[], directory=None, files=[], run_time=-1, bloomfilter_update=-1):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
         self._work_dir = work_dir
         self._sqlite_database = sqlite_database
         self._swift_work_dir = swift_work_dir
         self._swift_zerostatedir = swift_zerostatedir
-        self._ports = ports
-        self._addresses = addresses
+        self._listen = listen
+        self._peers = peers
         self._directory = directory
         self._files = files
         self._filepusher = None
@@ -71,7 +71,7 @@ class DispersyInstance(object):
         # Create Dispersy object
         self._callback = Callback("Dispersy-Callback")
         
-        self._swift = self.create_swift_instance(self._ports)
+        self._swift = self.create_swift_instance(self._listen)
         endpoint = MultiEndpoint(self._swift)
 
         self._dispersy = Dispersy(self._callback, endpoint, self._work_dir, self._sqlite_database)
@@ -85,10 +85,10 @@ class DispersyInstance(object):
         
         # Remove all duplicate ip addresses, regardless of their ports.
         # We assume that same ip means same dispersy instance for now.
-        addrs = self.remove_duplicate_ip(self._addresses)
+        addrs = self.remove_duplicate_ip(self._peers)
         
-        for address in addrs:
-            self.send_introduction_request(address)
+        for a in addrs:
+            self.send_introduction_request(a.addr())
             
         # Start Filepusher if directory or files available
         if self._directory or self._files:
@@ -133,37 +133,38 @@ class DispersyInstance(object):
     def dest_dir(self):
         return self._dest_dir
     
-    def create_swift_instance(self, ports):
+    def create_swift_instance(self, addrs):
         
-        def recur(ports, n, iteration):
+        def recur(addrs, n, iteration):
             if iteration >= 5:
                 return None
-            if ports is None or not ports:
-                ports = [random.randint(*RANDOM_PORTS) for _ in range(n)]
-            if not try_sockets(ports):
+            if addrs is None or not addrs:
+                addrs = [Address.localport(random.randint(*RANDOM_PORTS)) for _ in range(n)]
+            # TODO: Go through each address separately, otherwise unnecessary generating, and increasing chance of failure
+            if not try_sockets(addrs):
                 recur(None, iteration + 1)
-            return ports
+            return addrs
         
-        if ports is None or not ports:
-            ports = recur(None, 1, 0)
+        if addrs is None or not addrs:
+            addrs = recur(None, 1, 0)
         else:
-            ports = recur(ports, len(ports), 0)
+            addrs = recur(addrs, len(addrs), 0)
         
-        if ports is None:
+        if addrs is None:
             logger.warning("Could not obtain free ports!")
         else:
-            logger.debug("Swift will listen to %s", ports)
+            logger.debug("Swift will listen to %s", [str(a) for a in addrs])
         
         httpgwport = None
         cmdgwport = None
         spmgr = None
-        return MySwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, ports, 
+        return MySwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, addrs, 
                                      httpgwport, cmdgwport, spmgr)
         
     def remove_duplicate_ip(self, addrs):
         faddrs = []
         for a in addrs:
-            if all([a[0] != f[0] for f in faddrs]):
+            if all([a.ip != f.ip for f in faddrs]):
                 faddrs.append(a)
         return faddrs
     
@@ -173,13 +174,12 @@ class DispersyInstance(object):
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance')
-    parser.add_argument("-a", "--addresses", nargs="+", help="List addresses of other dispersy instances: 0.0.0.0:12345, space separated")
     parser.add_argument("-b", "--bloomfilter",help="Send bloom filter every # seconds")
     parser.add_argument("-d", "--directory",help="List directory of files to send")
     parser.add_argument("-D", "--destination", help="List directory to put downloads")
     parser.add_argument("-f", "--files", nargs="+", help="List files to send")
-    parser.add_argument("-p", "--ports", type=int, nargs="+", help="List ports to assign to endpoints, space separated")
-    parser.add_argument("-P", "--peer_ports", type=int, nargs="+", help="List ports of local dispersy instances, space separated")
+    parser.add_argument("-l", "--listen", nargs="+", help="List of sockets to listen to (port, ip4, ip6), space separated")
+    parser.add_argument("-p", "--peers", type=int, nargs="+", help="List of Dispersy peers(port, ip4, ip6), space separated")
     parser.add_argument("-q", "--sqlite_database", default=u":memory:", help="SQLite Database directory")
     parser.add_argument("-s", "--swift", help="Swift binary path")
     parser.add_argument("-t", "--time",type=float, help="Set runtime")
@@ -204,28 +204,24 @@ if __name__ == '__main__':
     if args.bloomfilter:
         BLOOM_FILTER_UPDATE = args.bloomfilter
         
-    addresses = []
-    if args.addresses:
-        for a in args.addresses:
-            i = a.find(":")
-            ip = a[:i]
-            port = int(a[i+1:])
-            addresses.append((ip, port))
+    listen = []
+    if args.listen:
+        for a in args.listen:
+            addr = Address.unknown(a)
+            if addr.is_wildcard_ip():
+                addr.set_ipv4(Dispersy._guess_lan_address())
+            listen.append(addr)
     
-    if args.peer_ports:
-        for p in args.peer_ports:
-            local_address = Dispersy._guess_lan_address()
-            if local_address is None:
-                local_address = "0.0.0.0"
-            addresses.append((local_address,p))
-    
-    ports = []
-    if args.ports:
-        for p in args.ports:
-            ports.append(p)
+    peers = []
+    if args.peers:
+        for p in args.peers:
+            addr = Address.unknown(p)
+            if addr.is_wildcard_ip():
+                addr.set_ipv4(Dispersy._guess_lan_address())
+            peers.append(addr)
         
     d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE, 
-                         swift_work_dir=DEST_DIR, addresses=addresses, ports=ports, directory=args.directory, 
+                         swift_work_dir=DEST_DIR, listen=listen, peers=peers, directory=args.directory, 
                          files=args.files, run_time=TOTAL_RUN_TIME, bloomfilter_update=BLOOM_FILTER_UPDATE)
     d.start()
     

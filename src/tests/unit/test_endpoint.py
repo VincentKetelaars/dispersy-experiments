@@ -14,6 +14,7 @@ from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 from dispersy.endpoint import NullEndpoint
 
+from src.address import Address
 from src.definitions import SWIFT_BINPATH, HASH_LENGTH, TIMEOUT_TESTS, SLEEP_TIME
 from src.dispersy_extends.endpoint import MultiEndpoint, get_hash, try_sockets
 
@@ -27,7 +28,8 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
     def setUp(self):
         callback = Callback("TestCallback")
         self._ports = [12344]
-        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._ports, None, None, None)
+        self._addrs = [Address.localport(p) for p in self._ports]
+        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._addrs, None, None, None)
         self._endpoint = MultiEndpoint(swift_process)
         self._dispersy = Dispersy(callback, self._endpoint, DISPERSY_WORKDIR, u":memory:")
         self._dispersy.start()
@@ -38,7 +40,8 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
         
         callback2 = Callback("TestCallback2")
         self._ports2 = [34254]
-        swift_process2 = MySwiftProcess(SWIFT_BINPATH, ".", None, self._ports2, None, None, None)
+        self._addrs2 = [Address.localport(p) for p in self._ports2]
+        swift_process2 = MySwiftProcess(SWIFT_BINPATH, ".", None, self._addrs2, None, None, None)
         self._endpoint2 = MultiEndpoint(swift_process2)
         self._dispersy2 = Dispersy(callback2, self._endpoint2, u".", u":memory:")
         self._dispersy2.start()
@@ -132,7 +135,8 @@ class TestEndpointNoConnection(unittest.TestCase):
         
         callback = Callback("TestCallback")
         self._ports = [12344]
-        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._ports, None, None, None)
+        self._addrs = [Address.localport(p) for p in self._ports]
+        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._addrs, None, None, None)
         self._endpoint = MultiEndpoint(swift_process)
         self._dispersy = Dispersy(callback, self._endpoint, DISPERSY_WORKDIR, u":memory:")
         self._dispersy.start()
@@ -143,7 +147,8 @@ class TestEndpointNoConnection(unittest.TestCase):
         
         callback2 = Callback("TestCallback2")
         self._ports2 = [34254]
-        swift_process2 = MySwiftProcess(SWIFT_BINPATH, ".", None, self._ports2, None, None, None)
+        self._addrs2 = [Address.localport(p) for p in self._ports2]
+        swift_process2 = MySwiftProcess(SWIFT_BINPATH, ".", None, self._addrs2, None, None, None)
         self._endpoint2 = MultiEndpoint(swift_process2)
         self._dispersy2 = Dispersy(callback2, self._endpoint2, u".", u":memory:")
         self._dispersy2.start()
@@ -246,7 +251,8 @@ class TestSocketAvailable(unittest.TestCase):
         
     def setUp(self):
         self._ports = [12345, 12346, 12347]
-        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._ports, None, None, None)
+        self._addrs = [Address.localport(p) for p in self._ports]
+        swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._addrs, None, None, None)
         self._endpoint = MultiEndpoint(swift_process)
         self._endpoint.open(FakeDispersy())
         
@@ -254,12 +260,11 @@ class TestSocketAvailable(unittest.TestCase):
         self._endpoint.close()
         
     def test_multiple_sockets_in_use(self):
-        self.assertFalse(try_sockets(self._ports, timeout=1.0))
+        self.assertFalse(try_sockets(self._addrs, timeout=1.0))
         
     def test_multiple_sockets_not_in_use(self):
         self._endpoint.close() # Socket should be released within a second
-        self.assertTrue(try_sockets(self._ports, timeout=1.0))
-
+        self.assertTrue(try_sockets(self._addrs, timeout=1.0))
 
 
 def remove_files(filename):

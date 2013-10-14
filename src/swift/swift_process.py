@@ -13,25 +13,27 @@ from threading import RLock, currentThread, Thread, Event
 from dispersy.logger import get_logger
 from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING, DONE_STATE_SHUTDOWN
 
+from src.address import Address
+
 logger = get_logger(__name__)
 
 class MySwiftProcess(SwiftProcess):
     
-    def __init__(self, binpath, workdir, zerostatedir, listenports, httpgwport, cmdgwport, spmgr):
+    def __init__(self, binpath, workdir, zerostatedir, listenaddrs, httpgwport, cmdgwport, spmgr):
         # Called by any thread, assume sessionlock is held
         self.splock = RLock()
         self.binpath = binpath
         self.workdir = workdir
         self.zerostatedir = zerostatedir
         self.spmgr = spmgr
-        self.listenports = []
+        self.listenaddrs = []
 
         # Main UDP listen socket
-        if listenports is None:
-            self.listenport = random.randint(10001, 10999)
+        if listenaddrs is None:
+            self.listenaddr = Address.localport(random.randint(10001, 10999))
         else:
-            self.listenports = listenports
-            self.listenport = listenports[0]
+            self.listenaddrs = listenaddrs
+            self.listenaddr = listenaddrs[0]
         
         # NSSA control socket
         if cmdgwport is None:
@@ -56,8 +58,8 @@ class MySwiftProcess(SwiftProcess):
 #         args.append("-B") # Set Channel debug_file
         args.append("-l")  # listen port
         ports = ""
-        for l in self.listenports:
-            ports += "0.0.0.0:" + str(l) +","
+        for l in self.listenaddrs:
+            ports += str(l) + ","
         args.append(ports[:-1]) # Remove last comma
         args.append("-c")  # command port
         args.append("127.0.0.1:" + str(self.cmdport))
@@ -106,7 +108,7 @@ class MySwiftProcess(SwiftProcess):
                     print >> sys.stderr, prefix, "readline returned nothing quitting"
                     break
                 print >> sys.stderr, prefix, line.rstrip()
-        self.popen_outputthreads = [Thread(target=read_and_print, args=(self.popen.stdout,), name="SwiftProcess_%d_stdout" % self.listenport), Thread(target=read_and_print, args=(self.popen.stderr,), name="SwiftProcess_%d_stderr" % self.listenport)]
+        self.popen_outputthreads = [Thread(target=read_and_print, args=(self.popen.stdout,), name="SwiftProcess_%d_stdout" % self.listenaddr.port), Thread(target=read_and_print, args=(self.popen.stderr,), name="SwiftProcess_%d_stderr" % self.listenaddr.port)]
         [thread.start() for thread in self.popen_outputthreads]
 
         self.roothash2dl = {}

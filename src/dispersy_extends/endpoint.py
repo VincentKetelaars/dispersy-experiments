@@ -68,8 +68,8 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         
         if swift_process:
             self._swift.set_on_swift_restart_callback(self.restart_swift)
-            for p in self._swift.listenports:
-                self.add_endpoint(SwiftEndpoint(swift_process, p))      
+            for a in self._swift.listenaddrs:
+                self.add_endpoint(SwiftEndpoint(swift_process, a))      
     
     def get_address(self):
         if self._endpoint is None:
@@ -108,7 +108,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         # TODO: Try clean and fast shutdown
         self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
         # Try the sockets to see if they are in use
-        if not try_sockets(self._swift.listenports, timeout=1.0):
+        if not try_sockets(self._swift.listenaddrs, timeout=1.0):
             logger.warning("Socket(s) is/are still in use")
         # Note that the swift_endpoints are still available after return, although closed
         return all([x.close(timeout) for x in self.swift_endpoints]) and super(TunnelEndpoint, self).close(timeout)
@@ -300,7 +300,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.update_known_addresses([sock_addr])
             
         for e in self.swift_endpoints:
-            if e.port == incoming_port:
+            if e.address.port == incoming_port:
                 e.i2ithread_data_came_in(session, sock_addr, data)
                 return
         # In case the incoming_port number does not match any of the endpoints
@@ -358,12 +358,12 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self.added_peers = Set() # Reset the peers added before shutdown
             
             # Try the sockets to see if they are in use
-            if not try_sockets(self._swift.listenports):
+            if not try_sockets(self._swift.listenaddrs):
                 logger.warning("Socket(s) is/are still in use")
             
             # Make sure not to make the same mistake as what let to this
             # Any roothash added twice will create an error, leading to this. 
-            self._swift = MySwiftProcess(self._swift.binpath, self._swift.workdir, None, self._swift.listenports, None, None, None)
+            self._swift = MySwiftProcess(self._swift.binpath, self._swift.workdir, None, self._swift.listenaddrs, None, None, None)
             self._swift.set_on_swift_restart_callback(self.restart_swift) # Normally in init
             self._swift.add_download(self) # Normally in open
             # We have to make sure that swift has already started, otherwise the tcp binding might fail
@@ -424,10 +424,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
-    def __init__(self, swift_process, port):
+    def __init__(self, swift_process, address):
         super(SwiftEndpoint, self).__init__(swift_process) # Dispersy and session code 
         EndpointStatistics.__init__(self)
-        self.port = port
+        self.address = address
         
     def open(self, dispersy):
         self.is_alive = True
@@ -441,9 +441,9 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     def get_address(self):
         # Dispersy retrieves the local ip
         if self._dispersy is not None:
-            return (self._dispersy.lan_address[0],self.port)
+            return (self._dispersy.lan_address[0], self.address.port)
         else:
-            return (TunnelEndpoint.get_address(self)[0], self.port)
+            return self.address.addr()
     
     def send(self, candidates, packets):
         if self._swift.is_alive():
@@ -468,7 +468,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
                                 name = "???"
                             logger.debug("%30s -> %15s:%-5d %4d bytes", name, sock_addr[0], sock_addr[1], len(data))
                             self._dispersy.statistics.dict_inc(self._dispersy.statistics.endpoint_send, name)
-                        self._swift.send_tunnel(self._session, sock_addr, data, self.port)
+                        self._swift.send_tunnel(self._session, sock_addr, data, self.address.port)
     
                 # return True when something has been send
                 return candidates and packets
@@ -518,33 +518,33 @@ def get_hash(filename, swift_path):
         # returning get_roothash() gives an error somewhere (perhaps message?)
         return sdef.get_roothash_as_hex()
     
-def try_sockets(ports, timeout=1.0):
+def try_sockets(addrs, timeout=1.0):
     """
     This method returns when all UDP sockets are free to use, or if the timeout is reached
     
-    @param ports: List of local socket ports
+    @param ports: List of local socket addresses
     @param timeout: Try until timeout time has been exceeded
     @return: True if the sockets are free
     """
     event = Event()
     t = time.time()        
     while not event.is_set() and t + timeout > time.time():
-        if all([try_socket(p) for p in ports]):
+        if all([try_socket(a) for a in addrs]):
             event.set()
         event.wait(0.1)
         
-    return all([try_socket(p) for p in ports])
+    return all([try_socket(a) for a in addrs])
     
-def try_socket(port):
+def try_socket(addr):
     """
     This methods tries to bind to an UDP socket.
     
-    @param port: Local socket port
+    @param port: Local socket address
     @return: True if socket is free to use
     """
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.bind(("", port))
+        s = socket.socket(addr.family, socket.SOCK_DGRAM)
+        s.bind(addr.addr())
         return True
     except Exception:
         logger.exception("Bummer, socket is still in use!")
