@@ -142,7 +142,7 @@ class DispersyInstance(object):
                 addrs = [Address.localport(random.randint(*RANDOM_PORTS)) for _ in range(n)]
             # TODO: Go through each address separately, otherwise unnecessary generating, and increasing chance of failure
             if not try_sockets(addrs):
-                recur(None, iteration + 1)
+                recur(None, n, iteration + 1)
             return addrs
         
         if addrs is None or not addrs:
@@ -204,12 +204,14 @@ if __name__ == '__main__':
     if args.bloomfilter:
         BLOOM_FILTER_UPDATE = args.bloomfilter
         
+    localip = Dispersy._guess_lan_address(Dispersy._get_interface_addresses()).address
+        
     listen = []
     if args.listen:
         for a in args.listen:
             addr = Address.unknown(a)
             if addr.is_wildcard_ip():
-                addr.set_ipv4(Dispersy._guess_lan_address())
+                addr.set_ipv4(localip)
             listen.append(addr)
     
     peers = []
@@ -217,7 +219,7 @@ if __name__ == '__main__':
         for p in args.peers:
             addr = Address.unknown(p)
             if addr.is_wildcard_ip():
-                addr.set_ipv4(Dispersy._guess_lan_address())
+                addr.set_ipv4(localip)
             peers.append(addr)
         
     d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE, 
