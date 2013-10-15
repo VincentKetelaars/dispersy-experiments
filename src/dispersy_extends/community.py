@@ -3,7 +3,6 @@ Created on Aug 7, 2013
 
 @author: Vincent Ketelaars
 '''
-from sets import Set
 from threading import Event
 from os.path import isfile, basename
 
@@ -37,7 +36,7 @@ class MyCommunity(Community):
         super(MyCommunity, self).__init__(dispersy, master_member)
         self._dest_dir = None
         self._update_bloomfilter = -1
-        self._intro_request_updates = Set()
+        self._intro_request_updates = {}
         
     def initiate_conversions(self):
         """
@@ -119,11 +118,39 @@ class MyCommunity(Community):
         candidate = EligibleWalkCandidate(sock_addr, tunnel, lan_address, wan_address, connection_type)
         self.add_candidate(candidate)
         return candidate
+    
+    def _add_candidate_intro_requests_update(self, candidate, send_request):
+        """
+        @param candidate: Add candidate to list
+        @param send_request: Callback function assigned to IntroductionRequestTimeout
+        @return: True if candidate already existed, False otherwise
+        """
+        # find existing candidates that are likely to be the same candidate
+        others = [other.candidate for other in self._intro_request_updates.itervalues()
+                  if (other.candidate.wan_address[0] == candidate.wan_address[0] and
+                      other.candidate.lan_address == candidate.lan_address)]
+        
+        l = len(others)
+        if l == 0:
+            logger.debug("Add new %s", candidate)
+        elif l == 1:
+            logger.debug("Merge existing %s with %s", others[0], candidate)
+            candidate.merge(others[0])
+        else: # len(others) > 1
+            logger.debug("Merge first of list, %s with %s", others[0], candidate)
+            candidate.merge(others[0])
+                
+        for o in others:
+            del self._intro_request_updates[o.sock_addr]
+        
+        self._intro_request_updates.update({candidate.sock_addr : IntroductionRequestTimeout(candidate, send_request)})
+        
+        return l > 0
                 
     def add_candidate(self, candidate):
         Community.add_candidate(self, candidate)
         # Each candidate should only create one IntroductionRequestTimeout
-        if candidate not in [i.candidate for i in self._intro_request_updates]:
+        if not candidate.sock_addr in self._intro_request_updates:
             self.send_introduction_request(candidate) 
         
     def send_introduction_request(self, walker):
@@ -144,8 +171,8 @@ class MyCommunity(Community):
             if self.update_bloomfilter > 0:
                 # First add the IntroductionRequestTimeout to the list, then send request. 
                 # Otherwise this method is recursively called to often
-                self._intro_request_updates.add(IntroductionRequestTimeout(walker, send_request))
-                send_request()
+                if not self._add_candidate_intro_requests_update(walker, send_request):                    
+                    send_request()
         else:
             logger.debug("This is not a EligibleWalkCandidate: %s", walker)
             
