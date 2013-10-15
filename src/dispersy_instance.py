@@ -179,7 +179,7 @@ if __name__ == '__main__':
     parser.add_argument("-D", "--destination", help="List directory to put downloads")
     parser.add_argument("-f", "--files", nargs="+", help="List files to send")
     parser.add_argument("-l", "--listen", nargs="+", help="List of sockets to listen to (port, ip4, ip6), space separated")
-    parser.add_argument("-p", "--peers", type=int, nargs="+", help="List of Dispersy peers(port, ip4, ip6), space separated")
+    parser.add_argument("-p", "--peers", nargs="+", help="List of Dispersy peers(port, ip4, ip6), space separated")
     parser.add_argument("-q", "--sqlite_database", default=u":memory:", help="SQLite Database directory")
     parser.add_argument("-s", "--swift", help="Swift binary path")
     parser.add_argument("-t", "--time",type=float, help="Set runtime")
