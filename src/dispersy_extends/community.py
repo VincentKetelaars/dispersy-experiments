@@ -29,10 +29,11 @@ class MyCommunity(Community):
     classdocs
     '''
 
-    def __init__(self, dispersy, master_member):
+    def __init__(self, dispersy, master_member, enable):
         '''
         Constructor
         '''
+        self._enable_candidate_walker = enable # Needs to be set before call to Community
         super(MyCommunity, self).__init__(dispersy, master_member)
         self._dest_dir = None
         self._update_bloomfilter = -1
@@ -179,7 +180,7 @@ class MyCommunity(Community):
         
     @property
     def dispersy_enable_candidate_walker(self):
-        return False
+        return self._enable_candidate_walker
     
     @property
     def dispersy_enable_candidate_walker_responses(self):

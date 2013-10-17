@@ -47,6 +47,7 @@ DEST_DIR = os.getenv("HOME") + "/Desktop/tests_dest"
 SWIFT_BINPATH = os.getenv("HOME") + "/git/dispersy-experiments/libswift/swift" #os.getenv("HOME") + "/svn/libswift/ppsp/swift" # "/git/dispersy-experiments/tribler/Tribler/SwiftEngine/swift"
 DISPERSY_WORK_DIR = os.getenv("HOME") + u"/Music/"+ datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(os.getpid()) + "/"
 SQLITE_DATABASE = u":memory:"
+ENABLE_CANDIDATE_WALKER = False
 
 SEPARATOR = ";;"
 

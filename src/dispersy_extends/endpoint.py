@@ -235,7 +235,8 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         @param roothash: Must be unhexlified roothash
         """
         logger.debug("Add peer %s %s", addr, roothash)
-        if roothash is not None and not (addr, roothash) in self.added_peers:
+        if (roothash is not None and not (addr, roothash) in self.added_peers 
+            and not addr in self._dispersy._bootstrap_candidates): # Don't add bootstrap peers
             d = self.retrieve_download_impl(roothash)
             if d is not None:
                 logger.info("Add peer %s with roothash %s ", addr, roothash)

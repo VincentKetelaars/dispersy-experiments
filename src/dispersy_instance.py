@@ -21,7 +21,7 @@ from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
 from src.definitions import DISPERSY_WORK_DIR, SQLITE_DATABASE, TOTAL_RUN_TIME, MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, \
-DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH, BLOOM_FILTER_UPDATE
+DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH, BLOOM_FILTER_UPDATE, ENABLE_CANDIDATE_WALKER
 
 logger = get_logger(__name__)
 
@@ -31,7 +31,8 @@ class DispersyInstance(object):
     '''
 
     def __init__(self, dest_dir, swift_binpath, work_dir=u".", sqlite_database=u":memory:", swift_work_dir=None, 
-                 swift_zerostatedir=None, listen=[], peers=[], directory=None, files=[], run_time=-1, bloomfilter_update=-1):
+                 swift_zerostatedir=None, listen=[], peers=[], directory=None, files=[], run_time=-1, bloomfilter_update=-1,
+                 walker=False):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
         self._work_dir = work_dir
@@ -45,6 +46,7 @@ class DispersyInstance(object):
         self._filepusher = None
         self._run_time = run_time
         self._bloomfilter_update = bloomfilter_update
+        self._walker = walker
         
         self._loop_event = Event()
         
@@ -57,7 +59,7 @@ class DispersyInstance(object):
     def create_mycommunity(self):    
         master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
         my_member = self._dispersy.get_new_member(SECURITY)
-        return MyCommunity.join_community(self._dispersy, master_member, my_member)
+        return MyCommunity.join_community(self._dispersy, master_member, my_member, (self._walker,))
     
     def start(self):
         try:
@@ -142,7 +144,7 @@ class DispersyInstance(object):
                 addrs = [Address.localport(random.randint(*RANDOM_PORTS)) for _ in range(n)]
             # TODO: Go through each address separately, otherwise unnecessary generating, and increasing chance of failure
             if not try_sockets(addrs):
-                recur(None, n, iteration + 1)
+                addrs = recur(None, n, iteration + 1)
             return addrs
         
         if addrs is None or not addrs:
@@ -184,6 +186,7 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--swift", help="Swift binary path")
     parser.add_argument("-t", "--time",type=float, help="Set runtime")
     parser.add_argument("-w", "--work_dir", help="Working directory")
+    parser.add_argument("-W", "--walker", action='store_true', help="Enable candidate walker")
     args = parser.parse_args()
     
     if args.time:
@@ -204,7 +207,13 @@ if __name__ == '__main__':
     if args.bloomfilter:
         BLOOM_FILTER_UPDATE = args.bloomfilter
         
-    localip = Dispersy._guess_lan_address(Dispersy._get_interface_addresses()).address
+    if args.walker:
+        ENABLE_CANDIDATE_WALKER = args.walker
+        
+    localip = "127.0.0.1"
+    local_interface = Dispersy._guess_lan_address(Dispersy._get_interface_addresses())
+    if local_interface is not None:
+        localip = local_interface.address
         
     listen = []
     if args.listen:
@@ -224,6 +233,7 @@ if __name__ == '__main__':
         
     d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE, 
                          swift_work_dir=DEST_DIR, listen=listen, peers=peers, directory=args.directory, 
-                         files=args.files, run_time=TOTAL_RUN_TIME, bloomfilter_update=BLOOM_FILTER_UPDATE)
+                         files=args.files, run_time=TOTAL_RUN_TIME, bloomfilter_update=BLOOM_FILTER_UPDATE, 
+                         walker=ENABLE_CANDIDATE_WALKER)
     d.start()
     
