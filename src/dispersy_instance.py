@@ -59,7 +59,7 @@ class DispersyInstance(object):
     def create_mycommunity(self):    
         master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
         my_member = self._dispersy.get_new_member(SECURITY)
-        return MyCommunity.join_community(self._dispersy, master_member, my_member, (self._walker,))
+        return MyCommunity.join_community(self._dispersy, master_member, my_member, {"enable":self._walker,})
     
     def start(self):
         try:

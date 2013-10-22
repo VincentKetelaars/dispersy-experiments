@@ -29,7 +29,7 @@ class MyCommunity(Community):
     classdocs
     '''
 
-    def __init__(self, dispersy, master_member, enable):
+    def __init__(self, dispersy, master_member, enable=False):
         '''
         Constructor
         '''

@@ -24,6 +24,10 @@ LIBSWIFT:
 
 AddPeer in content.cpp now connects all sockets to all peers
 
+If both eth and wlan are available, a UDP socket will switch between both, depending on the destination address, each sendto.
+Perhaps it is good to choose a single interface for each socket. This will create problems with NAT traversal.
+http://stackoverflow.com/questions/12371385/how-to-specify-which-interface-to-use-for-a-socket-in-linux
+
 
 
 GENERAL:

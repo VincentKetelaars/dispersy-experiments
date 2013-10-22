@@ -453,12 +453,11 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
 
             self._total_up += sum(len(data) for data in packets) * len(candidates)
             self._total_send += (len(packets) * len(candidates))
-            wan_address = self._dispersy.wan_address
     
             self._swift.splock.acquire()
             try:
                 for candidate in candidates:
-                    sock_addr = candidate.get_destination_address(wan_address)
+                    sock_addr = candidate.sock_addr
                     assert self._dispersy.is_valid_address(sock_addr), sock_addr
     
                     for data in packets:
