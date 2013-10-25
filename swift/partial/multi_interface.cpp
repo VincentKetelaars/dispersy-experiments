@@ -14,13 +14,18 @@
 #include <net/if.h>
 #include <ifaddrs.h>
 
-#define print_error_or_success(x,addr,port,fd) { if (x < 0) { \
-		char msg[50]; sprintf(msg,"IPv4 %d peer %s:%d cannot send",fd,addr.c_str(),port);	perror(msg); } \
-		else { fprintf(stderr,"IPv4 %d peer %s:%d send successful\n",fd,addr.c_str(),port);} }
+#define print_error_or_success(x,addr,port,fd,fa) { if (x < 0) { \
+		char msg[50]; sprintf(msg,"IPv%d %d peer %s:%d cannot send",fa,fd,addr.c_str(),port);	perror(msg); } \
+		else { fprintf(stderr,"IPv%d %d peer %s:%d send successful\n",fa,fd,addr.c_str(),port);} }
 
-#define ipv4_send(fd,port,addr) { print_error_or_success(send(fd, create_ipv4_sockaddr(port,addr), msg),addr,port,fd) }
+#define addr_send(fd,sock,port,fa) { print_error_or_success(send(fd, sock, msg) ,get_addr_string(&sock),port,fd, \
+		family_to_ip(fa)) }
 
-#define ipv6_send(fd,port,addr,b) { print_error_or_success(send(fd, create_ipv6_sockaddr(port,addr,0,0,b), msg),addr,port,fd) }
+#define ipv4_send(fd,port,addr) { print_error_or_success(send(fd, create_ipv4_sockaddr(port,addr), msg) \
+		,addr,port,fd,4) }
+
+#define ipv6_send(fd,port,addr,b) { print_error_or_success(send(fd, create_ipv6_sockaddr(port,addr,0,0,b), msg) \
+		,addr,port,fd,6) }
 
 using namespace std;
 
@@ -174,9 +179,9 @@ sockaddr_in create_ipv4_sockaddr(int port, string addr) {
 sockaddr_in6 create_ipv6_sockaddr(int port, string addr, uint32_t flowinfo, uint32_t scope_id, bool ipv4=false) {
 	struct sockaddr_in6 si;
 	si.sin6_family = AF_INET6;
-//	if (ipv4) {
-//		si.sin6_family = AF_INET;
-//	}
+	//	if (ipv4) {
+	//		si.sin6_family = AF_INET;
+	//	}
 	si.sin6_port = htons(port);
 	si.sin6_flowinfo = flowinfo; // Should be 0 or 'random' number to distinguish this flow
 	if (ipv4) {
@@ -194,6 +199,10 @@ sockaddr_in6 create_ipv6_sockaddr(int port, string addr, uint32_t flowinfo, uint
 		si.sin6_scope_id = ipv6_to_scope_id(&si); // Interface number
 	}
 	return si;
+}
+
+int send(int sock, sockaddr peer, char *content) {
+	return sendto(sock,content,strlen(content),0,&peer,sizeof(peer));
 }
 
 int send(int sock, sockaddr_in peer, char *content) {
@@ -224,13 +233,14 @@ std::vector<int> create_own_sockets() {
 	std::vector<int> fd;
 	struct sockaddr_in si = create_ipv4_sockaddr(5555, "193.156.108.78");
 	fd.push_back(bind_ipv4(si));
-	struct sockaddr_in6 si6 = create_ipv6_sockaddr(5556, "fe80::caf7:33ff:fe8f:d39c", 0, 0);
+//	struct sockaddr_in6 si6 = create_ipv6_sockaddr(5556, "fe80::caf7:33ff:fe8f:d39c", 0, 0);
+	struct sockaddr_in6 si6 = create_ipv6_sockaddr(5556, "::0", 0, 0);
 	fd.push_back(bind_ipv6(si6));
 
 	return fd;
 }
 
-std::vector<int> create_socket_for_each_if() {
+std::vector<int> create_socket_for_each_if(bool ipv4=true, bool ipv6=true) {
 	std::vector<int> fd;
 	struct ifaddrs *ifaddr, *ifa;
 	char host[NI_MAXHOST];
@@ -242,12 +252,16 @@ std::vector<int> create_socket_for_each_if() {
 	}
 
 	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr->sa_family == AF_INET) {
+		if ((ifa->ifa_flags & IFF_LOOPBACK) != IFF_LOOPBACK) {
+		if (ifa->ifa_addr->sa_family == AF_INET && ipv4) {
 			struct sockaddr_in *in = (struct sockaddr_in *)ifa->ifa_addr;
 			fd.push_back(bind_ipv4(*in));
-		} else if (ifa->ifa_addr->sa_family == AF_INET6) {
+		} else if (ifa->ifa_addr->sa_family == AF_INET6 && ipv6) {
 			struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)ifa->ifa_addr;
 			fd.push_back(bind_ipv6(*in6));
+		}
+		} else {
+			// Ignored loopback
 		}
 	}
 
@@ -256,7 +270,60 @@ std::vector<int> create_socket_for_each_if() {
 	return fd;
 }
 
-int get_family(int fd, bool debug=false) {
+int family_to_ip(int fa) {
+	if (fa == AF_INET)
+		return 4;
+	else if (fa == AF_INET6)
+		return 6;
+	else
+		return -1;
+}
+
+void *get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET)
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+string get_addr_string(struct sockaddr *sa) {
+	char s[INET6_ADDRSTRLEN];
+	inet_ntop(sa->sa_family, get_in_addr(sa), s, sizeof(s));
+	return string (s);
+}
+
+std::vector<sockaddr> get_peers_sockaddr(string host, unsigned short port) {
+	//  AI_ADDRCONFIG: Only give address, if that family has a non loopback local address.
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(addrinfo));
+	hints.ai_socktype=SOCK_DGRAM;
+	hints.ai_flags =  AI_CANONNAME;
+	struct addrinfo * ai;
+	char name[100];
+	std::vector<sockaddr> sa;
+
+	char cport[5];
+	sprintf(cport, "%d", port);
+
+	if (getaddrinfo(host.c_str(), cport, &hints, &ai) < 0) {
+		perror("No addrinfo..");
+		return sa;
+	}
+	// Now we have the wanted infos in ai.
+	struct addrinfo * aii;
+	for (aii=ai; aii; aii=aii->ai_next) {
+		if (aii->ai_addr == NULL)
+			continue;
+
+		fprintf(stderr, "Hostname: %s\n", aii->ai_canonname);
+
+		sa.push_back((struct sockaddr)*(aii->ai_addr));
+	}
+	freeaddrinfo(ai);
+	return sa;
+}
+
+short get_family(int fd, bool debug=false) {
 	struct sockaddr sa;
 	socklen_t len = sizeof(sa);
 	if (getsockname(fd, &sa, &len) < 0) {
@@ -269,13 +336,13 @@ int get_family(int fd, bool debug=false) {
 			struct sockaddr_in in;
 			len = sizeof(in);
 			getsockname(fd, (struct sockaddr *)&in, &len);
-			port = in.sin_port;
+			port = ntohs(in.sin_port);
 			addr = inet_ntoa(in.sin_addr);
 		} else if (sa.sa_family == AF_INET6) {
 			struct sockaddr_in6 in6;
 			len = sizeof(in6);
 			getsockname(fd, (struct sockaddr *)&in6, &len);
-			port = in6.sin6_port;
+			port = ntohs(in6.sin6_port);
 			char s[40];
 			inet_ntop(AF_INET6, &(in6.sin6_addr), s, sizeof(s));
 			string str(s);
@@ -287,7 +354,7 @@ int get_family(int fd, bool debug=false) {
 }
 
 int main(int argc, char *argv[]) {
-	std::vector<int> fd = create_socket_for_each_if();
+	std::vector<int> fd = create_own_sockets();//create_socket_for_each_if();
 	if (fd.size() <= 0) {
 		perror("No sockets..");
 		return -1;
@@ -298,19 +365,34 @@ int main(int argc, char *argv[]) {
 	string addr1 = "193.156.108.67";
 	string addr2 = "130.161.211.194";
 	string addr3 = "fe80::218:deff:fee2:5ba6";
+	string addr4 = "www.google.com";
+
+//	std::vector<sockaddr> sa = get_peers_sockaddr(addr1,port1);
+//	std::vector<sockaddr> sa1 = get_peers_sockaddr(addr2,port2);
+//	std::vector<sockaddr> sa2 = get_peers_sockaddr(addr3,port1);
+//	std::vector<sockaddr> sa3 = get_peers_sockaddr(addr4,port1);
+//	sa.insert(sa.end(), sa1.begin(), sa1.end() );
+//	sa.insert(sa.end(), sa2.begin(), sa2.end() );
+//	sa.insert(sa.end(), sa3.begin(), sa3.end() );
 
 	for (int i = 0; i < fd.size(); i++) {
-		int fa = get_family(fd[i], true);
+		short fa = get_family(fd[i], true);
 
 		char msg[10];
 		sprintf(msg, "testing %d", fd[i]);
 
+//		for (int j = 0; j < sa.size(); j++) {
+//			addr_send(fd[i],sa[j],port1,fa);
+//		}
+
 		if (fa == AF_INET) {
 			ipv4_send(fd[i],port1,addr1);
 			ipv4_send(fd[i],port2,addr2);
-		} else {
+		} else if (fa == AF_INET6) {
 			ipv6_send(fd[i],port1, addr1,true);
 			ipv6_send(fd[i],port2, addr3,false);
+		} else {
+			fprintf(stderr,"Unknown family: %d\n", fa);
 		}
 	}
 	return 0;
