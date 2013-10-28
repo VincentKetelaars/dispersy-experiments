@@ -16,9 +16,9 @@
 
 static std::vector<int> table_numbers;
 
-#define print_error_or_success(x,addr,port,fd,fa) { if (x < 0) { \
+#define print_error_or_success(x,addr,port,fd,fa) { int res = x; if (res < 0) { \
 		char msg[50]; sprintf(msg,"IPv%d %d peer %s:%d cannot send",fa,fd,addr.c_str(),port);	perror(msg); } \
-		else { fprintf(stderr,"IPv%d %d peer %s:%d send successful\n",fa,fd,addr.c_str(),port);} }
+		else { fprintf(stderr,"IPv%d %d peer %s:%d send successful %d bytes\n",fa,fd,addr.c_str(),port,res);} }
 
 #define addr_send(fd,sock,port,fa) { print_error_or_success(send(fd, sock, msg) ,get_addr_string(&sock),port,fd, \
 		family_to_ip(fa)) }
@@ -53,32 +53,56 @@ int get_routing_table_number(string name) {
 	}
 }
 
-int set_routing_table(string ifname, char *ip) {
+int set_routing_table(string ifname, sockaddr_in sa) {
+	string ip = inet_ntoa(sa.sin_addr);
+	short port = ntohs(sa.sin_port);
 	int table_num = get_routing_table_number(string (ifname));
 	if (table_num > 0) {
-		char buffer[50];
-		//	fprintf(stderr, "Gateway %s, device %s\n", inet_ntoa(addr), devname);
-		sprintf(buffer, "ip route del table %d", table_num);
-		fprintf(stderr,"CMD: %s\n", buffer);
-		system(buffer);
-		memset(&buffer[0], 0, sizeof(buffer));
-		sprintf(buffer, "ip route add dev %s src %s table %d", ifname.c_str(), ip, table_num);
-		fprintf(stderr, "CMD: %s\n", buffer);
-		system(buffer);
+		std::ostringstream oss;
+		oss << "ip route flush table " << table_num;
+		fprintf(stderr,"CMD: %s\n", oss.str().c_str());
+		system(oss.str().c_str());
+
+		oss.str(""); // oss.clear() is probably not necessary..
+		oss << "iptables -A PREROUTING -i "<< ifname.c_str() << " -t mangle -p udp --sport " << port << " -s ";
+		oss << ip << " -j MARK --set-mark " << table_num;
+		fprintf(stderr,"CMD: %s\n", oss.str().c_str());
+		system(oss.str().c_str());
+
+		oss.str("");
+		oss << "ip rule add fwmark " << table_num << " table " << table_num;
+		fprintf(stderr,"CMD: %s\n", oss.str().c_str());
+		system(oss.str().c_str());
+
+		struct in_addr addr = sa.sin_addr;
+//		*((char *)&addr.s_addr + 3) = 1; // Change the last byte of the ip address to 1
+		addr.s_addr &= ~0xff000000; // Clear the most significant byte
+		addr.s_addr |= 0x01000000; // Add one to the most significant byte
+
+		oss.str("");
+		oss << "ip route add dev " << ifname.c_str() << " default via " << inet_ntoa(addr) << " table " << table_num;
+		fprintf(stderr, "CMD: %s\n", oss.str().c_str());
+		system(oss.str().c_str());
+
 		table_numbers.push_back(table_num);
 	}
 	return table_num;
 }
 
 int del_routing_tables() {
-	char buffer[50];
+	std::ostringstream oss;
 	for (int i = 0; i < table_numbers.size(); i++) {
-		// We can use the same buffer because table_num has always just length 1
-		// sprintf adds a null terminator. What does system do with that?
-		sprintf(buffer, "ip route del table %d", table_numbers[i]);
-		fprintf(stderr,"CMD: %s\n", buffer);
-		system(buffer);
+		oss << "ip route del table " <<  table_numbers[i];
+		fprintf(stderr,"CMD: %s\n", oss.str().c_str());
+		system(oss.str().c_str());
+
+		oss.str("");
+		oss << "ip rule del fwmark " << table_numbers[i] << " table " << table_numbers[i];
+		fprintf(stderr,"CMD: %s\n", oss.str().c_str());
+		system(oss.str().c_str());
+		oss.str("");
 	}
+	system("iptables -t mangle -F");
 }
 
 char *ipv4_to_if(sockaddr_in *find, std::map<string, short> pifs) {
@@ -181,11 +205,8 @@ int bind_ipv4 (sockaddr_in sa) {
 		fprintf(stderr, "No interface has been found\n");
 		return -1;
 	}
-	//	struct in_addr addr = sa.sin_addr;
-	//	*((char *)&addr.s_addr + 3) = 1; // Change the last byte of the ip address to 1
-	//	addr.s_addr &= ~0xff000000; // Clear the most significant byte
-	//	addr.s_addr |= 0x01000000; // Add one to the most significant byte
-	set_routing_table(string (devname), inet_ntoa(sa.sin_addr));
+
+	set_routing_table(string (devname), sa);
 
 	if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, devname, strlen(devname)) < 0) { // Needs root permission??
 		perror("Setting BINDTODEVICE option failed");
