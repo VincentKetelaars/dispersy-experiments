@@ -14,6 +14,8 @@
 #include <net/if.h>
 #include <ifaddrs.h>
 
+static std::vector<int> table_numbers;
+
 #define print_error_or_success(x,addr,port,fd,fa) { if (x < 0) { \
 		char msg[50]; sprintf(msg,"IPv%d %d peer %s:%d cannot send",fa,fd,addr.c_str(),port);	perror(msg); } \
 		else { fprintf(stderr,"IPv%d %d peer %s:%d send successful\n",fa,fd,addr.c_str(),port);} }
@@ -29,9 +31,60 @@
 
 using namespace std;
 
+int get_routing_table_number(string name) {
+	// Return the routing table number for the given interface name.
+
+	char n = *name.rbegin();
+	int number = n - '0';
+	if (number < 0 || number > 9) {
+		fprintf(stderr, "Got interface number %d\n", number);
+		return -1;
+	}
+	if (name.find("eth") == 0) {
+		return 1+number;
+	} else if (name.find("ath") == 0) {
+		return 11+number;
+	} else if (name.find("wlan") == 0) {
+		return 21+number;
+	} else if (name.find("ppp") == 0) {
+		return 31+number;
+	} else {
+		return -1;
+	}
+}
+
+int set_routing_table(string ifname, char *ip) {
+	int table_num = get_routing_table_number(string (ifname));
+	if (table_num > 0) {
+		char buffer[50];
+		//	fprintf(stderr, "Gateway %s, device %s\n", inet_ntoa(addr), devname);
+		sprintf(buffer, "ip route del table %d", table_num);
+		fprintf(stderr,"CMD: %s\n", buffer);
+		system(buffer);
+		memset(&buffer[0], 0, sizeof(buffer));
+		sprintf(buffer, "ip route add dev %s src %s table %d", ifname.c_str(), ip, table_num);
+		fprintf(stderr, "CMD: %s\n", buffer);
+		system(buffer);
+		table_numbers.push_back(table_num);
+	}
+	return table_num;
+}
+
+int del_routing_tables() {
+	char buffer[50];
+	for (int i = 0; i < table_numbers.size(); i++) {
+		// We can use the same buffer because table_num has always just length 1
+		// sprintf adds a null terminator. What does system do with that?
+		sprintf(buffer, "ip route del table %d", table_numbers[i]);
+		fprintf(stderr,"CMD: %s\n", buffer);
+		system(buffer);
+	}
+}
+
 char *ipv4_to_if(sockaddr_in *find, std::map<string, short> pifs) {
 	struct ifaddrs *addrs, *iap;
 	struct sockaddr_in *sa;
+	struct in_addr si;
 	char *buf = NULL;
 	short priority = 0;
 
@@ -39,24 +92,26 @@ char *ipv4_to_if(sockaddr_in *find, std::map<string, short> pifs) {
 	for (iap = addrs; iap != NULL; iap = iap->ifa_next) {
 		if (iap->ifa_addr && (iap->ifa_flags & IFF_UP) && iap->ifa_addr->sa_family == AF_INET) {
 			sa = (struct sockaddr_in *)(iap->ifa_addr);
-			// TODO: Perhaps compare s_addr (4 bytes, with first byte depicting last number in string)
-			// So depending on iap->ifa_netmask, only the last three could i.e. matter.
-			if (find && find->sin_addr.s_addr == sa->sin_addr.s_addr) {
-				//				fprintf(stderr, "Found interface %s with ip %s\n", iap->ifa_name, inet_ntoa(sa->sin_addr));
+			// TODO: Perhaps compare s_addr on single byte only
+			// So depending on iap->ifa_netmask, only the first three could i.e. matter.
+			if (find && memcmp(&find->sin_addr, &sa->sin_addr, sizeof(sa->sin_addr)) == 0) {
+				fprintf(stderr, "Found interface %s with ip %s\n", iap->ifa_name, inet_ntoa(sa->sin_addr));
 				return iap->ifa_name;
 			}
 			// Determine default interface using pifs priority
 			std::map<string, short>::iterator it= pifs.find(iap->ifa_name);
 			if (it != pifs.end() && it->second > priority) { // Higher number, higher priority
-				find->sin_addr = sa->sin_addr;
+				si = sa->sin_addr;
 				buf = iap->ifa_name;
 				priority = it->second;
 			}
 		}
 	}
 	freeifaddrs(addrs);
-	//	if (buf != NULL)
-	//		fprintf(stderr, "Failed to find resembling ip. Try interface %s with ip %s %x\n", buf, inet_ntoa(find->sin_addr), find->sin_addr.s_addr);
+	if (buf != NULL) {
+		find->sin_addr = si;
+		fprintf(stderr, "Failed to find resembling ip. Try interface %s with ip %s %x\n", buf, inet_ntoa(find->sin_addr), find->sin_addr.s_addr);
+	}
 
 	return buf;
 }
@@ -70,7 +125,7 @@ int ipv6_to_scope_id(sockaddr_in6 *find) {
 	for (iap = addrs; iap != NULL; iap = iap->ifa_next) {
 		if (iap->ifa_addr && (iap->ifa_flags & IFF_UP) && iap->ifa_addr->sa_family == AF_INET6) {
 			sa = (struct sockaddr_in6 *)(iap->ifa_addr);
-			if (memcmp(find->sin6_addr.s6_addr, sa->sin6_addr.s6_addr, sizeof(sa->sin6_addr.s6_addr)) == 0) {
+			if (memcmp(&find->sin6_addr.s6_addr, &sa->sin6_addr.s6_addr, sizeof(sa->sin6_addr.s6_addr)) == 0) {
 				getnameinfo(iap->ifa_addr, sizeof(struct sockaddr_in6), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
 				//				fprintf(stderr, "Found interface %s with scope %d\n", host, sa->sin6_scope_id);
 				return sa->sin6_scope_id;
@@ -126,18 +181,15 @@ int bind_ipv4 (sockaddr_in sa) {
 		fprintf(stderr, "No interface has been found\n");
 		return -1;
 	}
-	struct in_addr addr = sa.sin_addr;
+	//	struct in_addr addr = sa.sin_addr;
 	//	*((char *)&addr.s_addr + 3) = 1; // Change the last byte of the ip address to 1
-	addr.s_addr &= ~0xff000000; // Clear the most significant byte
-	addr.s_addr |= 0x01000000; // Add one to the most significant byte
-	char buffer[50];
-	//	fprintf(stderr, "Gateway %s, device %s\n", inet_ntoa(addr), devname);
-	//	system("route del default");
-	//	sprintf(buffer, "route add default gw %s dev %s", addr.c_str(), devname);
-	//	system(buffer);
-	//	if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, devname, strlen(devname)) < 0) { // Needs root permission??
-	//		perror("Setting option failed");
-	//	}
+	//	addr.s_addr &= ~0xff000000; // Clear the most significant byte
+	//	addr.s_addr |= 0x01000000; // Add one to the most significant byte
+	set_routing_table(string (devname), inet_ntoa(sa.sin_addr));
+
+	if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, devname, strlen(devname)) < 0) { // Needs root permission??
+		perror("Setting BINDTODEVICE option failed");
+	}
 	//	fprintf(stderr, "Bind to %s:%d\n", inet_ntoa(sa.sin_addr), ntohs(sa.sin_port));
 	if (bind(fd, (sockaddr*)&sa, sizeof(sa)) < 0) {
 		perror("Binding failed");
@@ -233,7 +285,7 @@ std::vector<int> create_own_sockets() {
 	std::vector<int> fd;
 	struct sockaddr_in si = create_ipv4_sockaddr(5555, "193.156.108.78");
 	fd.push_back(bind_ipv4(si));
-//	struct sockaddr_in6 si6 = create_ipv6_sockaddr(5556, "fe80::caf7:33ff:fe8f:d39c", 0, 0);
+	//	struct sockaddr_in6 si6 = create_ipv6_sockaddr(5556, "fe80::caf7:33ff:fe8f:d39c", 0, 0);
 	struct sockaddr_in6 si6 = create_ipv6_sockaddr(5556, "::0", 0, 0);
 	fd.push_back(bind_ipv6(si6));
 
@@ -253,13 +305,13 @@ std::vector<int> create_socket_for_each_if(bool ipv4=true, bool ipv6=true) {
 
 	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
 		if ((ifa->ifa_flags & IFF_LOOPBACK) != IFF_LOOPBACK) {
-		if (ifa->ifa_addr->sa_family == AF_INET && ipv4) {
-			struct sockaddr_in *in = (struct sockaddr_in *)ifa->ifa_addr;
-			fd.push_back(bind_ipv4(*in));
-		} else if (ifa->ifa_addr->sa_family == AF_INET6 && ipv6) {
-			struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)ifa->ifa_addr;
-			fd.push_back(bind_ipv6(*in6));
-		}
+			if (ifa->ifa_addr->sa_family == AF_INET && ipv4) {
+				struct sockaddr_in *in = (struct sockaddr_in *)ifa->ifa_addr;
+				fd.push_back(bind_ipv4(*in));
+			} else if (ifa->ifa_addr->sa_family == AF_INET6 && ipv6) {
+				struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)ifa->ifa_addr;
+				fd.push_back(bind_ipv6(*in6));
+			}
 		} else {
 			// Ignored loopback
 		}
@@ -281,9 +333,9 @@ int family_to_ip(int fa) {
 
 void *get_in_addr(struct sockaddr *sa)
 {
-    if (sa->sa_family == AF_INET)
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+	if (sa->sa_family == AF_INET)
+		return &(((struct sockaddr_in*)sa)->sin_addr);
+	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
 string get_addr_string(struct sockaddr *sa) {
@@ -364,16 +416,16 @@ int main(int argc, char *argv[]) {
 	int port2 = 428;
 	string addr1 = "193.156.108.67";
 	string addr2 = "130.161.211.194";
-	string addr3 = "fe80::218:deff:fee2:5ba6";
+	string addr3 = "fe80::218:deff:fee2:5ba6"; //fe80::caf7:33ff:fe8f:d39c
 	string addr4 = "www.google.com";
 
-//	std::vector<sockaddr> sa = get_peers_sockaddr(addr1,port1);
-//	std::vector<sockaddr> sa1 = get_peers_sockaddr(addr2,port2);
-//	std::vector<sockaddr> sa2 = get_peers_sockaddr(addr3,port1);
-//	std::vector<sockaddr> sa3 = get_peers_sockaddr(addr4,port1);
-//	sa.insert(sa.end(), sa1.begin(), sa1.end() );
-//	sa.insert(sa.end(), sa2.begin(), sa2.end() );
-//	sa.insert(sa.end(), sa3.begin(), sa3.end() );
+	//	std::vector<sockaddr> sa = get_peers_sockaddr(addr1,port1);
+	//	std::vector<sockaddr> sa1 = get_peers_sockaddr(addr2,port2);
+	//	std::vector<sockaddr> sa2 = get_peers_sockaddr(addr3,port1);
+	//	std::vector<sockaddr> sa3 = get_peers_sockaddr(addr4,port1);
+	//	sa.insert(sa.end(), sa1.begin(), sa1.end() );
+	//	sa.insert(sa.end(), sa2.begin(), sa2.end() );
+	//	sa.insert(sa.end(), sa3.begin(), sa3.end() );
 
 	for (int i = 0; i < fd.size(); i++) {
 		short fa = get_family(fd[i], true);
@@ -381,9 +433,9 @@ int main(int argc, char *argv[]) {
 		char msg[10];
 		sprintf(msg, "testing %d", fd[i]);
 
-//		for (int j = 0; j < sa.size(); j++) {
-//			addr_send(fd[i],sa[j],port1,fa);
-//		}
+		//		for (int j = 0; j < sa.size(); j++) {
+		//			addr_send(fd[i],sa[j],port1,fa);
+		//		}
 
 		if (fa == AF_INET) {
 			ipv4_send(fd[i],port1,addr1);
@@ -395,5 +447,6 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr,"Unknown family: %d\n", fa);
 		}
 	}
+	del_routing_tables();
 	return 0;
 }
