@@ -13,6 +13,8 @@
 #include <errno.h>
 #include <net/if.h>
 #include <ifaddrs.h>
+#include <bitset>
+#include <climits>
 
 static std::vector<int> table_numbers;
 
@@ -81,11 +83,19 @@ int set_routing_table(string ifname, sockaddr_in sa, sockaddr_in netmask) {
 //		*((char *)&addr.s_addr + 3) = 1; // Change the last byte of the ip address to 1
 //		addr.s_addr &= ~0xff000000; // Clear the most significant byte
 
-		// Gateway assumption: First address of the subnet.
-		addr.s_addr &= netmask.sin_addr.s_addr; // Set netmask zero bits to zero.
-		addr.s_addr |= 0x01000000; // Add one to the most significant byte
+		addr.s_addr &= netmask.sin_addr.s_addr; // Set netmask zero bits to zero to get the base ip address
 
-		fprintf(stderr, "GATEWAY %s\n", inet_ntoa(addr));
+//		fprintf(stderr, "GATEWAY %s\n", inet_ntoa(addr));
+
+		// Get the number of bits set to 1
+		std::bitset<sizeof(netmask.sin_addr.s_addr) * CHAR_BIT> b(netmask.sin_addr.s_addr);
+
+		oss.str("");
+		oss << "ip route add dev " << ifname.c_str() << " " << inet_ntoa(addr) << "/" << b.count() << " table " << table_num;
+		fprintf(stderr, "CMD: %s\n", oss.str().c_str());
+		system(oss.str().c_str());
+
+		addr.s_addr |= 0x01000000; // Add one to the most significant byte to get the most likely address for the gateway
 
 		oss.str("");
 		oss << "ip route add dev " << ifname.c_str() << " default via " << inet_ntoa(addr) << " table " << table_num;
@@ -224,7 +234,7 @@ int bind_ipv4 (sockaddr_in sa) {
 		fprintf(stderr, "No interface has been found\n");
 		return -1;
 	}
-	fprintf(stderr, "NETMASK: %s\n", inet_ntoa(netmask.sin_addr));
+//	fprintf(stderr, "NETMASK: %s\n", inet_ntoa(netmask.sin_addr));
 
 	set_routing_table(string (devname), sa, netmask);
 
