@@ -54,6 +54,7 @@ int get_routing_table_number(string name) {
 }
 
 int set_routing_table(string ifname, sockaddr_in sa) {
+	// Routing picture: http://billauer.co.il/non-html/ipmasq-html2x.gif
 	string ip = inet_ntoa(sa.sin_addr);
 	short port = ntohs(sa.sin_port);
 	int table_num = get_routing_table_number(string (ifname));
@@ -64,8 +65,10 @@ int set_routing_table(string ifname, sockaddr_in sa) {
 		system(oss.str().c_str());
 
 		oss.str(""); // oss.clear() is probably not necessary..
-		oss << "iptables -A PREROUTING -i "<< ifname.c_str() << " -t mangle -p udp --sport " << port << " -s ";
-		oss << ip << " -j MARK --set-mark " << table_num;
+		oss << "iptables -A OUTPUT -o "<< ifname.c_str() << " -t mangle -p udp -s " << ip;
+		if (port > 0)
+			oss << " --sport " << port; // Can either set port or range of ports with :
+		oss << " -j MARK --set-mark " << table_num;
 		fprintf(stderr,"CMD: %s\n", oss.str().c_str());
 		system(oss.str().c_str());
 
@@ -83,6 +86,9 @@ int set_routing_table(string ifname, sockaddr_in sa) {
 		oss << "ip route add dev " << ifname.c_str() << " default via " << inet_ntoa(addr) << " table " << table_num;
 		fprintf(stderr, "CMD: %s\n", oss.str().c_str());
 		system(oss.str().c_str());
+
+		// Postrouting may be needed to make sure that packets actually arrive here
+		//iptables -A POSTROUTING -t nat -o wlan0 -p tcp --dport 443 -j SNAT --to 192.168.0.2
 
 		table_numbers.push_back(table_num);
 	}
@@ -134,7 +140,8 @@ char *ipv4_to_if(sockaddr_in *find, std::map<string, short> pifs) {
 	freeifaddrs(addrs);
 	if (buf != NULL) {
 		find->sin_addr = si;
-		fprintf(stderr, "Failed to find resembling ip. Try interface %s with ip %s %x\n", buf, inet_ntoa(find->sin_addr), find->sin_addr.s_addr);
+		fprintf(stderr, "Failed to find resembling ip. Try interface %s with ip %s %x\n",
+				buf, inet_ntoa(find->sin_addr), find->sin_addr.s_addr);
 	}
 
 	return buf;
@@ -208,8 +215,12 @@ int bind_ipv4 (sockaddr_in sa) {
 
 	set_routing_table(string (devname), sa);
 
-	if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, devname, strlen(devname)) < 0) { // Needs root permission??
+	if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, devname, strlen(devname)) < 0) { // Needs root permission
 		perror("Setting BINDTODEVICE option failed");
+	}
+	int table_num = get_routing_table_number(string (devname));
+	if (setsockopt(fd, SOL_SOCKET, SO_MARK, &table_num, sizeof(&table_num)) < 0) { // Needs root permission
+		perror("Setting MARK option failed");
 	}
 	//	fprintf(stderr, "Bind to %s:%d\n", inet_ntoa(sa.sin_addr), ntohs(sa.sin_port));
 	if (bind(fd, (sockaddr*)&sa, sizeof(sa)) < 0) {
@@ -228,7 +239,7 @@ int bind_ipv6 (sockaddr_in6 sa) {
 	inet_ntop(AF_INET6, &(sa.sin6_addr), str, sizeof(str));
 	//	fprintf(stderr, "Bind to %s:%d\n", str, ntohs(sa.sin6_port));
 	int no = 0;
-	if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&no, sizeof(no)) < 0 ) {
+	if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&no, sizeof(no)) < 0 ) { // Only works with wildcard
 		perror("V6ONLY failed");
 	}
 	if (bind(fd, (sockaddr*)&sa, sizeof(sa)) < 0) {
@@ -437,7 +448,7 @@ int main(int argc, char *argv[]) {
 	int port2 = 428;
 	string addr1 = "193.156.108.67";
 	string addr2 = "130.161.211.194";
-	string addr3 = "fe80::218:deff:fee2:5ba6"; //fe80::caf7:33ff:fe8f:d39c
+	string addr3 = "fe80::218:deff:fee2:5ba6"; //"fe80::caf7:33ff:fe8f:d39c";
 	string addr4 = "www.google.com";
 
 	//	std::vector<sockaddr> sa = get_peers_sockaddr(addr1,port1);
