@@ -53,7 +53,7 @@ int get_routing_table_number(string name) {
 	}
 }
 
-int set_routing_table(string ifname, sockaddr_in sa) {
+int set_routing_table(string ifname, sockaddr_in sa, sockaddr_in netmask) {
 	// Routing picture: http://billauer.co.il/non-html/ipmasq-html2x.gif
 	string ip = inet_ntoa(sa.sin_addr);
 	short port = ntohs(sa.sin_port);
@@ -79,8 +79,13 @@ int set_routing_table(string ifname, sockaddr_in sa) {
 
 		struct in_addr addr = sa.sin_addr;
 //		*((char *)&addr.s_addr + 3) = 1; // Change the last byte of the ip address to 1
-		addr.s_addr &= ~0xff000000; // Clear the most significant byte
+//		addr.s_addr &= ~0xff000000; // Clear the most significant byte
+
+		// Gateway assumption: First address of the subnet.
+		addr.s_addr &= netmask.sin_addr.s_addr; // Set netmask zero bits to zero.
 		addr.s_addr |= 0x01000000; // Add one to the most significant byte
+
+		fprintf(stderr, "GATEWAY %s\n", inet_ntoa(addr));
 
 		oss.str("");
 		oss << "ip route add dev " << ifname.c_str() << " default via " << inet_ntoa(addr) << " table " << table_num;
@@ -111,9 +116,9 @@ int del_routing_tables() {
 	system("iptables -t mangle -F");
 }
 
-char *ipv4_to_if(sockaddr_in *find, std::map<string, short> pifs) {
+char *ipv4_to_if(sockaddr_in *find, std::map<string, short> pifs, sockaddr_in &netmask) {
 	struct ifaddrs *addrs, *iap;
-	struct sockaddr_in *sa;
+	struct sockaddr_in *sa, *temp_netmask;
 	struct in_addr si;
 	char *buf = NULL;
 	short priority = 0;
@@ -122,24 +127,30 @@ char *ipv4_to_if(sockaddr_in *find, std::map<string, short> pifs) {
 	for (iap = addrs; iap != NULL; iap = iap->ifa_next) {
 		if (iap->ifa_addr && (iap->ifa_flags & IFF_UP) && iap->ifa_addr->sa_family == AF_INET) {
 			sa = (struct sockaddr_in *)(iap->ifa_addr);
-			// TODO: Perhaps compare s_addr on single byte only
-			// So depending on iap->ifa_netmask, only the first three could i.e. matter.
-			if (find && memcmp(&find->sin_addr, &sa->sin_addr, sizeof(sa->sin_addr)) == 0) {
+			temp_netmask = (struct sockaddr_in *) iap->ifa_netmask;
+			// Determine whether both address are in the same subnet.. If so then pick this address.
+			in_addr_t cmp_subnet1 = find->sin_addr.s_addr & temp_netmask->sin_addr.s_addr;
+			in_addr_t cmp_subnet2 = sa->sin_addr.s_addr & temp_netmask->sin_addr.s_addr;
+			if (find && memcmp(&cmp_subnet1, &cmp_subnet2, sizeof(cmp_subnet1)) == 0) {
 				fprintf(stderr, "Found interface %s with ip %s\n", iap->ifa_name, inet_ntoa(sa->sin_addr));
+				netmask = *temp_netmask;
+				find->sin_addr = sa->sin_addr;
 				return iap->ifa_name;
 			}
+			// For the case that no match is found
 			// Determine default interface using pifs priority
 			std::map<string, short>::iterator it= pifs.find(iap->ifa_name);
 			if (it != pifs.end() && it->second > priority) { // Higher number, higher priority
 				si = sa->sin_addr;
 				buf = iap->ifa_name;
 				priority = it->second;
+				netmask = *temp_netmask;
 			}
 		}
 	}
 	freeifaddrs(addrs);
 	if (buf != NULL) {
-		find->sin_addr = si;
+		find->sin_addr = si; // Set the default interface address
 		fprintf(stderr, "Failed to find resembling ip. Try interface %s with ip %s %x\n",
 				buf, inet_ntoa(find->sin_addr), find->sin_addr.s_addr);
 	}
@@ -207,13 +218,15 @@ int bind_ipv4 (sockaddr_in sa) {
 	std::map<string, short> pifs;
 	pifs["wlan0"] = 1;
 	pifs["eth0"] = 2;
-	char *devname = ipv4_to_if(&sa, pifs);
+	sockaddr_in netmask;
+	char *devname = ipv4_to_if(&sa, pifs, netmask);
 	if (devname == NULL) {
 		fprintf(stderr, "No interface has been found\n");
 		return -1;
 	}
+	fprintf(stderr, "NETMASK: %s\n", inet_ntoa(netmask.sin_addr));
 
-	set_routing_table(string (devname), sa);
+	set_routing_table(string (devname), sa, netmask);
 
 	if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, devname, strlen(devname)) < 0) { // Needs root permission
 		perror("Setting BINDTODEVICE option failed");
@@ -324,7 +337,7 @@ std::vector<int> create_own_sockets() {
 	return fd;
 }
 
-std::vector<int> create_socket_for_each_if(bool ipv4=true, bool ipv6=true) {
+std::vector<int> create_socket_for_each_if(bool ipv6=true, bool ipv4=true) {
 	std::vector<int> fd;
 	struct ifaddrs *ifaddr, *ifa;
 	char host[NI_MAXHOST];
