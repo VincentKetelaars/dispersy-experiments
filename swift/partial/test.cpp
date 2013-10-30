@@ -8,7 +8,10 @@ int main(int argc, char *argv[]) {
 	struct sockaddr_in si;
 	si.sin_family = AF_INET;
 	si.sin_port = htons(12);
-	inet_aton("129.123.123.123", &si.sin_addr);
+	inet_aton("0.0.0.0", &si.sin_addr);
+	if (si.sin_addr.s_addr == 0) {
+		fprintf(stderr,"Works..:)\n");
+	}
 	char *ip = inet_ntoa(si.sin_addr);
 	short port = 1;
 	sprintf(buffer, "Command with IP %s and port %d",ip, port);

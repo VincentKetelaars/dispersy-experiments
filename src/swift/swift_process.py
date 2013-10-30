@@ -7,6 +7,7 @@ import binascii
 import random
 import subprocess
 import sys
+import Queue
 from collections import defaultdict
 from threading import RLock, currentThread, Thread, Event
 
@@ -58,9 +59,12 @@ class MySwiftProcess(SwiftProcess):
 #         args.append("-B") # Set Channel debug_file
         args.append("-l")  # listen port
         ports = ""
-        for l in self.listenaddrs:
-            ports += str(l) + ","
-        args.append(ports[:-1]) # Remove last comma
+        if listenaddrs is not None:
+            for l in self.listenaddrs:
+                ports += str(l) + ","
+            args.append(ports[:-1]) # Remove last comma
+        else:
+            args.append(str(self.listenaddr)) # Swift should be able to handle just a port number
         args.append("-c")  # command port
         args.append("127.0.0.1:" + str(self.cmdport))
         args.append("-g")  # HTTP gateway port
@@ -108,7 +112,8 @@ class MySwiftProcess(SwiftProcess):
                     print >> sys.stderr, prefix, "readline returned nothing quitting"
                     break
                 print >> sys.stderr, prefix, line.rstrip()
-        self.popen_outputthreads = [Thread(target=read_and_print, args=(self.popen.stdout,), name="SwiftProcess_%d_stdout" % self.listenaddr.port), Thread(target=read_and_print, args=(self.popen.stderr,), name="SwiftProcess_%d_stderr" % self.listenaddr.port)]
+        self.popen_outputthreads = [Thread(target=read_and_print, args=(self.popen.stdout,), name="SwiftProcess_%d_stdout" % self.listenaddr.port), 
+                                    Thread(target=read_and_print, args=(self.popen.stderr,), name="SwiftProcess_%d_stderr" % self.listenaddr.port)]
         [thread.start() for thread in self.popen_outputthreads]
 
         self.roothash2dl = {}
@@ -122,18 +127,37 @@ class MySwiftProcess(SwiftProcess):
         # Dispersy shutdown
         self._warn_missing_endpoint = True
         
+        # callback to endpoint when SwiftProcess.start_cmd_connection has been run.
+        self.swift_queue = Queue.Queue()
+        # TODO: Make regular checks to make sure that nothing is left in the queue
+        
     def read_and_print_out(self, line):
         # As soon as a TCP connection has been made, will the FastI2I be allowed to start
         if line.find("TCP") != -1:
             self._swift_running.set()
             
     def start_cmd_connection(self):
-        while not self._swift_running.is_set():
-            self._swift_running.wait()
-        SwiftProcess.start_cmd_connection(self)
+        # Wait till Libswift is actually ready to create a TCP connection
+        # TODO: Set timeout so that endpoint can make a new attempt at starting Swift
+        def wait_to_start():
+            while not self._swift_running.is_set():
+                self._swift_running.wait()
+            SwiftProcess.start_cmd_connection(self)
+            if self.fastconn is not None and self._tcp_connection_open_callback is not None:
+                self._tcp_connection_open_callback()
+            else:
+                logger.debug("TCP connection failed")
+        
+        t = Thread(target=wait_to_start)
+        t.setDaemon(True) # This thread should die when main is quit
+        t.start()
+        # TODO: Should this thread be cleaned up somewhere?
     
     def set_on_swift_restart_callback(self, callback):
         self.swift_restart_callback = callback
+        
+    def set_on_tcp_connection_callback(self, callback):
+        self._tcp_connection_open_callback = callback
     
     def i2ithread_readlinecallback(self, ic, cmd):
         logger.debug("CMD IN: %s", cmd)
@@ -167,7 +191,8 @@ class MySwiftProcess(SwiftProcess):
         return SwiftProcess.i2ithread_readlinecallback(self, ic, cmd)
     
     def write(self, msg):
-        if self.fastconn is not None or self.donestate == DONE_STATE_SHUTDOWN or not self._swift_running.is_set():
+        if self.is_running():
+            logger.debug("CMD OUT: %s", msg)
             try:
                 SwiftProcess.write(self, msg)
             except:
@@ -183,5 +208,13 @@ class MySwiftProcess(SwiftProcess):
         else:
             self.write("TUNNELSEND %s:%d/%s %d %d\r\n" % (address[0], address[1], session.encode("HEX"), len(data), port))
             self.write(data)
+            
+    def is_running(self):
+        return (self.fastconn is not None and self.donestate != DONE_STATE_SHUTDOWN 
+                and self._swift_running.is_set() and self.is_alive())
+        
+    def is_ready(self):
+        # TODO: Make sure that fastconn is not busy writing
+        return self.is_running();
 
             

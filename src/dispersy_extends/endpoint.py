@@ -13,6 +13,7 @@ import binascii
 import socket
 import time
 import logging
+import Queue
 
 from src.swift.swift_process import MySwiftProcess # This should be imported first, or it will screw up the logs.
 from dispersy.logger import get_logger
@@ -62,12 +63,15 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self._resetting = False
         self._endpoint = None
         self.swift_endpoints = []
+        self.swift_queue = Queue.Queue() # TODO: Queue should probably be synchronized
+        # TODO: Make regular checks to make sure that nothing is left in the queue
         TunnelEndpoint.__init__(self, swift_process)
         EndpointStatistics.__init__(self)
         EndpointDownloads.__init__(self)
         
         if swift_process:
             self._swift.set_on_swift_restart_callback(self.restart_swift)
+            self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback)
             for a in self._swift.listenaddrs:
                 self.add_endpoint(SwiftEndpoint(swift_process, a))      
     
@@ -81,6 +85,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         return list(endpoint.get_address() for endpoint in self.swift_endpoints)
     
     def send(self, candidates, packets):
+        if not self._swift.is_ready():
+            self.swift_queue.put((self.send, (candidates, packets), {}))
+            logger.debug("Send is queued")
+            return
         logger.debug("Send %s %d", candidates, len(packets))
         self.update_known_addresses_candidates(candidates, packets)
         self.determine_endpoint(known_addresses=self.known_addresses, subset=True)
@@ -100,7 +108,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
     
     def close(self, timeout=0.0):
         logger.info("CLOSE: address %s: down %d, send %d, up %d, cur %d", self.get_address(), self.total_down, self.total_send, self.total_up, self.cur_sendqueue)
-        self.is_alive = False
+        self.is_alive = False # Must be set before swift is shut down
         self._thread_stop_event.set()
         self._thread_loop.join()
         self._swift.remove_download(self, True, True)
@@ -203,6 +211,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         @param filename: The absolute path of the file
         @param roothash: The roothash of this file
         """
+        if not self._swift.is_ready():
+            self.swift_queue.put((self.add_file, (filename, roothash), {})) 
+            logger.debug("Add file is queued")
+            return
         logger.debug("Add file, %s %s", filename, roothash)        
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys() and len(roothash) == HASH_LENGTH / 2: # Check if not already added, and if the unhexlified roothash has the proper length
@@ -234,6 +246,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         @param addr: address of the peer: (ip, port)
         @param roothash: Must be unhexlified roothash
         """
+        if not self._swift.is_ready():
+            self.swift_queue.put((self.add_peer, (addr, roothash), {}))
+            logger.debug("Add peer is queued")
+            return
         logger.debug("Add peer %s %s", addr, roothash)
         if (roothash is not None and not (addr, roothash) in self.added_peers 
             and not addr in self._dispersy._bootstrap_candidates): # Don't add bootstrap peers
@@ -252,6 +268,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         @param roothash: hash to locate swarm
         @param dest_dir: The folder the file will be put
         """
+        if not self._swift.is_ready():
+            self.swift_queue.put((self.start_download, (filename, directories, roothash, dest_dir), {"addr":addr}))
+            logger.debug("Start download is queued")
+            return
         logger.debug("Start download %s %s %s %s %s", filename, directories, roothash, dest_dir, addr)
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys():
@@ -268,6 +288,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             
             
     def do_checkpoint(self, d):
+        if not self._swift.is_ready():
+            self.swift_queue.put((self.do_checkpoint, (d,), {}))
+            logger.debug("Do checkpoint is queued")
+            return
         logger.debug("Do checkpoint")
         if d is not None:
             self._swift.checkpoint_download(d)
@@ -365,17 +389,18 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             # Make sure not to make the same mistake as what let to this
             # Any roothash added twice will create an error, leading to this. 
             self._swift = MySwiftProcess(self._swift.binpath, self._swift.workdir, None, self._swift.listenaddrs, None, None, None)
-            self._swift.set_on_swift_restart_callback(self.restart_swift) # Normally in init
+            self._swift.set_on_swift_restart_callback(self.restart_swift) # Normally in init            
+            self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback) #Normally in init
             self._swift.add_download(self) # Normally in open
-            # We have to make sure that swift has already started, otherwise the tcp binding might fail
-            self._swift.start_cmd_connection() # Normally in open
+            # First add all calls to the queue and then start the TCP connection
             for h, d in self.downloads.iteritems():
                 if (not d.is_finished()) or d.seeder(): # No sense in adding a download that is finished, and not seeding
-                    self._swift.start_download(d.downloadimpl)
+                    self.swift_queue.put((self._swift.start_download, (d.downloadimpl,), {}))
                     for addr in d.peers():
                         if not (addr, h) in self.added_peers:
-                            self._swift.add_peer(d.downloadimpl, addr)
+                            self.swift_queue.put((self._swift.add_peer, (d.downloadimpl, addr), {}))                            
                             self.added_peers.add((addr, h))
+            self._swift.start_cmd_connection() # Normally in open
             self._resetting = False
     
     def _loop(self):
@@ -397,6 +422,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         @param rm_state: Remove state boolean
         @param rm_download: Remove download file boolean
         """
+        if not self._swift.is_ready():
+            self.swift_queue.put((self.clean_up_files, (roothash, rm_state, rm_download), {}))
+            logger.debug("Clean up files is queued")
+            return
         logger.debug("Clean up files, %s, %s, %s", roothash, rm_state, rm_download)
         d = self.retrieve_download_impl(roothash)
         if d is not None:
@@ -422,6 +451,13 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.downloads[roothash] = Download(roothash, filename, download_impl, seed=seed, download=download)
         self.downloads[roothash].moreinfo = True
         self.downloads[roothash].add_peer(address)
+        
+    def swift_started_running_callback(self):
+        logger.info("The TCP connection with Swift is up")
+        while not self.swift_queue.empty():
+            func, args, kargs = self.swift_queue.get()
+            logger.debug("Dequeue %s %s %s", func, args, kargs)
+            func(*args, **kargs)
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     

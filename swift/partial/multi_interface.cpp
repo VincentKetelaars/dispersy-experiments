@@ -113,7 +113,7 @@ int set_routing_table(string ifname, sockaddr_in sa, sockaddr_in netmask) {
 int del_routing_tables() {
 	std::ostringstream oss;
 	for (int i = 0; i < table_numbers.size(); i++) {
-		oss << "ip route del table " <<  table_numbers[i];
+		oss << "ip route flush table " <<  table_numbers[i]; // We need flush instead of del
 		fprintf(stderr,"CMD: %s\n", oss.str().c_str());
 		system(oss.str().c_str());
 

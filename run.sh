@@ -1,6 +1,6 @@
 export PYTHONPATH=${PYTHONPATH}:${PWD}:${PWD}/tribler
 
-sudo python -O -m src.dispersy_instance -d /home/vincent/Desktop/test_large -D /home/vincent/Desktop/tests_dest -t 15 -l 12346 -W &> ~/Desktop/logs1 &
+python -O -m src.dispersy_instance -d /home/vincent/Desktop/test_large -D /home/vincent/Desktop/tests_dest -t 15 -l 12346 -W &> ~/Desktop/logs1 &
 # python -O -m src.dispersy_instance -d /home/vincent/Desktop/tests -D /home/vincent/Desktop/tests_dest_2 -t 15 -l 192.168.0.1:11111  &> ~/Desktop/logs2 &
 
 #sleep 10

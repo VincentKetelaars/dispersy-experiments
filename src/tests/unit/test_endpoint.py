@@ -97,6 +97,8 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
         self.assertTrue(os.path.exists(absfilename1 + ".mbinmap"))
         self.assertTrue(os.path.exists(absfilename2 + ".mhash"))
         self.assertTrue(os.path.exists(absfilename2 + ".mbinmap"))
+        
+    # TODO: Create test that will see if DispersyInstance handles no Swift well
           
     def test_restart(self): 
         # Send fake message over cmdgw, which will lead to an error 
