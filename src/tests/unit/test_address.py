@@ -16,6 +16,12 @@ class TestAddress(unittest.TestCase):
         self.assertEqual(addr.ip, "0.0.0.0")
         self.assertEqual(addr.family, AF_INET)
         
+    def test_no_port_ipv4(self):
+        addr = Address.ipv4("0.0.0.0")
+        self.assertEqual(addr.port, 0)
+        self.assertEqual(addr.ip, "0.0.0.0")
+        self.assertEqual(addr.family, AF_INET)
+        
     def test_unknown_ipv4(self):
         addr = Address.unknown("1.0.1.0:1")
         self.assertEqual(addr.port, 1)
@@ -45,6 +51,12 @@ class TestAddress(unittest.TestCase):
         self.assertEqual(addr.family, AF_INET6)
         self.assertEqual(addr._flowinfo, 2)
         self.assertEqual(addr._scopeid, 3)
+        
+    def test_no_port_ipv6(self):
+        addr = Address.unknown("[::0]")
+        self.assertEqual(addr.port, 0)
+        self.assertEqual(addr.ip, "::0")
+        self.assertEqual(addr.family, AF_INET6)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

@@ -91,8 +91,11 @@ class Address(object):
     
     @staticmethod
     def parse_ipv4_string(addr_str):
-        split = addr_str.split(":")
-        return (split[0], int(split[1]))
+        sp = addr_str.split(":")
+        port = 0
+        if len(sp) == 2:
+            port = int(sp[1])
+        return (sp[0], port)
     
     @staticmethod
     def parse_ipv6_string(addr_str):
@@ -104,6 +107,8 @@ class Address(object):
         sp1 = sp0[0].rsplit("/", 1)
         if len(sp1) == 2:
             flowinfo = int(sp1[1])
+        if (sp1[0].endswith("]")):
+            return (sp1[0][1:-1], 0, flowinfo, scopeid)
         sp2 = sp1[0].rsplit(":", 1)
         # Remove both "[" and "]"
         return (sp2[0][1:-1], int(sp2[1]), flowinfo, scopeid)
