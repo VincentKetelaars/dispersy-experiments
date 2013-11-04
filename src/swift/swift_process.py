@@ -32,6 +32,7 @@ class MySwiftProcess(SwiftProcess):
         # Main UDP listen socket
         if listenaddrs is None:
             self.listenaddr = Address.localport(random.randint(10001, 10999))
+            self.listenaddrs = [self.listenaddr]
         else:
             self.listenaddrs = listenaddrs
             self.listenaddr = listenaddrs[0]
@@ -59,12 +60,10 @@ class MySwiftProcess(SwiftProcess):
 #         args.append("-B") # Set Channel debug_file
         args.append("-l")  # listen port
         ports = ""
-        if listenaddrs is not None:
-            for l in self.listenaddrs:
-                ports += str(l) + ","
-            args.append(ports[:-1]) # Remove last comma
-        else:
-            args.append(str(self.listenaddr)) # Swift should be able to handle just a port number
+        for l in self.listenaddrs:
+            ports += str(l) + ","
+        args.append(ports[:-1]) # Remove last comma
+        
         args.append("-c")  # command port
         args.append("127.0.0.1:" + str(self.cmdport))
         args.append("-g")  # HTTP gateway port
@@ -170,9 +169,9 @@ class MySwiftProcess(SwiftProcess):
             port = int(port)
             session = session.decode("HEX")
             length = int(words[2])
-            incoming_port = 0 # None port numbers are ignored
+            incoming_addr = 0 # None port numbers are ignored
             if len(words) > 3:
-                incoming_port = int(words[3])
+                incoming_addr = Address.unknown(words[3])
 
             # require LENGTH bytes
             if len(ic.buffer) < length:
@@ -182,7 +181,7 @@ class MySwiftProcess(SwiftProcess):
             ic.buffer = ic.buffer[length:]
 
             try:
-                self.roothash2dl["dispersy-endpoint"].i2ithread_data_came_in(session, (host, port), data, incoming_port)
+                self.roothash2dl["dispersy-endpoint"].i2ithread_data_came_in(session, (host, port), data, incoming_addr)
             except KeyError:
                 if self._warn_missing_endpoint:
                     self._warn_missing_endpoint = False
@@ -202,17 +201,17 @@ class MySwiftProcess(SwiftProcess):
         logger.debug("CONNECTION LOST")
         self.swift_restart_callback()
         
-    def send_tunnel(self, session, address, data, port=0):
-        if port <= 0:
+    def send_tunnel(self, session, address, data, addr=Address()):
+        if addr.port == 0:
             SwiftProcess.send_tunnel(self, session, address, data)
         else:
-            self.write("TUNNELSEND %s:%d/%s %d %d\r\n" % (address[0], address[1], session.encode("HEX"), len(data), port))
+            self.write("TUNNELSEND %s:%d/%s %d %s\r\n" % (address[0], address[1], session.encode("HEX"), len(data), str(addr)))
             self.write(data)
             
     def is_running(self):
         return (self.fastconn is not None and self.donestate != DONE_STATE_SHUTDOWN 
                 and self._swift_running.is_set() and self.is_alive())
-        
+
     def is_ready(self):
         # TODO: Make sure that fastconn is not busy writing
         return self.is_running();

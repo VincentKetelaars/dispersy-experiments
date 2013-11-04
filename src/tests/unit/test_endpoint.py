@@ -102,7 +102,7 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
           
     def test_restart(self): 
         # Send fake message over cmdgw, which will lead to an error 
-        self._endpoint._swift.write("START stuff to do..;)")
+        self._endpoint._swift.write("message designed to crash tcp conn\n")
         self._endpoint.add_file(self._filename, self._roothash)
         roothash_unhex=binascii.unhexlify(self._roothash)
         self._endpoint.add_peer(self._addr, roothash_unhex)
@@ -205,33 +205,30 @@ class TestMultiEndpoint(unittest.TestCase):
 
     def test_add_and_remove_endpoint(self):
         dispersy = 1
-        ne = NullEndpoint(23456)
+        ne = self._me.add_endpoint(Address(port=23456))
         ne.open(dispersy)
-        self._me.add_endpoint(ne)
-        self.assertEqual(len(self._me.swift_endpoints), 1)
+        self.assertEqual(len(self._me.swift_endpoints), 1) # One endpoint in the list
         self.assertEqual(self._me._endpoint, ne) 
-        ne2 = NullEndpoint(23457)
-        ne2.open(dispersy)
-        self._me.add_endpoint(ne2)
-        self.assertEqual(len(self._me.swift_endpoints), 2)
+        ne2 = self._me.add_endpoint(Address(port=23457))
+        ne2.open(dispersy)        
+        self.assertEqual(len(self._me.swift_endpoints), 2) # Two endpoint in the list
         self.assertEqual(self._me._endpoint, ne) # Still the first endpoint at point
         self._me.remove_endpoint(ne)
         self.assertEqual(len(self._me.swift_endpoints), 1)
         self.assertEqual(self._me._endpoint, ne2) # The one left should now take over
-        self._me.add_endpoint(ne)
+        ne = self._me.add_endpoint(Address(port=23456))
         ne.open(dispersy)
         self._me._endpoint = ne
         self._me.remove_endpoint(ne)
-        self.assertEqual(self._me._endpoint, ne2)
+        self.assertEqual(self._me._endpoint, ne2) # ne2 should now again be default endpoint
         self._me.remove_endpoint(ne2)
-        self.assertEqual(len(self._me.swift_endpoints), 0)
-        self.assertEqual(self._me._endpoint, None)
+        self.assertEqual(len(self._me.swift_endpoints), 0) # No endpoints left
+        self.assertEqual(self._me._endpoint, None) # No endpoints left
         
     def test_address(self):
         addr = 34254
-        ne = NullEndpoint(addr)
-        self._me.add_endpoint(ne)
-        self.assertEqual(self._me.get_address(), addr)
+        self._me.add_endpoint(Address(port=addr))
+        self.assertEqual(self._me.get_address()[1], addr)
     
 
 class TestStaticMethods(unittest.TestCase):

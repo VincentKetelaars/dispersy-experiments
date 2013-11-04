@@ -33,3 +33,10 @@ http://stackoverflow.com/questions/12371385/how-to-specify-which-interface-to-us
 GENERAL:
 
 Tests are necessary to see if multiple channels really perform better. And if improvements can be made.
+
+TESTING:
+
+How to drop packets in Linux..
+http://sandilands.info/sgordon/dropping-packets-in-ubuntu-linux-using-tc-and-iptables
+
+ethtool - get all the network interface card parameters (status of the link, speed, offload parameters...)

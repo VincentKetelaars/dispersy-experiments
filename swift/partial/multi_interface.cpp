@@ -56,7 +56,10 @@ int get_routing_table_number(string name) {
 }
 
 int set_routing_table(string ifname, sockaddr_in sa, sockaddr_in netmask) {
-	// Routing picture: http://billauer.co.il/non-html/ipmasq-html2x.gif
+	// Routing picture: http://blog.schaal-24.de/wp-content/uploads/2013/08/2683-PacketFlow.png
+	// http://commons.wikimedia.org/wiki/File:Diagrama_linux_netfilter_iptables.gif
+	//http://xkr47.outerspace.dyndns.org/netfilter/packet_flow/packet_flow9.png
+	// http://inai.de/images/nf-packet-flow.png
 	string ip = inet_ntoa(sa.sin_addr);
 	short port = ntohs(sa.sin_port);
 	int table_num = get_routing_table_number(string (ifname));
@@ -66,30 +69,19 @@ int set_routing_table(string ifname, sockaddr_in sa, sockaddr_in netmask) {
 		fprintf(stderr,"CMD: %s\n", oss.str().c_str());
 		system(oss.str().c_str());
 
-		oss.str(""); // oss.clear() is probably not necessary..
-		oss << "iptables -A OUTPUT -o "<< ifname.c_str() << " -t mangle -p udp -s " << ip;
-		if (port > 0)
-			oss << " --sport " << port; // Can either set port or range of ports with :
-		oss << " -j MARK --set-mark " << table_num;
-		fprintf(stderr,"CMD: %s\n", oss.str().c_str());
-		system(oss.str().c_str());
-
 		oss.str("");
-		oss << "ip rule add fwmark " << table_num << " table " << table_num;
+		oss << "ip rule add from " << ip << " table " << table_num;
 		fprintf(stderr,"CMD: %s\n", oss.str().c_str());
 		system(oss.str().c_str());
 
 		struct in_addr addr = sa.sin_addr;
-//		*((char *)&addr.s_addr + 3) = 1; // Change the last byte of the ip address to 1
-//		addr.s_addr &= ~0xff000000; // Clear the most significant byte
-
 		addr.s_addr &= netmask.sin_addr.s_addr; // Set netmask zero bits to zero to get the base ip address
-
-//		fprintf(stderr, "GATEWAY %s\n", inet_ntoa(addr));
-
 		// Get the number of bits set to 1
 		std::bitset<sizeof(netmask.sin_addr.s_addr) * CHAR_BIT> b(netmask.sin_addr.s_addr);
 
+//		fprintf(stderr, "GATEWAY %s\n", inet_ntoa(addr));
+
+		// Is this one necessary? Probably in the case of point to point networks only.. So yeah.
 		oss.str("");
 		oss << "ip route add dev " << ifname.c_str() << " " << inet_ntoa(addr) << "/" << b.count() << " table " << table_num;
 		fprintf(stderr, "CMD: %s\n", oss.str().c_str());
@@ -101,9 +93,6 @@ int set_routing_table(string ifname, sockaddr_in sa, sockaddr_in netmask) {
 		oss << "ip route add dev " << ifname.c_str() << " default via " << inet_ntoa(addr) << " table " << table_num;
 		fprintf(stderr, "CMD: %s\n", oss.str().c_str());
 		system(oss.str().c_str());
-
-		// Postrouting may be needed to make sure that packets actually arrive here
-		//iptables -A POSTROUTING -t nat -o wlan0 -p tcp --dport 443 -j SNAT --to 192.168.0.2
 
 		table_numbers.push_back(table_num);
 	}
@@ -467,7 +456,7 @@ int main(int argc, char *argv[]) {
 		return -1;
 	}
 
-	int port1 = 55555;
+	int port1 = 12346;
 	int port2 = 428;
 	string addr1 = "193.156.108.67";
 	string addr2 = "130.161.211.194";

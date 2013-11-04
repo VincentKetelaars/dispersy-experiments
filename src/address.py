@@ -4,7 +4,11 @@ Created on Oct 14, 2013
 @author: Vincent Ketelaars
 '''
 
+from dispersy.logger import get_logger
+
 from socket import AF_INET, AF_INET6
+
+logger = get_logger(__name__)
 
 class Address(object):
     '''
@@ -34,33 +38,56 @@ class Address(object):
     def localport(cls, port_str):
         # Assumes basic IP family provided by init
         # All interfaces
-        return cls(port=int(port_str))
+        try:
+            port = int(port_str)
+            return cls(port=port)
+        except:
+            logger.debug("Not a number format! Fall back to default")
+            return cls()
         
     @classmethod
     def ipv4(cls, addr_str):
         # ip:port
-        (ip, port) = cls.parse_ipv4_string(addr_str.strip())
-        return cls(ip=ip, port=port, family=AF_INET)
+        try:
+            (ip, port) = cls.parse_ipv4_string(addr_str.strip())
+            return cls(ip=ip, port=port, family=AF_INET)
+        except:
+            logger.debug("Not an ipv4 format! Fall back to default")
+            return cls()
         
     @classmethod
     def ipv6(cls, addr_str):
         # Use RFC2732
         # [ipv6]:port/flowinfo%scopeid
-        (ip, port, flowinfo, scopeid) = cls.parse_ipv6_string(addr_str.strip())
-        return cls(ip=ip, port=port, family=AF_INET6, flowinfo=flowinfo, scopeid=scopeid)
+        try:
+            (ip, port, flowinfo, scopeid) = cls.parse_ipv6_string(addr_str.strip())
+            return cls(ip=ip, port=port, family=AF_INET6, flowinfo=flowinfo, scopeid=scopeid)
+        except:
+            logger.debug("Not an ipv6 format! Fall back to default ipv6")
+            return cls(ip="::0", family=AF_INET6)
     
     @classmethod
     def unknown(cls, addr):
-        if isinstance(addr, int):
-            return cls(port=addr)
-        addr = addr.strip()
-        if addr.find(":") > 0:
-            if addr.find("[") >= 0:
-                return cls.ipv6(addr)
+        try:
+            p = int(addr)
+            # If it is an integer, it is a port
+            return cls(port=p)
+        except:
+            pass
+        # Assume it is a string
+        try:               
+            addr = addr.strip()
+            if addr.find(":") > 0:
+                if addr.find("[") >= 0:
+                    return cls.ipv6(addr)
+                else:
+                    return cls.ipv4(addr)
             else:
+                # Assume ipv4
                 return cls.ipv4(addr)
-        else:
-            return cls.localport(addr)
+        except:
+            logger.debug("Unknown address format! Fall back to default")
+            cls()
     
     @staticmethod
     def parse_ipv4_string(addr_str):

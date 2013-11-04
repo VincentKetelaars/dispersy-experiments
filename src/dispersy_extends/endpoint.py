@@ -23,6 +23,7 @@ from dispersy.statistics import Statistics
 from Tribler.Core.Swift.SwiftDef import SwiftDef
 from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
 
+from src.address import Address
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download
@@ -72,8 +73,8 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         if swift_process:
             self._swift.set_on_swift_restart_callback(self.restart_swift)
             self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback)
-            for a in self._swift.listenaddrs:
-                self.add_endpoint(SwiftEndpoint(swift_process, a))      
+            for addr in self._swift.listenaddrs:
+                self.add_endpoint(addr)      
     
     def get_address(self):
         if self._endpoint is None:
@@ -121,12 +122,13 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         # Note that the swift_endpoints are still available after return, although closed
         return all([x.close(timeout) for x in self.swift_endpoints]) and super(TunnelEndpoint, self).close(timeout)
     
-    def add_endpoint(self, endpoint):
-        logger.info("Add %s", endpoint)
-        assert isinstance(endpoint, Endpoint), type(endpoint)
-        self.swift_endpoints.append(endpoint)
+    def add_endpoint(self, addr):
+        logger.info("Add %s", addr)
+        new_endpoint = SwiftEndpoint(self._swift, addr)
+        self.swift_endpoints.append(new_endpoint)
         if len(self.swift_endpoints) == 1:
-            self._endpoint = endpoint
+            self._endpoint = new_endpoint
+        return new_endpoint
             
     def remove_endpoint(self, endpoint):
         """
@@ -320,12 +322,12 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         if download.is_finished() and not download.seeder():
             self.clean_up_files(roothash, False, False)
         
-    def i2ithread_data_came_in(self, session, sock_addr, data, incoming_port=0):
-        logger.debug("Data came in, %s %s %d", session, sock_addr, incoming_port)        
+    def i2ithread_data_came_in(self, session, sock_addr, data, incoming_addr=str(Address())):
+        logger.debug("Data came in, %s %s %s", session, sock_addr, incoming_addr)        
         self.update_known_addresses([sock_addr])
             
         for e in self.swift_endpoints:
-            if e.address.port == incoming_port:
+            if e.address == incoming_addr:
                 e.i2ithread_data_came_in(session, sock_addr, data)
                 return
         # In case the incoming_port number does not match any of the endpoints
@@ -477,10 +479,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
     def get_address(self):
         # Dispersy retrieves the local ip
-        if self._dispersy is not None:
-            return (self._dispersy.lan_address[0], self.address.port)
-        else:
-            return self.address.addr()
+        return self.address.addr()
     
     def send(self, candidates, packets):
         if self._swift.is_alive():
@@ -504,7 +503,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
                                 name = "???"
                             logger.debug("%30s -> %15s:%-5d %4d bytes", name, sock_addr[0], sock_addr[1], len(data))
                             self._dispersy.statistics.dict_inc(self._dispersy.statistics.endpoint_send, name)
-                        self._swift.send_tunnel(self._session, sock_addr, data, self.address.port)
+                        self._swift.send_tunnel(self._session, sock_addr, data, self.address)
     
                 # return True when something has been send
                 return candidates and packets
