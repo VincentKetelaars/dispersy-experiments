@@ -12,7 +12,6 @@ from src.swift.swift_process import MySwiftProcess
 from dispersy.logger import get_logger
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
-from dispersy.endpoint import NullEndpoint
 
 from src.address import Address
 from src.definitions import SWIFT_BINPATH, HASH_LENGTH, TIMEOUT_TESTS, SLEEP_TIME
@@ -109,8 +108,10 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
         self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir, self._addr)
   
         self._wait()
-           
-        self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))   
+        
+        res_path = os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))
+        self.assertTrue(os.path.exists(res_path))
+        remove_files(res_path)   
 
     def _wait(self):
         for _ in range(int(TIMEOUT_TESTS / SLEEP_TIME)):

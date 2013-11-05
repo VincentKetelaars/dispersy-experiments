@@ -112,10 +112,15 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.is_alive = False # Must be set before swift is shut down
         self._thread_stop_event.set()
         self._thread_loop.join()
-        self._swift.remove_download(self, True, True)
-        self._swift.early_shutdown()
-        # TODO: Try clean and fast shutdown
-        self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
+        # We want to shutdown now, but if no connection to swift is available, we need to do it the hard way
+        if self._swift.is_ready():
+            logger.debug("Closing softly")
+            self._swift.remove_download(self, True, True)
+            self._swift.early_shutdown()
+        else:
+            logger.debug("Closing harshly")
+            self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
+            self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
         # Try the sockets to see if they are in use
         if not try_sockets(self._swift.listenaddrs, timeout=1.0):
             logger.warning("Socket(s) is/are still in use")
@@ -381,11 +386,11 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             logger.info("Resetting swift")
             # Make sure that the current swift instance is gone
             self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
-            self._swift.network_shutdown()
+#             self._swift.network_shutdown()
             self.added_peers = Set() # Reset the peers added before shutdown
             
             # Try the sockets to see if they are in use
-            if not try_sockets(self._swift.listenaddrs):
+            if not try_sockets(self._swift.listenaddrs, timeout=1.0):
                 logger.warning("Socket(s) is/are still in use")
             
             # Make sure not to make the same mistake as what let to this
@@ -395,6 +400,11 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback) #Normally in init
             self._swift.add_download(self) # Normally in open
             # First add all calls to the queue and then start the TCP connection
+            # Be sure to put all current queued items at the back of the startup queue
+            temp_queue = Queue.Queue();
+            while not self.swift_queue.empty():
+                temp_queue.put(self.swift_queue.get())
+                
             for h, d in self.downloads.iteritems():
                 if (not d.is_finished()) or d.seeder(): # No sense in adding a download that is finished, and not seeding
                     self.swift_queue.put((self._swift.start_download, (d.downloadimpl,), {}))
@@ -402,6 +412,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                         if not (addr, h) in self.added_peers:
                             self.swift_queue.put((self._swift.add_peer, (d.downloadimpl, addr), {}))                            
                             self.added_peers.add((addr, h))
+                            
+            while not temp_queue.empty():
+                self.swift_queue.put(temp_queue.get())
+                
             self._swift.start_cmd_connection() # Normally in open
             self._resetting = False
     
@@ -582,7 +596,7 @@ def try_socket(addr):
         s.bind(addr.addr())
         return True
     except Exception:
-        logger.exception("Bummer, socket is still in use!")
+        logger.exception("Bummer, %s is still in use!", str(addr))
         return False
     finally:
         s.close()

@@ -58,6 +58,7 @@ class MySwiftProcess(SwiftProcess):
         # instead of CONSOLE app.
         args.append("-j")
 #         args.append("-B") # Set Channel debug_file
+        args.append("-D" + self.workdir + "/channeldebug")
         args.append("-l")  # listen port
         ports = ""
         for l in self.listenaddrs:
@@ -95,9 +96,6 @@ class MySwiftProcess(SwiftProcess):
         # these streams into the FastI2I thread
         # A proper solution would be to switch to twisted for the communication with the swift binary
         self.popen = subprocess.Popen(args, cwd=workdir, creationflags=creationflags, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        # Callback for read_and_print
-        self.read_and_print_callback = self.read_and_print_out
         
         # This event must be set when is verified that swift is running
         self._swift_running = Event()
@@ -106,7 +104,7 @@ class MySwiftProcess(SwiftProcess):
             prefix = currentThread().getName() + ":"
             while True:
                 line = socket.readline()
-                self.read_and_print_callback(line)
+                self.read_and_print_out(line)
                 if not line:
                     print >> sys.stderr, prefix, "readline returned nothing quitting"
                     break
@@ -199,6 +197,7 @@ class MySwiftProcess(SwiftProcess):
             
     def connection_lost(self, port, error=False):
         logger.debug("CONNECTION LOST")
+        self.donestate = DONE_STATE_SHUTDOWN
         self.swift_restart_callback()
         
     def send_tunnel(self, session, address, data, addr=Address()):
