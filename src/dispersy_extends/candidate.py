@@ -22,3 +22,4 @@ class EligibleWalkCandidate(WalkCandidate):
     
     def set_update_bloomfilter(self, update):
         self.update_bloomfilter = update
+    

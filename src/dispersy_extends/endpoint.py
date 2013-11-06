@@ -19,6 +19,7 @@ from src.swift.swift_process import MySwiftProcess # This should be imported fir
 from dispersy.logger import get_logger
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
+from dispersy.candidate import BootstrapCandidate
 
 from Tribler.Core.Swift.SwiftDef import SwiftDef
 from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
@@ -30,6 +31,8 @@ from src.download import Download
 from src.definitions import SLEEP_TIME, HASH_LENGTH
 
 logger = get_logger(__name__)
+
+LOG_MESSAGES = False
 
 class NoEndpointAvailableException(Exception):
     pass
@@ -251,6 +254,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
     def add_peer(self, addr, roothash):                
         """
         Send message to the swift process to add a peer.
+        Make sure it is not a bootstrap peer
         
         @param addr: address of the peer: (ip, port)
         @param roothash: Must be unhexlified roothash
@@ -260,6 +264,9 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             logger.debug("Add peer is queued")
             return
         logger.debug("Add peer %s %s", addr, roothash)
+        if self.is_bootstrap_candidate(addr=addr):
+            logger.debug("Add bootstrap candidate rejected")
+            return
         if (roothash is not None and not (addr, roothash) in self.added_peers 
             and not addr in self._dispersy._bootstrap_candidates): # Don't add bootstrap peers
             d = self.retrieve_download_impl(roothash)
@@ -422,7 +429,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self._resetting = False
     
     def _loop(self):
-        while not self._thread_stop_event.is_set():
+        while not self._thread_stop_event.is_set() and LOG_MESSAGES:
             self._thread_stop_event.wait(SLEEP_TIME)
             for _, D in self.downloads.iteritems():
                 if D.downloadimpl is not None:
@@ -476,6 +483,17 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             func, args, kargs = self.swift_queue.get()
             logger.debug("Dequeue %s %s %s", func, args, kargs)
             func(*args, **kargs)
+            
+            
+    def is_bootstrap_candidate(self, addr=None, candidate=None):
+        if addr is not None:
+            if self._dispersy._bootstrap_candidates.get(addr) is not None:
+                return True
+        if candidate is not None:
+            if (isinstance(candidate, BootstrapCandidate) or 
+                self._dispersy._bootstrap_candidates.get(candidate.sock_addr) is not None):
+                return True
+        return False
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     

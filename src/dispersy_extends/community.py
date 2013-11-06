@@ -21,6 +21,7 @@ from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConver
 from src.dispersy_extends.payload import SimpleFilePayload, FileHashPayload
 
 from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME
+from dispersy.candidate import BootstrapCandidate
 
 logger = get_logger(__name__)    
     
@@ -175,7 +176,10 @@ class MyCommunity(Community):
                 if not self._add_candidate_intro_requests_update(walker, send_request):                    
                     send_request()
         else:
-            logger.debug("This is not a EligibleWalkCandidate: %s", walker)
+            if self.dispersy.endpoint.is_bootstrap_candidate(candidate=walker):
+                logger.debug("This is a BootstrapCandidate: %s", walker)
+            else:
+                logger.debug("This is not a EligibleWalkCandidate: %s", walker)
             
         
     @property
@@ -211,6 +215,5 @@ class MyCommunity(Community):
     
     @update_bloomfilter.setter
     def update_bloomfilter(self, update_bloomfilter):
-        self._update_bloomfilter = update_bloomfilter
-    
+        self._update_bloomfilter = update_bloomfilter    
     

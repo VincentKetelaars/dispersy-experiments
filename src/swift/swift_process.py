@@ -58,7 +58,7 @@ class MySwiftProcess(SwiftProcess):
         # instead of CONSOLE app.
         args.append("-j")
 #         args.append("-B") # Set Channel debug_file
-        args.append("-D" + self.workdir + "/channeldebug")
+#         args.append("-D" + self.workdir + "/channeldebug")
         args.append("-l")  # listen port
         ports = ""
         for l in self.listenaddrs:
