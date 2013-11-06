@@ -124,6 +124,8 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         # Try the sockets to see if they are in use
         if not try_sockets(self._swift.listenaddrs, timeout=1.0):
             logger.warning("Socket(s) is/are still in use")
+            self._swift.network_shutdown() # End it at all cost
+        
         # Note that the swift_endpoints are still available after return, although closed
         return all([x.close(timeout) for x in self.swift_endpoints]) and super(TunnelEndpoint, self).close(timeout)
     
@@ -386,12 +388,12 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             logger.info("Resetting swift")
             # Make sure that the current swift instance is gone
             self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
-#             self._swift.network_shutdown()
             self.added_peers = Set() # Reset the peers added before shutdown
             
             # Try the sockets to see if they are in use
             if not try_sockets(self._swift.listenaddrs, timeout=1.0):
                 logger.warning("Socket(s) is/are still in use")
+                self._swift.network_shutdown() # Ensure that restart can be done
             
             # Make sure not to make the same mistake as what let to this
             # Any roothash added twice will create an error, leading to this. 
