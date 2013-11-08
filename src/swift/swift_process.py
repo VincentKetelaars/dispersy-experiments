@@ -12,7 +12,8 @@ from collections import defaultdict
 from threading import RLock, currentThread, Thread, Event
 
 from dispersy.logger import get_logger
-from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING, DONE_STATE_SHUTDOWN
+from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING, DONE_STATE_SHUTDOWN,\
+    DONE_STATE_EARLY_SHUTDOWN
 
 from src.address import Address
 
@@ -67,8 +68,8 @@ class MySwiftProcess(SwiftProcess):
         
         args.append("-c")  # command port
         args.append("127.0.0.1:" + str(self.cmdport))
-        args.append("-g")  # HTTP gateway port
-        args.append("127.0.0.1:" + str(self.httpport))
+#         args.append("-g")  # HTTP gateway port
+#         args.append("127.0.0.1:" + str(self.httpport))
         args.append("-w")
         if zerostatedir is not None:
             if sys.platform == "win32":
@@ -107,6 +108,8 @@ class MySwiftProcess(SwiftProcess):
                 self.read_and_print_out(line)
                 if not line:
                     print >> sys.stderr, prefix, "readline returned nothing quitting"
+                    # Most of the time the socket will throw an error as well, but not always
+                    self.connection_lost(self.get_cmdport(), output_read=True)
                     break
                 print >> sys.stderr, prefix, line.rstrip()
         self.popen_outputthreads = [Thread(target=read_and_print, args=(self.popen.stdout,), name="SwiftProcess_%d_stdout" % self.listenaddr.port), 
@@ -189,15 +192,18 @@ class MySwiftProcess(SwiftProcess):
     
     def write(self, msg):
         if self.is_running():
-            logger.debug("CMD OUT: %s", msg)
+            logger.debug("CMD OUT: %s", msg[0:100])
             try:
                 SwiftProcess.write(self, msg)
             except:
                 logger.warning("FastConnection is down")
             
-    def connection_lost(self, port, error=False):
+    def connection_lost(self, port, error=False, output_read=False):
+        if self.donestate == DONE_STATE_EARLY_SHUTDOWN or self.donestate == DONE_STATE_SHUTDOWN:
+            # Only if it is still running should we consider restarting swift
+            return
         logger.debug("CONNECTION LOST")
-        self.donestate = DONE_STATE_SHUTDOWN
+        self.donestate = DONE_STATE_SHUTDOWN # Mark as done for
         self.swift_restart_callback()
         
     def send_tunnel(self, session, address, data, addr=Address()):
@@ -208,11 +214,34 @@ class MySwiftProcess(SwiftProcess):
             self.write(data)
             
     def is_running(self):
-        return (self.fastconn is not None and self.donestate != DONE_STATE_SHUTDOWN 
+        return (self.fastconn is not None and self.donestate != DONE_STATE_SHUTDOWN
                 and self._swift_running.is_set() and self.is_alive())
 
     def is_ready(self):
         # TODO: Make sure that fastconn is not busy writing
         return self.is_running();
+    
+    def add_peer(self, d, addr, saddr):
+        self.splock.acquire()
+        try:
+            if self.donestate != DONE_STATE_WORKING or not self.is_alive():
+                return
+
+            addrstr = addr[0] + ':' + str(addr[1])
+            saddrstr = None
+            if saddr is not None:
+                saddrstr = saddr[0] + ':' + str(saddr[1])
+            roothash_hex = d.get_def().get_roothash_as_hex()
+            self.send_peer_addr(roothash_hex, addrstr, saddrstr)
+        finally:
+            self.splock.release()
+
+    def send_peer_addr(self, roothash_hex, addrstr, saddrstr):
+        # assume splock is held to avoid concurrency on socket
+        cmd = 'PEERADDR ' + roothash_hex + ' ' + addrstr
+        if saddrstr is not None:
+            cmd += ' ' + saddrstr
+        cmd += '\r\n'
+        self.write(cmd)
 
             

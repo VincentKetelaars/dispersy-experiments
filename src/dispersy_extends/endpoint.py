@@ -273,7 +273,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             if d is not None:
                 logger.info("Add peer %s with roothash %s ", addr, roothash)
                 self.downloads[roothash].add_peer(addr)
-                self._swift.add_peer(d, addr)
+                self._swift.add_peer(d, addr, self._endpoint.address.addr())
                 self.added_peers.add((addr, roothash))
             
     def start_download(self, filename, directories, roothash, dest_dir, addr=None):
@@ -419,7 +419,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                     self.swift_queue.put((self._swift.start_download, (d.downloadimpl,), {}))
                     for addr in d.peers():
                         if not (addr, h) in self.added_peers:
-                            self.swift_queue.put((self._swift.add_peer, (d.downloadimpl, addr), {}))                            
+                            self.swift_queue.put((self._swift.add_peer, (d.downloadimpl, addr, None), {}))                            
                             self.added_peers.add((addr, h))
                             
             while not temp_queue.empty():
