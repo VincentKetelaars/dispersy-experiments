@@ -78,7 +78,9 @@ class Address(object):
             return cls(port=p)
         except:
             pass
-        # Assume it is a string
+        if len(addr) == 2:
+            return cls.tuple(addr)
+        # Not an integer or tuple, so most likely a string
         try:               
             addr = addr.strip()
             if addr.find(":") > 0:
@@ -95,10 +97,14 @@ class Address(object):
             
     @classmethod
     def tuple(cls, addr):
-        if addr[0].find("[") == 0:
-            cls.ipv6(addr[0] + ":" + str(addr[1]))
-        else:
-            cls.ipv4(addr[0] + ":" + str(addr[1]))
+        try:
+            if addr[0].find("[") == 0:
+                cls.ipv6(addr[0] + ":" + str(addr[1]))
+            else:
+                cls.ipv4(addr[0] + ":" + str(addr[1]))
+        except:
+            logger.exception("Irregular tuple! Fall back to default")
+            cls()
     
     @staticmethod
     def parse_ipv4_string(addr_str):

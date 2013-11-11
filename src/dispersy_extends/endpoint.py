@@ -73,7 +73,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         EndpointStatistics.__init__(self)
         EndpointDownloads.__init__(self)
         
-        self.lock = RLock()
+        self.lock = RLock() # Reentrant Lock
         
         if swift_process:
             self._swift.set_on_swift_restart_callback(self.restart_swift)
@@ -483,11 +483,12 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.added_peers = Set([p for p in self.added_peers if p[1] != roothash])
         
     def update_known_addresses_candidates(self, candidates, packets):
-        self.update_known_addresses(list(Address.tuple(c.sock_addr) for c in candidates))
+        self.update_known_addresses([Address.tuple(c.sock_addr) for c in candidates])
         
     def update_known_addresses(self, addresses):
         logger.debug("Update known addresses, %s", addresses)
         ka_size = len(self.known_addresses)
+        addresses = [a for a in addresses if isinstance(a, Address)]
         self.known_addresses.update(addresses)
         if ka_size < len(self.known_addresses):
             self.distribute_all_hashes_to_peers()
