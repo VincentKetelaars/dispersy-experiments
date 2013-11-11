@@ -96,15 +96,15 @@ class Address(object):
             cls()
             
     @classmethod
-    def tuple(cls, addr):
+    def tuple(cls, tuple_addr):
         try:
-            if addr[0].find("[") == 0:
-                cls.ipv6(addr[0] + ":" + str(addr[1]))
+            if tuple_addr[0].find("[") == 0:
+                return cls.ipv6(tuple_addr[0] + ":" + str(tuple_addr[1]))
             else:
-                cls.ipv4(addr[0] + ":" + str(addr[1]))
+                return cls.ipv4(tuple_addr[0] + ":" + str(tuple_addr[1]))
         except:
             logger.exception("Irregular tuple! Fall back to default")
-            cls()
+            return cls()
     
     @staticmethod
     def parse_ipv4_string(addr_str):

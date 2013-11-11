@@ -85,7 +85,7 @@ class MyCommunity(Community):
         for x in messages:
             if len(x.payload.filename) >= 1 and x.payload.directories is not None and len(x.payload.roothash) == HASH_LENGTH:
                 self.dispersy.endpoint.start_download(x.payload.filename, x.payload.directories, x.payload.roothash, 
-                                                      self._dest_dir, addr=x.payload.addresses)
+                                                      self._dest_dir, x.payload.addresses)
     
     def addresses_message_check(self, messages):
         """
