@@ -18,7 +18,7 @@ from src.definitions import SWIFT_BINPATH, HASH_LENGTH, TIMEOUT_TESTS, SLEEP_TIM
 from src.dispersy_extends.endpoint import MultiEndpoint, get_hash, try_sockets
 
 from src.tests.unit.test_definitions import DIRECTORY, FILES, DISPERSY_WORKDIR
-from src.tests.unit.mock_classes import FakeDispersy
+from src.tests.unit.mock_classes import FakeDispersy, FakeSwift
 
 logger = get_logger(__name__)
 
@@ -27,7 +27,7 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
     def setUp(self):
         callback = Callback("TestCallback")
         self._ports = [12344]
-        self._addrs = [Address.localport(p) for p in self._ports]
+        self._addrs = [Address(port=p, ip="127.0.0.1") for p in self._ports]
         swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._addrs, None, None, None)
         self._endpoint = MultiEndpoint(swift_process)
         self._dispersy = Dispersy(callback, self._endpoint, DISPERSY_WORKDIR, u":memory:")
@@ -39,12 +39,11 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
         
         callback2 = Callback("TestCallback2")
         self._ports2 = [34254]
-        self._addrs2 = [Address.localport(p) for p in self._ports2]
+        self._addrs2 = [Address(port=p, ip="127.0.0.1") for p in self._ports2]
         swift_process2 = MySwiftProcess(SWIFT_BINPATH, ".", None, self._addrs2, None, None, None)
         self._endpoint2 = MultiEndpoint(swift_process2)
         self._dispersy2 = Dispersy(callback2, self._endpoint2, u".", u":memory:")
         self._dispersy2.start()
-        self._addr = ("127.0.0.1",self._ports2[0])
 
     def tearDown(self):
         self._dispersy.stop()
@@ -60,8 +59,8 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
     def test_seed_and_download(self):           
         self._endpoint.add_file(self._filename, self._roothash)
         roothash_unhex=binascii.unhexlify(self._roothash)
-        self._endpoint.add_peer(self._addr, roothash_unhex)
-        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
+        self._endpoint.add_peer(self._addrs2[0], roothash_unhex)
+        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir, self._addrs2)
            
         self._wait()
         
@@ -70,17 +69,17 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
     def test_duplicate_roothash_and_clean_up(self):           
         self._endpoint.add_file(self._filename, self._roothash)
         roothash_unhex=binascii.unhexlify(self._roothash)
-        self._endpoint.add_peer(self._addr, roothash_unhex)
+        self._endpoint.add_peer(self._addrs2[0], roothash_unhex)
         self._endpoint.add_file(self._filename, self._roothash)
-        self._endpoint.add_peer(self._addr, roothash_unhex)
-        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
-        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir)
+        self._endpoint.add_peer(self._addrs2[0], roothash_unhex)
+        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir, self._addrs2)
+        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir, self._addrs2)
         file2 = FILES[1]
         roothash2 = get_hash(file2, SWIFT_BINPATH)
         roothash_unhex=binascii.unhexlify(roothash2)
         self._endpoint.add_file(file2, roothash2)
-        self._endpoint.add_peer(self._addr, roothash_unhex)
-        self._endpoint2.start_download(file2, self._directories, roothash2, self._dest_dir)
+        self._endpoint.add_peer(self._addrs2[0], roothash_unhex)
+        self._endpoint2.start_download(file2, self._directories, roothash2, self._dest_dir, self._addrs2)
                 
         self._wait()
          
@@ -104,8 +103,8 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
         self._endpoint._swift.write("message designed to crash tcp conn\n")
         self._endpoint.add_file(self._filename, self._roothash)
         roothash_unhex=binascii.unhexlify(self._roothash)
-        self._endpoint.add_peer(self._addr, roothash_unhex)
-        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir, self._addr)
+        self._endpoint.add_peer(self._addrs2[0], roothash_unhex)
+        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir, self._addrs2)
   
         self._wait()
         
@@ -138,7 +137,7 @@ class TestEndpointNoConnection(unittest.TestCase):
         
         callback = Callback("TestCallback")
         self._ports = [12344]
-        self._addrs = [Address.localport(p) for p in self._ports]
+        self._addrs = [Address(port=p) for p in self._ports]
         swift_process = MySwiftProcess(SWIFT_BINPATH, ".", None, self._addrs, None, None, None)
         self._endpoint = MultiEndpoint(swift_process)
         self._dispersy = Dispersy(callback, self._endpoint, DISPERSY_WORKDIR, u":memory:")
@@ -150,12 +149,11 @@ class TestEndpointNoConnection(unittest.TestCase):
         
         callback2 = Callback("TestCallback2")
         self._ports2 = [34254]
-        self._addrs2 = [Address.localport(p) for p in self._ports2]
+        self._addrs2 = [Address(port=p) for p in self._ports2]
         swift_process2 = MySwiftProcess(SWIFT_BINPATH, ".", None, self._addrs2, None, None, None)
         self._endpoint2 = MultiEndpoint(swift_process2)
         self._dispersy2 = Dispersy(callback2, self._endpoint2, u".", u":memory:")
         self._dispersy2.start()
-        self._addr = ("127.0.0.1",self._ports2[0])
         
     def tearDown(self):
         self._dispersy.stop()
@@ -174,8 +172,8 @@ class TestEndpointNoConnection(unittest.TestCase):
     def test_temp_no_wifi(self): 
         self._endpoint.add_file(self._filename, self._roothash)
         roothash_unhex=binascii.unhexlify(self._roothash)
-        self._endpoint.add_peer(self._addr, roothash_unhex)
-        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir, self._addr)
+        self._endpoint.add_peer(self._addrs2[0], roothash_unhex)
+        self._endpoint2.start_download(self._filename, self._directories, self._roothash, self._dest_dir, self._addrs2)
   
         self._wait()
            
@@ -199,37 +197,42 @@ class TestMultiEndpoint(unittest.TestCase):
     """
 
     def setUp(self):
-        self._me = MultiEndpoint(None)
+        self._addrs = [Address(port=23456), Address(port=23457)]
+        swift = FakeSwift(self._addrs)
+        self.dispersy = FakeDispersy()
+        self._me = MultiEndpoint(swift)
+        self._me.open(self.dispersy)
 
     def tearDown(self):
         self._me = None
 
     def test_add_and_remove_endpoint(self):
-        dispersy = 1
-        ne = self._me.add_endpoint(Address(port=23456))
-        ne.open(dispersy)
-        self.assertEqual(len(self._me.swift_endpoints), 1) # One endpoint in the list
-        self.assertEqual(self._me._endpoint, ne) 
-        ne2 = self._me.add_endpoint(Address(port=23457))
-        ne2.open(dispersy)        
-        self.assertEqual(len(self._me.swift_endpoints), 2) # Two endpoint in the list
-        self.assertEqual(self._me._endpoint, ne) # Still the first endpoint at point
+        ne = self._me.swift_endpoints[0]
+        ne2 = self._me.swift_endpoints[1]
         self._me.remove_endpoint(ne)
         self.assertEqual(len(self._me.swift_endpoints), 1)
         self.assertEqual(self._me._endpoint, ne2) # The one left should now take over
-        ne = self._me.add_endpoint(Address(port=23456))
-        ne.open(dispersy)
-        self._me._endpoint = ne
-        self._me.remove_endpoint(ne)
-        self.assertEqual(self._me._endpoint, ne2) # ne2 should now again be default endpoint
         self._me.remove_endpoint(ne2)
         self.assertEqual(len(self._me.swift_endpoints), 0) # No endpoints left
         self.assertEqual(self._me._endpoint, None) # No endpoints left
         
-    def test_address(self):
-        addr = 34254
-        self._me.add_endpoint(Address(port=addr))
-        self.assertEqual(self._me.get_address()[1], addr)
+        ne = self._me.add_endpoint(self._addrs[0])
+        ne.open(self.dispersy)
+        self.assertEqual(len(self._me.swift_endpoints), 1) # One endpoint in the list
+        self.assertEqual(self._me._endpoint, ne) 
+        ne2 = self._me.add_endpoint(self._addrs[1])
+        ne2.open(self.dispersy)
+        self.assertEqual(len(self._me.swift_endpoints), 2) # Two endpoint in the list
+        self.assertEqual(self._me._endpoint, ne) # Still the first endpoint at point
+        
+        self._me._endpoint = ne
+        self._me.remove_endpoint(ne)
+        self.assertEqual(self._me._endpoint, ne2) # ne2 should now again be default endpoint
+
+        
+    def test_add_endpoint(self):
+        self._me.add_endpoint(self._addrs[0])
+        self.assertEqual(self._me._endpoint.address, self._addrs[0])
     
 
 class TestStaticMethods(unittest.TestCase):

@@ -20,6 +20,12 @@ Started on providing IPv6 capabilities. Swift instances should be able to handle
 Dispersy itself will be a problem most likely.
 Address class should be used more in Endpoint. 
 
+WALKER:
+
+you should still be able to use the associated Member to determine that multiple Candidate instances belong to a single device
+perhaps you should override the 'who to introduce' method, to take into account your multi-interface thing (this code should also ensure you don't introduce A(interface1) to A(interface2)
+or you will introduce a device to one of its other interfaces, so you may want to filter out those introductions (to prevent a device to talk to itself)
+
 LIBSWIFT:
 
 AddPeer in content.cpp now connects all sockets to all peers

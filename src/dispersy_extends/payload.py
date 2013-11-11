@@ -42,14 +42,14 @@ class SimpleFilePayload(Payload):
         
 class FileHashCarrier():
     
-    def __init__(self, filename, directories, roothash, address):
+    def __init__(self, filename, directories, roothash, addresses):
         self._filename = filename
         if directories is None:
             self._directories = ""
         else:
             self._directories = directories
         self._roothash = roothash
-        self._address = address
+        self._addresses = addresses
         
     @property
     def filename(self):
@@ -64,19 +64,19 @@ class FileHashCarrier():
         return self._roothash
     
     @property
-    def address(self):
-        return self._address   
+    def addresses(self):
+        return self._addresses  
     
 class FileHashPayload(Payload):
     
     class Implementation(Payload.Implementation):
         
-        def __init__(self, meta, filename, directories, roothash, address):
+        def __init__(self, meta, filename, directories, roothash, addresses):
             super(Payload.Implementation, self).__init__(meta)
             self._filename = filename
             self._directories = directories
             self._roothash = roothash
-            self._address = address
+            self._addresses = addresses
         
         @property
         def filename(self):
@@ -91,5 +91,26 @@ class FileHashPayload(Payload):
             return self._roothash
         
         @property
-        def address(self):
-            return self._address
+        def addresses(self):
+            return self._addresses
+        
+class AddressesCarrier():
+    
+    def __init__(self, addresses):
+        self._addresses = addresses
+    
+    @property
+    def addresses(self):
+        return self._addresses
+    
+class AddressesPayload(Payload):
+    
+    class Implementation(Payload.Implementation):
+        
+        def __init__(self, meta, addresses):
+            super(Payload.Implementation, self).__init__(meta)
+            self._addresses = addresses
+        
+        @property
+        def addresses(self):
+            return self._addresses

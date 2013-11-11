@@ -227,10 +227,10 @@ class MySwiftProcess(SwiftProcess):
             if self.donestate != DONE_STATE_WORKING or not self.is_alive():
                 return
 
-            addrstr = addr[0] + ':' + str(addr[1])
+            addrstr = str(addr)
             saddrstr = None
             if saddr is not None:
-                saddrstr = saddr[0] + ':' + str(saddr[1])
+                saddrstr = str(saddr)
             roothash_hex = d.get_def().get_roothash_as_hex()
             self.send_peer_addr(roothash_hex, addrstr, saddrstr)
         finally:
@@ -244,4 +244,32 @@ class MySwiftProcess(SwiftProcess):
         cmd += '\r\n'
         self.write(cmd)
 
+    def add_socket(self, saddr, d):
+        self.splock.acquire()
+        try:
+            if self.donestate != DONE_STATE_WORKING or not self.is_alive():
+                return
+            
+            if saddr in self.listenaddrs:
+                logger.debug("Address already in use %s", saddr)
+                return
+            # saddr is of instance Address
+            self.listenaddrs.append(saddr)
+
+            saddrstr = str(saddr)
+            if d is None:
+                roothash_hex = None
+            else:
+                roothash_hex = d.get_def().get_roothash_as_hex()
+            self.send_add_socket(saddrstr, roothash_hex)
+        finally:
+            self.splock.release()
+            
+    def send_add_socket(self, saddrstr, roothash_hex):
+        # assume splock is held to avoid concurrency on socket
+        cmd = 'ADDSOCKET ' + saddrstr
+        if roothash_hex is not None:
+            cmd += ' ' + roothash_hex
+        cmd += '\r\n'
+        self.write(cmd)
             

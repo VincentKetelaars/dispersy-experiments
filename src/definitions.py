@@ -58,6 +58,7 @@ HASH_LENGTH = 40
 
 SIMPLE_MESSAGE_NAME = u"simple_message"
 FILE_HASH_MESSAGE_NAME = u"file_hash_message"
+ADDRESSES_MESSAGE_NAME = u"addresses_message"
 
 MAX_FILE_SIZE = 2**16-60
 

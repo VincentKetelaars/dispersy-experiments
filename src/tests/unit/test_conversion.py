@@ -5,10 +5,16 @@ Created on Sep 17, 2013
 '''
 import unittest
 
+from dispersy.logger import get_logger
+
 from src.tests.unit.test_definitions import SMALL_TASK_TIMEOUT
 from src.dispersy_instance import DispersyInstance
-from src.definitions import SWIFT_BINPATH, DEST_DIR, FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME
-from src.dispersy_extends.conversion import FileHashConversion, SimpleFileConversion
+from src.definitions import SWIFT_BINPATH, DEST_DIR, FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME,\
+    ADDRESSES_MESSAGE_NAME
+from src.dispersy_extends.conversion import FileHashConversion, SimpleFileConversion, AddressesConversion
+from src.address import Address
+
+logger = get_logger(__name__)
 
 class TestConversion(unittest.TestCase):
     
@@ -19,18 +25,6 @@ class TestConversion(unittest.TestCase):
 
     def tearDown(self):
         self._di.stop()
-
-    def test_address_string_to_tuple(self):
-        for c in self._conversions:
-            if isinstance(c, FileHashConversion):
-                addr_str = "('0.0.0.0', 1223)"
-                addr = c._address_string_to_tuple(addr_str)
-                self.assertEqual(addr[0],"0.0.0.0")
-                self.assertEqual(addr[1],1223)
-                addr_str = "('123.0.40.230', 1)"
-                addr = c._address_string_to_tuple(addr_str)
-                self.assertEqual(addr[0],"123.0.40.230")
-                self.assertEqual(addr[1],1)
                 
     def test_file_hash_message_conversion(self):
         for c in self._conversions:
@@ -39,17 +33,17 @@ class TestConversion(unittest.TestCase):
                 filename = "asdf.asdf"
                 dir_ = ""
                 roothash = "asdfj23j09f09sjfewef"
-                address = "('0.0.0.0', 1)"
+                address = Address.ipv4("0.0.0.0:1")
                 message = meta.impl(authentication=(self._di._community.my_member,), distribution=(self._di._community.claim_global_time(), self._di._community._file_hash_distribution.claim_sequence_number()), 
-                              payload=(filename, dir_, roothash, address))
+                              payload=(filename, dir_, roothash, [address]))
                 encoded = c.encode_payload(message)
                 placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
                 _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
                 self.assertEqual(x.filename, filename)
                 self.assertEqual(x.directories, dir_)
                 self.assertEqual(x.roothash, roothash)
-                self.assertEqual(x.address[0], '0.0.0.0')
-                self.assertEqual(x.address[1], 1)
+                logger.debug("Testconversion %s %s", x.addresses[0], address)
+                self.assertEqual(x.addresses[0], address)
                 
     def test_simple_message_conversion(self):
         for c in self._conversions:
@@ -64,6 +58,18 @@ class TestConversion(unittest.TestCase):
                 _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
                 self.assertEqual(x.filename, filename)
                 self.assertEqual(x.data, data)
+                
+    def test_addresses_message_conversion(self):
+        for c in self._conversions:
+            if isinstance(c, AddressesConversion):
+                meta = self._di._community.get_meta_message(ADDRESSES_MESSAGE_NAME)
+                addresses = [Address.ipv4("0.0.0.1:1232"), Address.ipv6("[::0]:12145", Address(port=32532))]
+                message = meta.impl(authentication=(self._di._community.my_member,), distribution=(self._di._community.claim_global_time(), self._di._community._file_hash_distribution.claim_sequence_number()), 
+                              payload=(addresses))
+                encoded = c.encode_payload(message)
+                placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
+                _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
+                self.assertEqual(x.addresses, addresses)
 
 if __name__ == "__main__":
     unittest.main()

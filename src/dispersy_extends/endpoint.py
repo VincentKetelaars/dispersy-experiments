@@ -7,7 +7,7 @@ Created on Aug 27, 2013
 from os import urandom, makedirs
 from os.path import isfile, dirname, exists, basename, getmtime
 from datetime import datetime
-from threading import Thread, Event
+from threading import Thread, Event, RLock
 from sets import Set
 import binascii
 import socket
@@ -73,11 +73,13 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         EndpointStatistics.__init__(self)
         EndpointDownloads.__init__(self)
         
+        self.lock = RLock()
+        
         if swift_process:
             self._swift.set_on_swift_restart_callback(self.restart_swift)
             self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback)
             for addr in self._swift.listenaddrs:
-                self.add_endpoint(addr)      
+                self.add_endpoint(addr)
     
     def get_address(self):
         if self._endpoint is None:
@@ -89,14 +91,17 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         return list(endpoint.get_address() for endpoint in self.swift_endpoints)
     
     def send(self, candidates, packets):
+        self.lock.acquire();
         if not self._swift.is_ready():
             self.swift_queue.put((self.send, (candidates, packets), {}))
             logger.debug("Send is queued")
+            self.lock.release()
             return
         logger.debug("Send %s %d", candidates, len(packets))
         self.update_known_addresses_candidates(candidates, packets)
         self.determine_endpoint(known_addresses=self.known_addresses, subset=True)
         self._endpoint.send(candidates, packets)
+        self.lock.release()
             
     def open(self, dispersy):
         ret = TunnelEndpoint.open(self, dispersy)
@@ -116,28 +121,31 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self._thread_stop_event.set()
         self._thread_loop.join()
         # We want to shutdown now, but if no connection to swift is available, we need to do it the hard way
-        if self._swift.is_ready():
-            logger.debug("Closing softly")
-            self._swift.remove_download(self, True, True)
-            self._swift.early_shutdown()
-        else:
-            logger.debug("Closing harshly")
-            self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
-            self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
-        # Try the sockets to see if they are in use
-        if not try_sockets(self._swift.listenaddrs, timeout=1.0):
-            logger.warning("Socket(s) is/are still in use")
-            self._swift.network_shutdown() # End it at all cost
+        if self._swift is not None:
+            if self._swift.is_ready():
+                logger.debug("Closing softly")
+                self._swift.remove_download(self, True, True)
+                self._swift.early_shutdown()
+            else:
+                logger.debug("Closing harshly")
+                self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
+                self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
+            # Try the sockets to see if they are in use
+            if not try_sockets(self._swift.listenaddrs, timeout=1.0):
+                logger.warning("Socket(s) is/are still in use")
+                self._swift.network_shutdown() # End it at all cost
         
         # Note that the swift_endpoints are still available after return, although closed
         return all([x.close(timeout) for x in self.swift_endpoints]) and super(TunnelEndpoint, self).close(timeout)
     
     def add_endpoint(self, addr):
         logger.info("Add %s", addr)
+        self.lock.acquire()
         new_endpoint = SwiftEndpoint(self._swift, addr)
         self.swift_endpoints.append(new_endpoint)
         if len(self.swift_endpoints) == 1:
             self._endpoint = new_endpoint
+        self.lock.release()
         return new_endpoint
             
     def remove_endpoint(self, endpoint):
@@ -146,6 +154,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         """
         logger.info("Remove %s", endpoint)
         assert isinstance(endpoint, Endpoint), type(endpoint)
+        self.lock.acquire()
         ret = False
         for e in self.swift_endpoints:
             if e == endpoint:
@@ -155,6 +164,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                     self.determine_endpoint()
                 ret = True
                 break
+        self.lock.release()
         return ret
     
     def _lowest_sendqueue(self):
@@ -223,9 +233,11 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         @param filename: The absolute path of the file
         @param roothash: The roothash of this file
         """
+        self.lock.acquire()
         if not self._swift.is_ready():
             self.swift_queue.put((self.add_file, (filename, roothash), {})) 
             logger.debug("Add file is queued")
+            self.lock.release()
             return
         logger.debug("Add file, %s %s", filename, roothash)        
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
@@ -240,6 +252,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self._swift.set_moreinfo_stats(d, True)
             
             self.distribute_all_hashes_to_peers() # After adding the file, directly add the peer as well
+        self.lock.release()
         
     def distribute_all_hashes_to_peers(self):
         """
@@ -259,24 +272,28 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         @param addr: address of the peer: (ip, port)
         @param roothash: Must be unhexlified roothash
         """
+        self.lock.acquire()
         if not self._swift.is_ready():
             self.swift_queue.put((self.add_peer, (addr, roothash), {}))
             logger.debug("Add peer is queued")
+            self.lock.release()
             return
         logger.debug("Add peer %s %s", addr, roothash)
         if self.is_bootstrap_candidate(addr=addr):
             logger.debug("Add bootstrap candidate rejected")
+            self.lock.release()
             return
         if (roothash is not None and not (addr, roothash) in self.added_peers 
-            and not addr in self._dispersy._bootstrap_candidates): # Don't add bootstrap peers
+            and not addr.addr() in self._dispersy._bootstrap_candidates): # Don't add bootstrap peers
             d = self.retrieve_download_impl(roothash)
             if d is not None:
                 logger.info("Add peer %s with roothash %s ", addr, roothash)
                 self.downloads[roothash].add_peer(addr)
-                self._swift.add_peer(d, addr, self._endpoint.address.addr())
+                self._swift.add_peer(d, addr, self._endpoint.address)
                 self.added_peers.add((addr, roothash))
+        self.lock.release()
             
-    def start_download(self, filename, directories, roothash, dest_dir, addr=None):
+    def start_download(self, filename, directories, roothash, dest_dir, addresses):
         """
         This method lets the swift instance know that it should download the file that comes with this roothash.
         
@@ -284,11 +301,13 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         @param roothash: hash to locate swarm
         @param dest_dir: The folder the file will be put
         """
+        self.lock.acquire()
         if not self._swift.is_ready():
-            self.swift_queue.put((self.start_download, (filename, directories, roothash, dest_dir), {"addr":addr}))
+            self.swift_queue.put((self.start_download, (filename, directories, roothash, dest_dir, addresses), {}))
             logger.debug("Start download is queued")
+            self.lock.release()
             return
-        logger.debug("Start download %s %s %s %s %s", filename, directories, roothash, dest_dir, addr)
+        logger.debug("Start download %s %s %s %s %s", filename, directories, roothash, dest_dir, addresses)
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys():
             logger.info("Start download of %s with roothash %s", filename, roothash)
@@ -298,10 +317,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             d = self.create_download_impl(roothash)
             d.set_dest_dir(dir_ + basename(filename))
             # Add download first, because it might take while before swift process returns
-            self.update_known_downloads(roothash, d.get_dest_dir(), d, address=addr, download=True)
+            self.update_known_downloads(roothash, d.get_dest_dir(), d, address=addresses[0], download=True)
             self._swift.start_download(d)
             self._swift.set_moreinfo_stats(d, True)
-            
+        self.lock.release()
             
     def do_checkpoint(self, d):
         if not self._swift.is_ready():
@@ -338,7 +357,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         
     def i2ithread_data_came_in(self, session, sock_addr, data, incoming_addr=str(Address())):
         logger.debug("Data came in, %s %s %s", session, sock_addr, incoming_addr)        
-        self.update_known_addresses([sock_addr])
+        self.update_known_addresses([Address.tuple(sock_addr)])
             
         for e in self.swift_endpoints:
             if e.address == incoming_addr:
@@ -374,14 +393,14 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         
         @return: DownloadImpl, otherwise None
         """
-        self._swift.splock.acquire()
+        self.lock.acquire()
         d = None
         try:
             d = self._swift.roothash2dl[roothash]
         except:
             logger.error("Could not retrieve downloadimpl from roothash2dl")
         finally:
-            self._swift.splock.release()
+            self.lock.release()
         return d
     
     def restart_swift(self):
@@ -390,6 +409,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         After swift has been terminated, a new process starts and previous downloads and their peers are added.
         """
         logger.debug("Restart swift called")
+        self.lock.acquire()
         if self.is_alive and not self._resetting:
             self._resetting = True
             logger.info("Resetting swift")
@@ -416,9 +436,11 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                 
             for h, d in self.downloads.iteritems():
                 if (not d.is_finished()) or d.seeder(): # No sense in adding a download that is finished, and not seeding
+                    logger.debug("Enqueue start download %s", h)
                     self.swift_queue.put((self._swift.start_download, (d.downloadimpl,), {}))
                     for addr in d.peers():
                         if not (addr, h) in self.added_peers:
+                            logger.debug("Enqueue add peer %s %s", addr, h)
                             self.swift_queue.put((self._swift.add_peer, (d.downloadimpl, addr, None), {}))                            
                             self.added_peers.add((addr, h))
                             
@@ -427,6 +449,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                 
             self._swift.start_cmd_connection() # Normally in open
             self._resetting = False
+        self.lock.release()
     
     def _loop(self):
         while not self._thread_stop_event.is_set() and LOG_MESSAGES:
@@ -460,13 +483,12 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.added_peers = Set([p for p in self.added_peers if p[1] != roothash])
         
     def update_known_addresses_candidates(self, candidates, packets):
-        self.update_known_addresses(list(c.sock_addr for c in candidates))
+        self.update_known_addresses(list(Address.tuple(c.sock_addr) for c in candidates))
         
     def update_known_addresses(self, addresses):
         logger.debug("Update known addresses, %s", addresses)
-        addrs = list(a for a in addresses if isinstance(a, tuple))
         ka_size = len(self.known_addresses)
-        self.known_addresses.update(addrs)
+        self.known_addresses.update(addresses)
         if ka_size < len(self.known_addresses):
             self.distribute_all_hashes_to_peers()
             
@@ -482,12 +504,11 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         while not self.swift_queue.empty():
             func, args, kargs = self.swift_queue.get()
             logger.debug("Dequeue %s %s %s", func, args, kargs)
-            func(*args, **kargs)
-            
+            func(*args, **kargs)            
             
     def is_bootstrap_candidate(self, addr=None, candidate=None):
         if addr is not None:
-            if self._dispersy._bootstrap_candidates.get(addr) is not None:
+            if self._dispersy._bootstrap_candidates.get(addr.addr()) is not None:
                 return True
         if candidate is not None:
             if (isinstance(candidate, BootstrapCandidate) or 
@@ -495,12 +516,21 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                 return True
         return False
     
+    def interface_came_up(self):
+        # Go over all endpoints and check interface names without number
+        # If it is new create endpoint
+        # Known, adapt endpoint to it
+        pass
+        
+    
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
     def __init__(self, swift_process, address):
         super(SwiftEndpoint, self).__init__(swift_process) # Dispersy and session code 
         EndpointStatistics.__init__(self)
         self.address = address
+        if not address in self._swift.listenaddrs:
+            self.swift_add_socket()
         
     def open(self, dispersy):
         self.is_alive = True
@@ -554,8 +584,12 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         
             
     def dispersythread_data_came_in(self, sock_addr, data, timestamp):
-        self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), data)], True, timestamp)
-                    
+        self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), 
+                                             data)], True, timestamp)
+        
+    def swift_add_socket(self):
+        logger.debug("SwiftEndpoint add socket %s", self.address)
+        self._swift.add_socket(self.address, None)
                     
 def get_hash(filename, swift_path):
     """

@@ -7,6 +7,7 @@ Created on Oct 14, 2013
 from dispersy.logger import get_logger
 
 from socket import AF_INET, AF_INET6
+from dispersy.dispersy import Dispersy
 
 logger = get_logger(__name__)
 
@@ -15,12 +16,15 @@ class Address(object):
     This class represents an socket address. Either AF_INET or AF_INET6.
     '''
 
-    def __init__(self, ip="0.0.0.0", port=0, family=AF_INET, flowinfo=0, scopeid=0):
+    def __init__(self, ip="0.0.0.0", port=0, family=AF_INET, flowinfo=0, scopeid=0, if_=None):
         self._ip = ip
         self._port = port
         self._family = family
         self._flowinfo = flowinfo # IPv6 only
         self._scopeid = scopeid # IPv6 only
+        self._if = if_
+        if if_ is None:
+            self.resolve_interface()
         
     @property
     def ip(self):
@@ -88,6 +92,13 @@ class Address(object):
         except:
             logger.debug("Unknown address format! Fall back to default")
             cls()
+            
+    @classmethod
+    def tuple(cls, addr):
+        if addr[0].find("[") == 0:
+            cls.ipv6(addr[0] + ":" + str(addr[1]))
+        else:
+            cls.ipv4(addr[0] + ":" + str(addr[1]))
     
     @staticmethod
     def parse_ipv4_string(addr_str):
@@ -134,3 +145,37 @@ class Address(object):
     
     def is_wildcard_port(self):
         return self.port == 0
+    
+    def resolve_interface(self):
+        for if_ in Dispersy._get_interface_addresses():
+            if if_.address == self._ip:
+                self._if = Interface(if_.name, if_.address, if_.netmask, if_.broadcast)
+    
+    def __eq__(self, other):
+        if not isinstance(other, Address):
+            return False
+        if (self.ip == other.ip and self.port == other.port and self.family == other.family and 
+            self._flowinfo == other._flowinfo and self._scopeid == other._scopeid and self._if == other._if):
+            return True
+        return False
+    
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+class Interface(object):
+    def __init__(self, name, address, netmask, broadcast):
+        self.name = name
+        self.address = address
+        self.netmask = netmask
+        self.broadcast = broadcast
+        
+    def __eq__(self, other):
+        if not isinstance(other, Interface):
+            return False
+        if (self.name == other.name and self.address == other.address and self.netmask == other.netmask and
+            self.broadcast == other.broadcast):
+            return True
+        return False
+    
+    def __ne__(self, other):
+        return not self.__eq__(other)
