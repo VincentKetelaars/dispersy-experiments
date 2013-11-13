@@ -141,7 +141,7 @@ class MyCommunity(Community):
         meta = self.get_meta_message(ADDRESSES_MESSAGE_NAME)
         messages = [meta.impl(authentication=(self.my_member,),
                               distribution=(self.claim_global_time(),),
-                              destination=(tuple(candidates),), 
+                              destination=tuple(candidates), 
                               payload=(addresses_message.addresses,)) for _ in xrange(count)]
         self.dispersy.store_update_forward(messages, store, update, forward)
                 
