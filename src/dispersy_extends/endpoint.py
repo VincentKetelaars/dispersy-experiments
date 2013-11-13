@@ -322,7 +322,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             d = self.create_download_impl(roothash)
             d.set_dest_dir(dir_ + basename(filename))
             # Add download first, because it might take while before swift process returns
-            self.update_known_downloads(roothash, d.get_dest_dir(), d, address=addresses[0], download=True)
+            self.update_known_downloads(roothash, d.get_dest_dir(), d, addresses=addresses, download=True)
             self._swift.start_download(d)
             self._swift.set_moreinfo_stats(d, True)
         self.lock.release()
@@ -506,13 +506,13 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self.distribute_all_hashes_to_peers()
         self.lock.release()
             
-    def update_known_downloads(self, roothash, filename, download_impl, address=None, seed=False, download=False):
+    def update_known_downloads(self, roothash, filename, download_impl, addresses=None, seed=False, download=False):
         # Know about all hashes that go through this endpoint
         logger.debug("Update known downloads, %s, %s", roothash, filename)
         self.lock.acquire()
         self.downloads[roothash] = Download(roothash, filename, download_impl, seed=seed, download=download)
         self.downloads[roothash].moreinfo = True
-        self.downloads[roothash].add_peer(Peer(address))
+        self.downloads[roothash].merge_peer(Peer(addresses))
         self.lock.release()
         
     def swift_started_running_callback(self):
