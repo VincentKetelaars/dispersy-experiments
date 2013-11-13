@@ -512,7 +512,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.lock.acquire()
         self.downloads[roothash] = Download(roothash, filename, download_impl, seed=seed, download=download)
         self.downloads[roothash].moreinfo = True
-        self.downloads[roothash].merge_peer(Peer(addresses))
+        self.downloads[roothash].merge_peers(Peer(addresses))
         self.lock.release()
         
     def swift_started_running_callback(self):
