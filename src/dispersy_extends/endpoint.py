@@ -548,11 +548,12 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         message = AddressesCarrier([e.address for e in self.swift_endpoints])
         for c in self._dispersy.get_communities():
             if isinstance(c, MyCommunity): # Ensure that the create_addresses_messages exists
-                self._dispersy.callback.register(c.create_addresses_messages, (1,message,candidates), delay=0)
+                self._dispersy.callback.register(c.create_addresses_messages, (1,message,candidates), 
+                                                 kargs={"update":False}, delay=0)
         
     def peer_addresses_arrived(self, addresses):
         logger.debug("Peer's addresses arrived %s", addresses)
-        for download in self.downloads:
+        for download in self.downloads.itervalues():
             # TODO: Protect against local addresses
             download.merge_peers(Peer(addresses))
     

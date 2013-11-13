@@ -22,9 +22,6 @@ class SimpleFileConversion(BinaryConversion):
     '''    
 
     def __init__(self, community):
-        '''
-        Constructor
-        '''
         super(SimpleFileConversion, self).__init__(community, "\x12")
         self.define_meta_message(chr(12), community.get_meta_message(SIMPLE_MESSAGE_NAME), self.encode_payload, 
                                  self.decode_payload)
@@ -53,9 +50,6 @@ class SimpleFileConversion(BinaryConversion):
 class FileHashConversion(BinaryConversion):
     
     def __init__(self, community):
-        '''
-        Constructor
-        '''
         super(FileHashConversion, self).__init__(community, "\x13")
         self.define_meta_message(chr(13), community.get_meta_message(FILE_HASH_MESSAGE_NAME), self.encode_payload, 
                                  self.decode_payload)
@@ -91,9 +85,6 @@ class AddressesConversion(BinaryConversion):
     '''    
 
     def __init__(self, community):
-        '''
-        Constructor
-        '''
         super(AddressesConversion, self).__init__(community, "\x14")
         self.define_meta_message(chr(14), community.get_meta_message(ADDRESSES_MESSAGE_NAME), self.encode_payload, 
                                  self.decode_payload)

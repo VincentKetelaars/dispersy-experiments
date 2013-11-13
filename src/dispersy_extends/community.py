@@ -17,7 +17,8 @@ from dispersy.destination import CommunityDestination, CandidateDestination
 
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.timeout import IntroductionRequestTimeout
-from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConversion
+from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConversion,\
+    AddressesConversion
 from src.dispersy_extends.payload import SimpleFilePayload, FileHashPayload, AddressesPayload
 
 from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, \
@@ -44,7 +45,7 @@ class MyCommunity(Community):
         """
         Overwrite
         """
-        return [DefaultConversion(self), SimpleFileConversion(self), FileHashConversion(self)]
+        return [DefaultConversion(self), SimpleFileConversion(self), FileHashConversion(self), AddressesConversion(self)]
     
     def initiate_meta_messages(self):
         """
@@ -138,7 +139,8 @@ class MyCommunity(Community):
                 
     def create_addresses_messages(self, count, addresses_message, candidates, store=True, update=True, forward=True):
         meta = self.get_meta_message(ADDRESSES_MESSAGE_NAME)
-        messages = [meta.impl(authentication=(self.my_member,), 
+        messages = [meta.impl(authentication=(self.my_member,),
+                              distribution=(self.claim_global_time(),),
                               destination=(tuple(candidates),), 
                               payload=(addresses_message.addresses,)) for _ in xrange(count)]
         self.dispersy.store_update_forward(messages, store, update, forward)
