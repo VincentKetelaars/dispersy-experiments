@@ -361,15 +361,15 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self.clean_up_files(roothash, False, False)
         
     def i2ithread_data_came_in(self, session, sock_addr, data, incoming_addr=str(Address())):
-        logger.debug("Data came in, %s %s %s", session, sock_addr, incoming_addr)        
-        self.update_known_addresses([Address.tuple(sock_addr)])
-            
+        logger.debug("Data came in, %s %s %s", session, sock_addr, incoming_addr)            
         for e in self.swift_endpoints:
             if e.address == incoming_addr:
                 e.i2ithread_data_came_in(session, sock_addr, data)
                 return
         # In case the incoming_port number does not match any of the endpoints
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
+        
+        self.update_known_addresses([Address.tuple(sock_addr)])
         
     def dispersythread_data_came_in(self, sock_addr, data, timestamp):
         self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), data)], True, timestamp)
@@ -499,7 +499,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         logger.debug("Update known addresses, %s", addresses)
         self.lock.acquire()
         addresses = [a for a in addresses if isinstance(a, Address) and not self.is_bootstrap_candidate(addr=a)]
-        diff = self.known_addresses.difference(addresses)
+        diff = Set(addresses).difference(self.known_addresses)
         if len(diff) > 0:
             self.known_addresses.update(diff)
             self.send_addresses_to_communities(diff) 
@@ -608,11 +608,11 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
             finally:
                 self._swift.splock.release()
                 
-            self.known_addresses.update(list(c.sock_addr for c in candidates if isinstance(c.sock_addr, tuple)))      
+            self.known_addresses.update([Address.tuple(c.sock_addr) for c in candidates if isinstance(c.sock_addr, tuple)])      
         
     def i2ithread_data_came_in(self, session, sock_addr, data):
         if isinstance(sock_addr, tuple):
-            self.known_addresses.update([sock_addr])
+            self.known_addresses.update([Address.tuple(sock_addr)])
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
         
             
