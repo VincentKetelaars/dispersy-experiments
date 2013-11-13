@@ -10,6 +10,7 @@ import test_conversion
 import test_endpoint
 import test_runner
 import test_address
+import test_download
 
 def suite():
     suite = unittest.TestSuite()
@@ -21,6 +22,7 @@ def suite():
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_endpoint))
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_runner))
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_address))
+    suite.addTest(unittest.TestLoader().loadTestsFromModule(test_download))
     # For testing of tests
 #     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(test_endpoint.TestEndpointNoConnection))
     return suite

@@ -7,7 +7,7 @@ import unittest
 
 from dispersy.logger import get_logger
 
-from src.tests.unit.test_definitions import SMALL_TASK_TIMEOUT
+from src.tests.unit.definitions import SMALL_TASK_TIMEOUT
 from src.dispersy_instance import DispersyInstance
 from src.definitions import SWIFT_BINPATH, DEST_DIR, FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME,\
     ADDRESSES_MESSAGE_NAME

@@ -57,7 +57,11 @@ class TestAddress(unittest.TestCase):
         self.assertEqual(addr.port, 0)
         self.assertEqual(addr.ip, "::0")
         self.assertEqual(addr.family, AF_INET6)
+        
+    def test_address_equal(self):
+        self.assertEqual(Address(port=1234), Address(port=1234))
+        self.assertEqual(Address(ip="0.0.1.2", port=1234), Address(ip="0.0.1.2", port=1234))
+        self.assertEqual(Address("::3", 12321, AF_INET6, 1, 1), Address("::3", 12321, AF_INET6, 1, 1))
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()

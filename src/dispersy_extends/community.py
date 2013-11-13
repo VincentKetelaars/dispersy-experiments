@@ -12,8 +12,8 @@ from dispersy.conversion import DefaultConversion
 from dispersy.message import Message
 from dispersy.authentication import MemberAuthentication
 from dispersy.resolution import PublicResolution
-from dispersy.distribution import FullSyncDistribution
-from dispersy.destination import CommunityDestination
+from dispersy.distribution import FullSyncDistribution, DirectDistribution
+from dispersy.destination import CommunityDestination, CandidateDestination
 
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.timeout import IntroductionRequestTimeout
@@ -52,7 +52,7 @@ class MyCommunity(Community):
         """
         self._simple_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
         self._file_hash_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
-        self._addresses_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
+        self._addresses_distribution = DirectDistribution()
         return [Message(self, SIMPLE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._simple_distribution, CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), SimpleFilePayload(), 
                         self.simple_message_check, self.simple_message_handle),
@@ -60,7 +60,7 @@ class MyCommunity(Community):
                         self._file_hash_distribution, CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), FileHashPayload(), 
                          self.file_hash_check, self.file_hash_handle),
                 Message(self, ADDRESSES_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
-                        self._addresses_distribution, CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), AddressesPayload(), 
+                        self._addresses_distribution, CandidateDestination(), AddressesPayload(), 
                         self.addresses_message_check, self.addresses_message_handle)]
         
     def simple_message_check(self, messages):
@@ -100,7 +100,7 @@ class MyCommunity(Community):
         """
         for x in messages:
             # Make sure that someone know that these addresses are one device
-            pass
+            self.dispersy.endpoint.peer_addresses_arrived(x.payload.addresses)
     
     def _short_member_id(self):
         return str(self.my_member.mid.encode("HEX"))[0:5]     
@@ -136,10 +136,10 @@ class MyCommunity(Community):
                             for _ in xrange(count)]
                 self.dispersy.store_update_forward(messages, store, update, forward)
                 
-    def create_addresses_messages(self, count, addresses_message, store=True, update=True, forward=True):
+    def create_addresses_messages(self, count, addresses_message, candidates, store=True, update=True, forward=True):
         meta = self.get_meta_message(ADDRESSES_MESSAGE_NAME)
         messages = [meta.impl(authentication=(self.my_member,), 
-                              distribution=(self.claim_global_time(), self._addresses_distribution.claim_sequence_number()), 
+                              destination=(candidates), 
                               payload=(addresses_message.addresses,)) for _ in xrange(count)]
         self.dispersy.store_update_forward(messages, store, update, forward)
                 

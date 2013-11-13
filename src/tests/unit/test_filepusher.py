@@ -11,7 +11,7 @@ from src.filepusher import FilePusher
 from src.definitions import SWIFT_BINPATH, MAX_FILE_SIZE, HASH_LENGTH, FILENAMES_NOT_TO_SEND, FILETYPES_NOT_TO_SEND
 from sets import Set
 
-from src.tests.unit.test_definitions import DIRECTORY, FILES
+from src.tests.unit.definitions import DIRECTORY, FILES
 
 all_success = False
         

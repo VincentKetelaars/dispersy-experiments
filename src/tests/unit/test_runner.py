@@ -6,7 +6,7 @@ Created on Oct 9, 2013
 import unittest
 from threading import Event
 
-from src.tests.unit.test_definitions import SMALL_TASK_TIMEOUT
+from src.tests.unit.definitions import SMALL_TASK_TIMEOUT
 from src.tools.runner import CallFunctionThread
 
 from dispersy.logger import get_logger

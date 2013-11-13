@@ -17,7 +17,7 @@ from src.address import Address
 from src.definitions import SWIFT_BINPATH, HASH_LENGTH, TIMEOUT_TESTS, SLEEP_TIME
 from src.dispersy_extends.endpoint import MultiEndpoint, get_hash, try_sockets
 
-from src.tests.unit.test_definitions import DIRECTORY, FILES, DISPERSY_WORKDIR
+from src.tests.unit.definitions import DIRECTORY, FILES, DISPERSY_WORKDIR
 from src.tests.unit.mock_classes import FakeDispersy, FakeSwift
 
 logger = get_logger(__name__)

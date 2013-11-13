@@ -19,7 +19,7 @@ from src.swift.swift_process import MySwiftProcess # This should be imported fir
 from dispersy.logger import get_logger
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
-from dispersy.candidate import BootstrapCandidate
+from dispersy.candidate import BootstrapCandidate, WalkCandidate
 
 from Tribler.Core.Swift.SwiftDef import SwiftDef
 from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
@@ -27,8 +27,10 @@ from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
 from src.address import Address
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
-from src.download import Download
+from src.download import Download, Peer
 from src.definitions import SLEEP_TIME, HASH_LENGTH
+from src.dispersy_extends.payload import AddressesCarrier
+from src.dispersy_extends.community import MyCommunity
 
 logger = get_logger(__name__)
 
@@ -67,7 +69,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self._resetting = False
         self._endpoint = None
         self.swift_endpoints = []
-        self.swift_queue = Queue.Queue() # TODO: Queue should probably be synchronized
+        self.swift_queue = Queue.Queue()
         # TODO: Make regular checks to make sure that nothing is left in the queue
         TunnelEndpoint.__init__(self, swift_process)
         EndpointStatistics.__init__(self)
@@ -145,9 +147,10 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.swift_endpoints.append(new_endpoint)
         if len(self.swift_endpoints) == 1:
             self._endpoint = new_endpoint
+        # TODO: In case we have already send our local addresses around, now update this message with this new endpoint
         self.lock.release()
         return new_endpoint
-            
+
     def remove_endpoint(self, endpoint):
         """
         Remove endpoint.
@@ -259,10 +262,12 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         All known addresses and downloads are added.
         """
         logger.debug("Distribute all hashes")
+        self.lock.acquire()
         for roothash in self.downloads.keys():
             if self.downloads[roothash].seeder():
                 for addr in self.known_addresses:
                     self.add_peer(addr, roothash)
+        self.lock.release()
     
     def add_peer(self, addr, roothash):                
         """
@@ -283,12 +288,12 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             logger.debug("Add bootstrap candidate rejected")
             self.lock.release()
             return
-        if (roothash is not None and not (addr, roothash) in self.added_peers 
+        if (roothash is not None and not any([addr == a and roothash == h for (a, h) in self.added_peers]) 
             and not addr.addr() in self._dispersy._bootstrap_candidates): # Don't add bootstrap peers
             d = self.retrieve_download_impl(roothash)
             if d is not None:
                 logger.info("Add peer %s with roothash %s ", addr, roothash)
-                self.downloads[roothash].add_peer(addr)
+                self.downloads[roothash].add_peer(Peer([addr]))
                 self._swift.add_peer(d, addr, self._endpoint.address)
                 self.added_peers.add((addr, roothash))
         self.lock.release()
@@ -438,7 +443,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                 if (not d.is_finished()) or d.seeder(): # No sense in adding a download that is finished, and not seeding
                     logger.debug("Enqueue start download %s", h)
                     self.swift_queue.put((self._swift.start_download, (d.downloadimpl,), {}))
-                    for addr in d.peers():
+                    for addr in [peer.addresses for peer in d.peers()]:
                         if not (addr, h) in self.added_peers:
                             logger.debug("Enqueue add peer %s %s", addr, h)
                             self.swift_queue.put((self._swift.add_peer, (d.downloadimpl, addr, None), {}))                            
@@ -486,19 +491,29 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.update_known_addresses([Address.tuple(c.sock_addr) for c in candidates])
         
     def update_known_addresses(self, addresses):
+        """
+        Update the list of known addresses (excluding bootstrappers), with addresses
+        Note that if the list grows, the new addresses will be called used for distributing
+        local addresses and adding peers to swift
+        """
         logger.debug("Update known addresses, %s", addresses)
-        ka_size = len(self.known_addresses)
-        addresses = [a for a in addresses if isinstance(a, Address)]
-        self.known_addresses.update(addresses)
-        if ka_size < len(self.known_addresses):
+        self.lock.acquire()
+        addresses = [a for a in addresses if isinstance(a, Address) and not self.is_bootstrap_candidate(addr=a)]
+        diff = self.known_addresses.difference(addresses)
+        if len(diff) > 0:
+            self.known_addresses.update(diff)
+            self.send_addresses_to_communities(diff) 
             self.distribute_all_hashes_to_peers()
+        self.lock.release()
             
     def update_known_downloads(self, roothash, filename, download_impl, address=None, seed=False, download=False):
         # Know about all hashes that go through this endpoint
         logger.debug("Update known downloads, %s, %s", roothash, filename)
+        self.lock.acquire()
         self.downloads[roothash] = Download(roothash, filename, download_impl, seed=seed, download=download)
         self.downloads[roothash].moreinfo = True
-        self.downloads[roothash].add_peer(address)
+        self.downloads[roothash].add_peer(Peer(address))
+        self.lock.release()
         
     def swift_started_running_callback(self):
         logger.info("The TCP connection with Swift is up")
@@ -522,7 +537,24 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         # If it is new create endpoint
         # Known, adapt endpoint to it
         pass
+    
+    def send_addresses_to_communities(self, addresses):
+        """
+        The addresses should be reachable from the candidates point of view
+        Local addresses will not benefit the candidate or us
+        """
+        logger.debug("Send address to %s", addresses)
+        candidates = [WalkCandidate(a.addr(), False, a.addr(), a.addr(), u"unknown") for a in addresses]
+        message = AddressesCarrier([e.address for e in self.swift_endpoints])
+        for c in self._dispersy.get_communities():
+            if isinstance(c, MyCommunity): # Ensure that the create_addresses_messages exists
+                self._dispersy.callback.register(c.create_addresses_messages, (1,message,candidates), delay=0)
         
+    def peer_addresses_arrived(self, addresses):
+        logger.debug("Peer's addresses arrived %s", addresses)
+        for download in self.downloads:
+            # TODO: Protect against local addresses
+            download.merge_peers(Peer(addresses))
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
@@ -591,6 +623,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     def swift_add_socket(self):
         logger.debug("SwiftEndpoint add socket %s", self.address)
         self._swift.add_socket(self.address, None)
+
                     
 def get_hash(filename, swift_path):
     """

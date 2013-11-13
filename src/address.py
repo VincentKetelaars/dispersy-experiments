@@ -160,13 +160,16 @@ class Address(object):
     def __eq__(self, other):
         if not isinstance(other, Address):
             return False
-        if (self.ip == other.ip and self.port == other.port and self.family == other.family and 
-            self._flowinfo == other._flowinfo and self._scopeid == other._scopeid and self._if == other._if):
+        if (self._ip == other._ip and self._port == other._port and self._family == other._family and 
+            self._flowinfo == other._flowinfo and self._scopeid == other._scopeid):
             return True
         return False
     
     def __ne__(self, other):
         return not self.__eq__(other)
+    
+    def __hash__(self):
+        return hash((self._ip, self._port, self._family, self._flowinfo, self._scopeid))
 
 class Interface(object):
     def __init__(self, name, address, netmask, broadcast):
