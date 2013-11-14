@@ -265,8 +265,9 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.lock.acquire()
         for roothash in self.downloads.keys():
             if self.downloads[roothash].seeder():
-                for addr in self.known_addresses:
-                    self.add_peer(addr, roothash)
+                for peer in self.downloads[roothash].peers():
+                    for addr in peer.addresses:
+                        self.add_peer(addr, roothash)
         self.lock.release()
     
     def add_peer(self, addr, roothash):                
@@ -293,7 +294,6 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             d = self.retrieve_download_impl(roothash)
             if d is not None:
                 logger.info("Add peer %s with roothash %s ", addr, roothash)
-                self.downloads[roothash].add_peer(Peer([addr]))
                 self._swift.add_peer(d, addr, self._endpoint.address)
                 self.added_peers.add((addr, roothash))
         self.lock.release()
@@ -443,11 +443,12 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                 if (not d.is_finished()) or d.seeder(): # No sense in adding a download that is finished, and not seeding
                     logger.debug("Enqueue start download %s", h)
                     self.swift_queue.put((self._swift.start_download, (d.downloadimpl,), {}))
-                    for addr in [peer.addresses for peer in d.peers()]:
-                        if not (addr, h) in self.added_peers:
-                            logger.debug("Enqueue add peer %s %s", addr, h)
-                            self.swift_queue.put((self._swift.add_peer, (d.downloadimpl, addr, None), {}))                            
-                            self.added_peers.add((addr, h))
+                    for peer in self.downloads[h].peers():
+                        for addr in peer.addresses:
+                            if not (addr, h) in self.added_peers:
+                                logger.debug("Enqueue add peer %s %s", addr, h)
+                                self.swift_queue.put((self._swift.add_peer, (d.downloadimpl, addr, None), {}))                            
+                                self.added_peers.add((addr, h))
                             
             while not temp_queue.empty():
                 self.swift_queue.put(temp_queue.get())
@@ -502,7 +503,8 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         diff = Set(addresses).difference(self.known_addresses)
         if len(diff) > 0:
             self.known_addresses.update(diff)
-            self.send_addresses_to_communities(diff) 
+            self.send_addresses_to_communities(diff)
+            # TODO: Perhaps add diff to download peers as well
             self.distribute_all_hashes_to_peers()
         self.lock.release()
             
@@ -512,7 +514,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.lock.acquire()
         self.downloads[roothash] = Download(roothash, filename, download_impl, seed=seed, download=download)
         self.downloads[roothash].moreinfo = True
-        self.downloads[roothash].merge_peers(Peer(addresses))
+        self.downloads[roothash].add_peer(Peer(addresses))
         self.lock.release()
         
     def swift_started_running_callback(self):
@@ -556,6 +558,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         for download in self.downloads.itervalues():
             # TODO: Protect against local addresses
             download.merge_peers(Peer(addresses))
+        self.distribute_all_hashes_to_peers()
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     

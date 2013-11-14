@@ -79,7 +79,7 @@ class DispersyInstance(object):
         self._dispersy = Dispersy(self._callback, endpoint, self._work_dir, self._sqlite_database)
         
         # Timeout determines how long the bootstrappers should try before continuing (at the moment)
-        self._dispersy.start(timeout=1) 
+        self._dispersy.start(timeout=1.0) 
         print "Dispersy is listening on port %d" % self._dispersy.lan_address[1]
         
         self._community = self._callback.call(self.create_mycommunity)

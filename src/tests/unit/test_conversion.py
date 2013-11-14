@@ -6,6 +6,7 @@ Created on Sep 17, 2013
 import unittest
 
 from dispersy.logger import get_logger
+from dispersy.candidate import Candidate
 
 from src.tests.unit.definitions import SMALL_TASK_TIMEOUT
 from src.dispersy_instance import DispersyInstance
@@ -63,9 +64,11 @@ class TestConversion(unittest.TestCase):
         for c in self._conversions:
             if isinstance(c, AddressesConversion):
                 meta = self._di._community.get_meta_message(ADDRESSES_MESSAGE_NAME)
-                addresses = [Address.ipv4("0.0.0.1:1232"), Address.ipv6("[::0]:12145", Address(port=32532))]
-                message = meta.impl(authentication=(self._di._community.my_member,), distribution=(self._di._community.claim_global_time(), self._di._community._file_hash_distribution.claim_sequence_number()), 
-                              payload=(addresses))
+                addresses = [Address.ipv4("0.0.0.1:1232"), Address.ipv6("[::0]:12145"), Address(port=32532)]
+                message = meta.impl(authentication=(self._di._community.my_member,),
+                                      distribution=(self._di._community.claim_global_time(),),
+                                      destination=(Candidate(addresses[0].addr(), True),), 
+                                      payload=(addresses,))
                 encoded = c.encode_payload(message)
                 placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
                 _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
