@@ -86,7 +86,7 @@ class Download(object):
     def add_address(self, address):
         if address is not None and isinstance(address, Address):
             for peer in self._peers:
-                if address in peer.address:
+                if address in peer.addresses:
                     return
             self._peers.add(Peer([address]))
         

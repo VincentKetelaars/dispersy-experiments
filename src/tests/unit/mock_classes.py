@@ -24,6 +24,9 @@ class FakeSwift(object):
     def set_on_tcp_connection_callback(self, callback):
         pass
     
+    def set_on_sockaddr_info_callback(self, callback):
+        pass
+    
     def add_socket(self, address):
         self.listenaddrs.append(address)
         

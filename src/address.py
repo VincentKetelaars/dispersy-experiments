@@ -6,7 +6,8 @@ Created on Oct 14, 2013
 
 from dispersy.logger import get_logger
 
-from socket import AF_INET, AF_INET6
+from struct import unpack
+from socket import AF_INET, AF_INET6, inet_aton
 from dispersy.dispersy import Dispersy
 
 logger = get_logger(__name__)
@@ -23,8 +24,6 @@ class Address(object):
         self._flowinfo = flowinfo # IPv6 only
         self._scopeid = scopeid # IPv6 only
         self._if = if_
-        if if_ is None:
-            self.resolve_interface()
         
     @property
     def ip(self):
@@ -37,6 +36,10 @@ class Address(object):
     @property
     def family(self):
         return self._family
+    
+    @property
+    def interface(self):
+        return self._if
     
     @classmethod
     def localport(cls, port_str):
@@ -154,8 +157,14 @@ class Address(object):
     
     def resolve_interface(self):
         for if_ in Dispersy._get_interface_addresses():
-            if if_.address == self._ip:
+            if (self.ipstr_to_int(if_.address) & self.ipstr_to_int(if_.netmask) == 
+                self.ipstr_to_int(self._ip) & self.ipstr_to_int(if_.netmask)): # Same subnet
                 self._if = Interface(if_.name, if_.address, if_.netmask, if_.broadcast)
+                return True
+        return False
+    
+    def ipstr_to_int(self, address):
+        return unpack("!L", inet_aton(address))[0]
     
     def __eq__(self, other):
         if not isinstance(other, Address):

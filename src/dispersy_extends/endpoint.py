@@ -51,10 +51,19 @@ class EndpointStatistics(Statistics):
         self.start_time = datetime.now()
         self.is_alive = False # The endpoint is alive between open and close
         self.id = urandom(16)
-        self.known_addresses = Set()
+        self.known_addresses = Set() 
+        self._socket_running = False
         
     def update(self):
         pass
+    
+    @property
+    def socket_running(self):
+        return self._socket_running
+    
+    @socket_running.setter
+    def socket_running(self, running):
+        self._socket_running = running
 
 class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
     '''
@@ -78,8 +87,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self.lock = RLock() # Reentrant Lock
         
         if swift_process:
-            self._swift.set_on_swift_restart_callback(self.restart_swift)
-            self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback)
+            self.set_callbacks()
             for addr in self._swift.listenaddrs:
                 self.add_endpoint(addr)
     
@@ -94,7 +102,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
     
     def send(self, candidates, packets):
         self.lock.acquire();
-        if not self._swift.is_ready():
+        if not self._swift.is_ready() or not self.socket_running:
             self.swift_queue.put((self.send, (candidates, packets), {}))
             logger.debug("Send is queued")
             self.lock.release()
@@ -431,8 +439,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             # Make sure not to make the same mistake as what let to this
             # Any roothash added twice will create an error, leading to this. 
             self._swift = MySwiftProcess(self._swift.binpath, self._swift.workdir, None, self._swift.listenaddrs, None, None, None)
-            self._swift.set_on_swift_restart_callback(self.restart_swift) # Normally in init            
-            self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback) #Normally in init
+            self.set_callbacks()
             self._swift.add_download(self) # Normally in open
             # First add all calls to the queue and then start the TCP connection
             # Be sure to put all current queued items at the back of the startup queue
@@ -560,6 +567,43 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             # TODO: Protect against local addresses
             download.merge_peers(Peer(addresses))
         self.distribute_all_hashes_to_peers()
+        
+    def set_callbacks(self):
+        self._swift.set_on_swift_restart_callback(self.restart_swift)
+        self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback)
+        self._swift.set_on_sockaddr_info_callback(self.sockaddr_info_callback)
+        
+    def sockaddr_info_callback(self, address, errno):
+        logger.debug("Socket info callback %s %d", address, errno)
+        if errno == -1:
+            logger.debug("Something is going on, but don't know what.")
+        elif errno == 0:
+            logger.debug("Socket has been bound")
+            if address.resolve_interface():
+                for e in self.swift_endpoints:
+                    if e.address.interface.name == address.interface.name:
+                        e.socket_running = True
+                        return
+            else:
+                logger.debug("Might have been able to bind to something, but unable to resolve interface")            
+        elif errno == 101:
+            logger.debug("Network error, interface down or route unavailable?")
+        elif errno == 22:
+            logger.debug("Invalid argument, socket probably gone")
+        if errno > 0: 
+            if not address.resolve_interface():
+                for e in self.swift_endpoints:
+                    if e.address == address:
+                        e.socket_running = False
+                        return
+
+    @property
+    def socket_running(self):
+        return all([e.socket_running for e in self.swift_endpoints])
+    
+    @socket_running.setter
+    def socket_running(self, running):
+        pass
     
 class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     
@@ -567,8 +611,11 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         super(SwiftEndpoint, self).__init__(swift_process) # Dispersy and session code 
         EndpointStatistics.__init__(self)
         self.address = address
-        if not address in self._swift.listenaddrs:
-            self.swift_add_socket()
+        if self.address.resolve_interface():
+            if not address in self._swift.listenaddrs:
+                self.swift_add_socket()
+        else:
+            logger.debug("This address can not be resolved to an interface")
         
     def open(self, dispersy):
         self.is_alive = True

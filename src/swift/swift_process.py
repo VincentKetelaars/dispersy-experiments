@@ -135,8 +135,15 @@ class MySwiftProcess(SwiftProcess):
         
     def read_and_print_out(self, line):
         # As soon as a TCP connection has been made, will the FastI2I be allowed to start
-        if line.find("TCP") != -1:
+        line.strip()
+        listenstr = "swift::Listen addr" 
+        if line.find("Creating new TCP listener") != -1:
             self._swift_running.set()
+        elif line.find(listenstr) != -1:
+            addrstr = line[len(listenstr) + 1:]
+            saddr = Address.unknown(addrstr)
+            if saddr != Address():
+                self._sockaddr_info_callback(saddr, 0)
             
     def start_cmd_connection(self):
         # Wait till Libswift is actually ready to create a TCP connection
@@ -160,6 +167,9 @@ class MySwiftProcess(SwiftProcess):
         
     def set_on_tcp_connection_callback(self, callback):
         self._tcp_connection_open_callback = callback
+        
+    def set_on_sockaddr_info_callback(self, callback):
+        self._sockaddr_info_callback = callback
     
     def i2ithread_readlinecallback(self, ic, cmd):
         logger.debug("CMD IN: %s", cmd)
@@ -192,6 +202,16 @@ class MySwiftProcess(SwiftProcess):
                 if self._warn_missing_endpoint:
                     self._warn_missing_endpoint = False
                     print >> sys.stderr, "sp: Dispersy endpoint is not available"
+                    
+        elif words[0] == "SOCKERROR":
+            saddr = words[1]
+            errno = -1
+            try:
+                errno = int(words[2])
+            except:
+                pass
+            if self._sockaddr_info_callback:
+                self._sockaddr_info_callback(Address.unknown(saddr), errno)
 
         else:
             roothash = binascii.unhexlify(words[1])
