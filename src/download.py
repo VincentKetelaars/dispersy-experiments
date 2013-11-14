@@ -7,6 +7,7 @@ import binascii
 from datetime import datetime
 from sets import Set
 
+from src.address import Address
     
 class Peer(object):
     
@@ -81,6 +82,13 @@ class Download(object):
     
     def path(self):
         return self._directories + self._filename
+    
+    def add_address(self, address):
+        if address is not None and isinstance(address, Address):
+            for peer in self._peers:
+                if address in peer.address:
+                    return
+            self._peers.add(Peer([address]))
         
     def add_peer(self, peer):
         if peer is not None and isinstance(peer, Peer) and len(peer.addresses) > 0:

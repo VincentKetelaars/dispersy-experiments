@@ -34,7 +34,7 @@ from src.dispersy_extends.community import MyCommunity
 
 logger = get_logger(__name__)
 
-LOG_MESSAGES = False
+LOG_MESSAGES = True
 
 class NoEndpointAvailableException(Exception):
     pass
@@ -295,6 +295,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             if d is not None:
                 logger.info("Add peer %s with roothash %s ", addr, roothash)
                 self._swift.add_peer(d, addr, self._endpoint.address)
+                self.downloads[roothash].add_address(addr)
                 self.added_peers.add((addr, roothash))
         self.lock.release()
             
