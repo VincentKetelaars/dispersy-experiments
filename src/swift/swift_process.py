@@ -129,10 +129,7 @@ class MySwiftProcess(SwiftProcess):
         # Dispersy shutdown
         self._warn_missing_endpoint = True
         
-        # callback to endpoint when SwiftProcess.start_cmd_connection has been run.
-        self.swift_queue = Queue.Queue()
-        # TODO: Make regular checks to make sure that nothing is left in the queue
-        
+                
     def read_and_print_out(self, line):
         # As soon as a TCP connection has been made, will the FastI2I be allowed to start
         line.strip()

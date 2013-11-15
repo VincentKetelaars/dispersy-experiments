@@ -9,6 +9,7 @@ from os.path import isfile, dirname, exists, basename, getmtime
 from datetime import datetime
 from threading import Thread, Event, RLock
 from sets import Set
+from errno import EADDRINUSE, EADDRNOTAVAIL
 import binascii
 import socket
 import time
@@ -698,6 +699,7 @@ def try_sockets(addrs, timeout=1.0, log=True):
     
     @param ports: List of local socket addresses
     @param timeout: Try until timeout time has been exceeded
+    @param log: Log the logger.exception
     @return: True if the sockets are free
     """
     event = Event()
@@ -714,15 +716,20 @@ def try_socket(addr, log=True):
     This methods tries to bind to an UDP socket.
     
     @param port: Local socket address
+    @param log: Log the logger.exception
     @return: True if socket is free to use
     """
     try:
         s = socket.socket(addr.family, socket.SOCK_DGRAM)
         s.bind(addr.addr())
         return True
-    except:
+    except Exception, ex:
         if log:
             logger.exception("Bummer, %s is still in use!", str(addr))
+        (error_number, error_message) = ex
+        if error_number == (EADDRINUSE or EADDRNOTAVAIL):
+            return False
+        logger.debug("He, we haven't taken into account this error yet!!\n%s", error_message)
         return False
     finally:
         s.close()
