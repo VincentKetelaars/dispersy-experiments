@@ -137,27 +137,7 @@ class DispersyInstance(object):
         return self._dest_dir
     
     def create_swift_instance(self, addrs):
-        
-        def recur(addrs, n, iteration):
-            if iteration >= 5:
-                return None
-            if addrs is None or not addrs:
-                addrs = [Address.localport(random.randint(*RANDOM_PORTS)) for _ in range(n)]
-            # TODO: Go through each address separately, otherwise unnecessary generating, and increasing chance of failure
-            if not try_sockets(addrs):
-                addrs = recur(None, n, iteration + 1)
-            return addrs
-        
-        if addrs is None or not addrs:
-            addrs = recur(None, 1, 0)
-        else:
-            addrs = recur(addrs, len(addrs), 0)
-        
-        if addrs is None:
-            logger.warning("Could not obtain free ports!")
-        else:
-            logger.debug("Swift will listen to %s", [str(a) for a in addrs])
-        
+        addrs = verify_addresses_are_free(addrs)
         httpgwport = None
         cmdgwport = None
         spmgr = None
@@ -173,7 +153,31 @@ class DispersyInstance(object):
     
     def send_introduction_request(self, address):
         # Each new candidate will be sent an introduction request, if update_bloomfilter > 0
-        self._community.create_candidate(address, True, address, address, u"unknown") 
+        self._community.create_candidate(address, True, address, address, u"unknown")
+        
+def verify_addresses_are_free(addrs):
+    def recur(addrs, n, iteration):
+        if iteration >= 5:
+            return None
+        if addrs is None or not addrs:
+            addrs = [Address.localport(random.randint(*RANDOM_PORTS)) for _ in range(n)]
+        for addr in addrs:
+            if not try_sockets([addr]):
+                addr.set_port(random.randint(*RANDOM_PORTS))
+                addr = recur([addr], 1, iteration + 1)[0]
+        return addrs
+    
+    if addrs is None or not addrs:
+        addrs = recur(None, 1, 0)
+    else:
+        addrs = recur(addrs, len(addrs), 0)
+    
+    if addrs is None:
+        logger.warning("Could not obtain free ports!")
+    else:
+        logger.debug("Swift will listen to %s", [str(a) for a in addrs])
+        
+    return addrs
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance')

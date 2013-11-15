@@ -76,6 +76,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
     def __init__(self, swift_process):
         self._thread_stop_event = Event()
         self._resetting = False
+        self._waiting_on_cmd_connection = False
         self._endpoint = None
         self.swift_endpoints = []
         self.swift_queue = Queue.Queue()
@@ -106,12 +107,13 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
             self.swift_queue.put((self.send, (candidates, packets), {}))
             logger.debug("Send is queued")
             self.lock.release()
-            return
+            return False
         logger.debug("Send %s %d", candidates, len(packets))
         self.update_known_addresses_candidates(candidates, packets)
-        self.determine_endpoint(known_addresses=self.known_addresses, subset=True)
-        self._endpoint.send(candidates, packets)
+        self.determine_endpoint()
+        send_success = self._endpoint.send(candidates, packets)
         self.lock.release()
+        return send_success
             
     def open(self, dispersy):
         ret = TunnelEndpoint.open(self, dispersy)
@@ -189,51 +191,30 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                 e = x
         return e
     
-    def _next_endpoint(self):
+    def _next_endpoint(self, current):
         i = -1
         for x in self.swift_endpoints:
-            if x == self._endpoint:
+            if x == self.current:
                 return self.swift_endpoints[i % len(self.swift_endpoints)]
             i+=1
-        return self._endpoint
+        return current
     
-    def determine_endpoint(self, swift=False, known_addresses=None, subset=True):
+    def determine_endpoint(self):
         """
         The endpoint that will take care of the task at hand, will be chosen here. 
         The chosen endpoint will be assigned to self._endpoint
         If no appropriate endpoint is found, the current endpoint will remain.
         """
         
-        def recur(endpoints, swift=False, known_addresses=None, subset=True):
-            if endpoints == Set():
-                return self._endpoint
-            
-            endpoint = None
-            tried = Set()
-            if known_addresses is not None:
-                for e in endpoints:
-                    tried.add(e)
-                    if subset and Set(known_addresses).issubset(e.known_addresses):
-                        endpoint = e
-                    if not subset and not Set(known_addresses).issubset(e.known_addresses):
-                        endpoint = e
-                
-                if endpoint is None:
-                    return self._endpoint
-            
-            else:
-                endpoint = endpoints.pop()
-                tried.add(endpoint)
-            
-            if swift and not isinstance(endpoint, SwiftEndpoint):
-                recur(tried.difference(endpoints), swift, known_addresses, subset)
-                
+        def recur(endpoint):
+            if not endpoint.is_alive or not endpoint.socket_running:
+                recur(self._next_endpoint(endpoint))
             return endpoint  
         
         if (len(self.swift_endpoints) == 0):
             self._endpoint = None
         elif (len(self.swift_endpoints) > 1):
-            self._endpoint = recur(Set(self.swift_endpoints), swift, known_addresses, subset)
+            self._endpoint = recur(self._endpoint)
         else:
             self._endpoint = self.swift_endpoints[0]
     
@@ -424,7 +405,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         """
         logger.debug("Restart swift called")
         self.lock.acquire()
-        if self.is_alive and not self._resetting:
+        if self.is_alive and not self._resetting and not self._waiting_on_cmd_connection and not self._swift.is_running():
             self._resetting = True
             logger.info("Resetting swift")
             # Make sure that the current swift instance is gone
@@ -460,7 +441,8 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                             
             while not temp_queue.empty():
                 self.swift_queue.put(temp_queue.get())
-                
+            
+            self._waiting_on_cmd_connection = True
             self._swift.start_cmd_connection() # Normally in open
             self._resetting = False
         self.lock.release()
@@ -527,7 +509,11 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         
     def swift_started_running_callback(self):
         logger.info("The TCP connection with Swift is up")
-        while not self.swift_queue.empty():
+        self._waiting_on_cmd_connection = False
+        self.dequeue_swift_queue()
+        
+    def dequeue_swift_queue(self):
+        while not self.swift_queue.empty() and self._swift.is_ready():
             func, args, kargs = self.swift_queue.get()
             logger.debug("Dequeue %s %s %s", func, args, kargs)
             func(*args, **kargs)            
@@ -575,27 +561,26 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         
     def sockaddr_info_callback(self, address, errno):
         logger.debug("Socket info callback %s %d", address, errno)
-        if errno == -1:
+        if errno < 0:
             logger.debug("Something is going on, but don't know what.")
         elif errno == 0:
-            logger.debug("Socket has been bound")
+            logger.debug("Socket is bound and active")
             if address.resolve_interface():
                 for e in self.swift_endpoints:
                     if e.address.interface.name == address.interface.name:
                         e.socket_running = True
-                        return
+                self.dequeue_swift_queue()
             else:
-                logger.debug("Might have been able to bind to something, but unable to resolve interface")            
-        elif errno == 101:
-            logger.debug("Network error, interface down or route unavailable?")
-        elif errno == 22:
-            logger.debug("Invalid argument, socket probably gone")
-        if errno > 0: 
+                logger.debug("Might have been able to bind to something, but unable to resolve interface")
+        elif errno > 0:
+            for e in self.swift_endpoints:
+                if e.address == address:
+                    e.socket_running = False
             if not address.resolve_interface():
-                for e in self.swift_endpoints:
-                    if e.address == address:
-                        e.socket_running = False
-                        return
+                logger.debug("Cannot resolve interface")
+            if try_socket(address):
+                logger.debug("Yelp, socket is gone!")
+                
 
     @property
     def socket_running(self):
@@ -707,7 +692,7 @@ def get_hash(filename, swift_path):
         # returning get_roothash() gives an error somewhere (perhaps message?)
         return sdef.get_roothash_as_hex()
     
-def try_sockets(addrs, timeout=1.0):
+def try_sockets(addrs, timeout=1.0, log=True):
     """
     This method returns when all UDP sockets are free to use, or if the timeout is reached
     
@@ -718,13 +703,13 @@ def try_sockets(addrs, timeout=1.0):
     event = Event()
     t = time.time()        
     while not event.is_set() and t + timeout > time.time():
-        if all([try_socket(a) for a in addrs]):
+        if all([try_socket(a, log) for a in addrs]):
             event.set()
         event.wait(0.1)
         
-    return all([try_socket(a) for a in addrs])
+    return all([try_socket(a, log) for a in addrs])
     
-def try_socket(addr):
+def try_socket(addr, log=True):
     """
     This methods tries to bind to an UDP socket.
     
@@ -735,8 +720,9 @@ def try_socket(addr):
         s = socket.socket(addr.family, socket.SOCK_DGRAM)
         s.bind(addr.addr())
         return True
-    except Exception:
-        logger.exception("Bummer, %s is still in use!", str(addr))
+    except:
+        if log:
+            logger.exception("Bummer, %s is still in use!", str(addr))
         return False
     finally:
         s.close()

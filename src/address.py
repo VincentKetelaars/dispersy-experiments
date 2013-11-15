@@ -137,6 +137,9 @@ class Address(object):
         self._ip = ip
         self._family = AF_INET
         
+    def set_port(self, port):
+        self._port = port
+        
     def addr(self):
         if self.family == AF_INET:
             return (self.ip, self.port)
@@ -156,6 +159,9 @@ class Address(object):
         return self.port == 0
     
     def resolve_interface(self):
+        if self.is_wildcard_ip():
+            self._if = Interface("All", self._ip, self._ip, self._ip)
+            return True
         for if_ in Dispersy._get_interface_addresses():
             if (self.ipstr_to_int(if_.address) & self.ipstr_to_int(if_.netmask) == 
                 self.ipstr_to_int(self._ip) & self.ipstr_to_int(if_.netmask)): # Same subnet

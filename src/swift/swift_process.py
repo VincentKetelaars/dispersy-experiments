@@ -142,7 +142,7 @@ class MySwiftProcess(SwiftProcess):
         elif line.find(listenstr) != -1:
             addrstr = line[len(listenstr) + 1:]
             saddr = Address.unknown(addrstr)
-            if saddr != Address():
+            if saddr != Address() and self._sockaddr_info_callback:
                 self._sockaddr_info_callback(saddr, 0)
             
     def start_cmd_connection(self):
@@ -203,7 +203,7 @@ class MySwiftProcess(SwiftProcess):
                     self._warn_missing_endpoint = False
                     print >> sys.stderr, "sp: Dispersy endpoint is not available"
                     
-        elif words[0] == "SOCKERROR":
+        elif words[0] == "SOCKETINFO":
             saddr = words[1]
             errno = -1
             try:
