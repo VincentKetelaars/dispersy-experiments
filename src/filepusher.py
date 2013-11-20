@@ -33,22 +33,28 @@ class FilePusher(object):
         @param files: The list of files to monitor
         @param file_size: The decision variable for choosing callback object
         '''
-        if directory and exists(directory) and isdir(directory):
-            self._dir = directory
-        else:
-            self._dir = None
+        self._dir = None
+        self.set_directory(directory)
+        # TODO: Allow for multiple directories
         
         self._files = []
-        if files and hasattr(files, "__iter__"): # It should also have a next (or __next__ in Python 3.x) method
-            for f in files:
-                if exists(f) and isfile(f):
-                    self._files.append(f)
+        self.add_files(files)
                 
         self._recent_files = []
         self._callback = callback
         self._file_size = file_size
         self.swift_path = swift_path
         self._stop_event = Event()
+        
+    def set_directory(self, directory):
+        if directory and exists(directory) and isdir(directory):
+            self._dir = directory
+        
+    def add_files(self, files):
+        if files and hasattr(files, "__iter__"): # It should also have a next (or __next__ in Python 3.x) method
+            for f in files:
+                if exists(f) and isfile(f):
+                    self._files.append(f)
         
     def start(self):
         """

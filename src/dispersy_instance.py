@@ -10,8 +10,7 @@ import argparse
 from threading import Event
 
 from dispersy.logger import get_logger
-from src.swift.swift_process import MySwiftProcess # This should be imported first, or it will screw up the logs.
-# from dispersy.candidate import WalkCandidate
+from src.swift.swift_process import MySwiftProcess  # This should be imported first, or it will screw up the logs. # TODO: Fix this
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 
@@ -21,7 +20,8 @@ from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
 from src.definitions import DISPERSY_WORK_DIR, SQLITE_DATABASE, TOTAL_RUN_TIME, MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, \
-DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH, BLOOM_FILTER_UPDATE, ENABLE_CANDIDATE_WALKER
+DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH, BLOOM_FILTER_UPDATE, ENABLE_CANDIDATE_WALKER,\
+    STATE_INITIALIZED, STATE_RUNNING, STATE_STOPPED, STATE_DONE
 
 logger = get_logger(__name__)
 
@@ -30,36 +30,35 @@ class DispersyInstance(object):
     Instance of Dispersy that runs on its own process
     '''
 
-    def __init__(self, dest_dir, swift_binpath, work_dir=u".", sqlite_database=u":memory:", swift_work_dir=None, 
-                 swift_zerostatedir=None, listen=[], peers=[], directory=None, files=[], run_time=-1, bloomfilter_update=-1,
+    def __init__(self, dest_dir, swift_binpath, dispersy_work_dir=u".", sqlite_database=u":memory:", swift_work_dir=None,
+                 swift_zerostatedir=None, listen=[], peers=[], files_directory=None, files=[], run_time=-1, bloomfilter_update=-1,
                  walker=False):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
-        self._work_dir = work_dir
-        self._sqlite_database = sqlite_database
+        self._dispersy_work_dir = dispersy_work_dir 
+        self._sqlite_database = sqlite_database # :memory: is in memory
         self._swift_work_dir = swift_work_dir
-        self._swift_zerostatedir = swift_zerostatedir
-        self._listen = listen
-        self._peers = peers
-        self._directory = directory
-        self._files = files
-        self._filepusher = None
-        self._run_time = run_time
-        self._bloomfilter_update = bloomfilter_update
-        self._walker = walker
+        self._swift_zerostatedir = swift_zerostatedir 
+        self._listen = listen # Local socket addresses, instances of Address
+        self._peers = peers # Peer addresses, instances of Address
+        self._files_directory = files_directory # Directory to monitor for new files (or changes in files)
+        self._files = files # Files to monitor
+        self._run_time = run_time # Time after which this process stops, -1 is infinite
+        self._bloomfilter_update = bloomfilter_update # Update every # seconds the bloomfilter to peers, -1 for never
+        self._walker = walker # Turn walker on
         
-        self._loop_event = Event()
+        self._filepusher = None
+        
+        self._loop_event = Event() # Loop
+        
+        self._api_callback = None # Any kind of callback to the API goes through this
         
         # redirect swift output:
-        sys.stderr = open(self._dest_dir+"/"+str(os.getpid()) + ".err", "w")
+        sys.stderr = open(self._dest_dir + "/" + str(os.getpid()) + ".err", "w")
         # redirect standard output: 
-        sys.stdout = open(self._dest_dir+"/"+str(os.getpid()) + ".out", "w")
+        sys.stdout = open(self._dest_dir + "/" + str(os.getpid()) + ".out", "w")
         
-
-    def create_mycommunity(self):    
-        master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
-        my_member = self._dispersy.get_new_member(SECURITY)
-        return MyCommunity.join_community(self._dispersy, master_member, my_member, {"enable":self._walker,})
+        self._state = STATE_INITIALIZED
     
     def start(self):
         try:
@@ -71,19 +70,19 @@ class DispersyInstance(object):
         
     def run(self):        
         # Create Dispersy object
-        self._callback = Callback("Dispersy-Callback")
+        self._callback = Callback("Dispersy-Callback-" + str(random.randint(0,1000000)))
         
         self._swift = self.create_swift_instance(self._listen)
-        endpoint = MultiEndpoint(self._swift)
+        self._endpoint = MultiEndpoint(self._swift)
 
-        self._dispersy = Dispersy(self._callback, endpoint, self._work_dir, self._sqlite_database)
+        self._dispersy = Dispersy(self._callback, self._endpoint, self._dispersy_work_dir, self._sqlite_database)
         
         # Timeout determines how long the bootstrappers should try before continuing (at the moment)
         self._dispersy.start(timeout=1.0) 
         print "Dispersy is listening on port %d" % self._dispersy.lan_address[1]
         
         self._community = self._callback.call(self.create_mycommunity)
-        self._community.dest_dir = self.dest_dir # Will be used to put swift downloads
+        self._community.dest_dir = self.dest_dir  # Will be used to put swift downloads
         self._community.update_bloomfilter = self._bloomfilter_update
         
         # Remove all duplicate ip addresses, regardless of their ports.
@@ -93,21 +92,12 @@ class DispersyInstance(object):
         for a in addrs:
             self.send_introduction_request(a.addr())
             
-        # Start Filepusher if directory or files available
-        if self._directory or self._files:
-            self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, directory=self._directory, files=self._files)
-            self._filepusher.start()
+        # Start Filepusher regardless of availability of directory or files
+        self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, directory=self._files_directory, files=self._files)
+        self._filepusher.start()
         
+        self.state = STATE_RUNNING
         self._loop()
-        
-    def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
-        logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)
-        if isinstance(message, SimpleFileCarrier):
-            self._callback.register(self._community.create_simple_messages, (count,message), kargs={"update":False}, delay=delay)
-        elif isinstance(message, FileHashCarrier):
-            self._callback.register(self._community.create_file_hash_messages, (count,message), kargs={"update":False}, delay=delay)
-        else:
-            self._callback.register(self._community.create_simple_messages, (count,None), kargs={"update":False}, delay=delay)
         
     def _loop(self):
         # Perhaps this should be a separate thread?
@@ -121,6 +111,7 @@ class DispersyInstance(object):
             self._loop_event.wait()
     
     def stop(self):
+        self.state = STATE_STOPPED
         self._loop_event.set()
     
     def _stop(self):
@@ -131,17 +122,49 @@ class DispersyInstance(object):
             self._dispersy.stop()
         except:
             logger.error("STOPPING HAS FAILED!")
-        
+        finally:
+            self.state = STATE_DONE
+            # TODO: How do we make sure that we are completely done?
+            pass
+
+    @property
+    def state(self):
+        return self._state
+    
+    @state.setter
+    def state(self, state):
+        self._state = state
+        logger.info("STATECHANGE %d", state)
+        if self._api_callback is not None:
+            self._api_callback("state", (state,))
+            
     @property
     def dest_dir(self):
         return self._dest_dir
+            
+    def set_callback(self, callback):
+        self._api_callback = callback      
+
+    def create_mycommunity(self):    
+        master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
+        my_member = self._dispersy.get_new_member(SECURITY)
+        return MyCommunity.join_community(self._dispersy, master_member, my_member, {"enable":self._walker, })
+        
+    def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
+        logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)
+        if isinstance(message, SimpleFileCarrier):
+            self._callback.register(self._community.create_simple_messages, (count, message), kargs={"update":False}, delay=delay)
+        elif isinstance(message, FileHashCarrier):
+            self._callback.register(self._community.create_file_hash_messages, (count, message), kargs={"update":False}, delay=delay)
+        else:
+            self._callback.register(self._community.create_simple_messages, (count, None), kargs={"update":False}, delay=delay)
     
     def create_swift_instance(self, addrs):
         addrs = verify_addresses_are_free(addrs)
         httpgwport = None
         cmdgwport = None
         spmgr = None
-        return MySwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, addrs, 
+        return MySwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, addrs,
                                      httpgwport, cmdgwport, spmgr)
         
     def remove_duplicate_ip(self, addrs):
@@ -181,15 +204,15 @@ def verify_addresses_are_free(addrs):
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start Dispersy instance')
-    parser.add_argument("-b", "--bloomfilter",help="Send bloom filter every # seconds")
-    parser.add_argument("-d", "--directory",help="List directory of files to send")
+    parser.add_argument("-b", "--bloomfilter", help="Send bloom filter every # seconds")
+    parser.add_argument("-d", "--directory", help="List directory of files to send")
     parser.add_argument("-D", "--destination", help="List directory to put downloads")
     parser.add_argument("-f", "--files", nargs="+", help="List files to send")
     parser.add_argument("-l", "--listen", nargs="+", help="List of sockets to listen to (port, ip4, ip6), space separated")
     parser.add_argument("-p", "--peers", nargs="+", help="List of Dispersy peers(port, ip4, ip6), space separated")
     parser.add_argument("-q", "--sqlite_database", default=u":memory:", help="SQLite Database directory")
     parser.add_argument("-s", "--swift", help="Swift binary path")
-    parser.add_argument("-t", "--time",type=float, help="Set runtime")
+    parser.add_argument("-t", "--time", type=float, help="Set runtime")
     parser.add_argument("-w", "--work_dir", help="Working directory")
     parser.add_argument("-W", "--walker", action='store_true', help="Enable candidate walker")
     args = parser.parse_args()
@@ -236,9 +259,8 @@ if __name__ == '__main__':
                 addr.set_ipv4(localip)
             peers.append(addr)
         
-    d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE, 
-                         swift_work_dir=DEST_DIR, listen=listen, peers=peers, directory=args.directory, 
-                         files=args.files, run_time=TOTAL_RUN_TIME, bloomfilter_update=BLOOM_FILTER_UPDATE, 
+    d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, dispersy_work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE,
+                         swift_work_dir=DEST_DIR, listen=listen, peers=peers, directory=args.directory,
+                         files=args.files, run_time=TOTAL_RUN_TIME, bloomfilter_update=BLOOM_FILTER_UPDATE,
                          walker=ENABLE_CANDIDATE_WALKER)
     d.start()
-    

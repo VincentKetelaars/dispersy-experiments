@@ -190,8 +190,8 @@ class MyCommunity(Community):
             self.send_introduction_request(candidate) 
         
     def send_introduction_request(self, walker):
-        logger.debug("Send introduction request %s", walker)
         if isinstance(walker, EligibleWalkCandidate):
+            logger.debug("Send introduction request %s", walker)
             walker.set_update_bloomfilter(self._update_bloomfilter)
         
             def send_request():

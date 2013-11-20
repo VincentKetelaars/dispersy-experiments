@@ -62,6 +62,11 @@ class TestAddress(unittest.TestCase):
         self.assertEqual(Address(port=1234), Address(port=1234))
         self.assertEqual(Address(ip="0.0.1.2", port=1234), Address(ip="0.0.1.2", port=1234))
         self.assertEqual(Address("::3", 12321, AF_INET6, 1, 1), Address("::3", 12321, AF_INET6, 1, 1))
+        
+    def test_resolve_interface(self):
+        addr = Address.unknown("127.0.0.1:1")
+        addr.resolve_interface()
+        self.assertEqual(addr.interface.name, "lo")
 
 if __name__ == "__main__":
     unittest.main()

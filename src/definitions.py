@@ -7,6 +7,15 @@ import os
 from datetime import datetime
 
 """
+DISPERSY_INSTANCE
+"""
+# States
+STATE_INITIALIZED = 0
+STATE_RUNNING = 1
+STATE_STOPPED = 2
+STATE_DONE = 3
+
+"""
 DISPERSY
 """
 

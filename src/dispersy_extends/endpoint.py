@@ -81,6 +81,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         self._endpoint = None
         self.swift_endpoints = []
         self.swift_queue = Queue.Queue()
+        self._dequeueing = False
         # TODO: Make regular checks to make sure that nothing is left in the queue
         TunnelEndpoint.__init__(self, swift_process)
         EndpointStatistics.__init__(self)
@@ -105,8 +106,9 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
     def send(self, candidates, packets):
         self.lock.acquire();
         if not self._swift.is_ready() or not self.socket_running:
-            self.swift_queue.put((self.send, (candidates, packets), {}))
-            logger.debug("Send is queued")
+            if not self._dequeueing:
+                self.swift_queue.put((self.send, (candidates, packets), {}))
+                logger.debug("Send is queued")
             self.lock.release()
             return False
         logger.debug("Send %s %d", candidates, len(packets))
@@ -512,13 +514,17 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
         logger.info("The TCP connection with Swift is up")
         self._waiting_on_cmd_connection = False
         self.dequeue_swift_queue()
+        for e in self.swift_endpoints:
+            e.swift_started_running_callback()
         
     def dequeue_swift_queue(self):
+        self._dequeueing = True
         while not self.swift_queue.empty() and self._swift.is_ready():
             func, args, kargs = self.swift_queue.get()
             logger.debug("Dequeue %s %s %s", func, args, kargs)
             func(*args, **kargs)            
-            
+        self._dequeueing = False    
+        
     def is_bootstrap_candidate(self, addr=None, candidate=None):
         if addr is not None:
             if self._dispersy._bootstrap_candidates.get(addr.addr()) is not None:
@@ -529,7 +535,7 @@ class MultiEndpoint(TunnelEndpoint, EndpointStatistics, EndpointDownloads):
                 return True
         return False
     
-    def interface_came_up(self):
+    def interface_came_up(self, addr):
         # Go over all endpoints and check interface names without number
         # If it is new create endpoint
         # Known, adapt endpoint to it
@@ -596,6 +602,7 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
     def __init__(self, swift_process, address):
         super(SwiftEndpoint, self).__init__(swift_process) # Dispersy and session code 
         EndpointStatistics.__init__(self)
+        self._queue = Queue.Queue()
         self.address = address
         if self.address.resolve_interface():
             if not address in self._swift.listenaddrs:
@@ -660,7 +667,21 @@ class SwiftEndpoint(TunnelEndpoint, EndpointStatistics):
         
     def swift_add_socket(self):
         logger.debug("SwiftEndpoint add socket %s", self.address)
-        self._swift.add_socket(self.address, None)
+        if not self._swift.is_ready():
+            self._enqueue(self.swift_add_socket, (), {})
+        else:
+            self._swift.add_socket(self.address, None)
+        
+    def _enqueue(self, func, args, kwargs):
+        self._queue.put((func, args, kwargs))
+    
+    def _dequeue(self):
+        while self._swift.is_ready() and not self._queue.empty():
+            f, a, k = self._queue.get()
+            f(*a, **k)
+            
+    def swift_started_running_callback(self):
+        self._dequeue()
 
                     
 def get_hash(filename, swift_path):
@@ -705,6 +726,7 @@ def try_sockets(addrs, timeout=1.0, log=True):
     event = Event()
     t = time.time()        
     while not event.is_set() and t + timeout > time.time():
+        # TODO: There is not point in doing this over and over if the interface is gone
         if all([try_socket(a, log) for a in addrs]):
             event.set()
         event.wait(0.1)
@@ -724,12 +746,17 @@ def try_socket(addr, log=True):
         s.bind(addr.addr())
         return True
     except Exception, ex:
-        if log:
-            logger.exception("Bummer, %s is still in use!", str(addr))
         (error_number, error_message) = ex
-        if error_number == (EADDRINUSE or EADDRNOTAVAIL):
+        if error_number == EADDRINUSE: # Socket is already bound
+            if log:
+                logger.exception("Bummer, %s is already bound!", str(addr))
             return False
-        logger.debug("He, we haven't taken into account this error yet!!\n%s", error_message)
+        if error_number == EADDRNOTAVAIL: # Interface is most likely gone so nothing on this ip can be bound
+            if log:
+                logger.exception("Shit, %s can't be bound! Interface gone?", str(addr))
+            return False
+        if log:
+            logger.exception("He, we haven't taken into account this error yet!!\n%s", error_message)
         return False
     finally:
         s.close()

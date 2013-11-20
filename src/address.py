@@ -17,13 +17,13 @@ class Address(object):
     This class represents an socket address. Either AF_INET or AF_INET6.
     '''
 
-    def __init__(self, ip="0.0.0.0", port=0, family=AF_INET, flowinfo=0, scopeid=0, if_=None):
+    def __init__(self, ip="0.0.0.0", port=0, family=AF_INET, flowinfo=0, scopeid=0, interface=None):
         self._ip = ip
         self._port = port
         self._family = family
         self._flowinfo = flowinfo # IPv6 only
         self._scopeid = scopeid # IPv6 only
-        self._if = if_
+        self._if = interface
         
     @property
     def ip(self):
@@ -38,8 +38,26 @@ class Address(object):
         return self._family
     
     @property
+    def flowinfo(self):
+        return self._flowinfo
+    
+    @property
+    def scopeid(self):
+        return self._scopeid
+    
+    @property
     def interface(self):
         return self._if
+    
+    @classmethod
+    def copy(cls, addr):
+        # Assume Address instance
+        try:
+            return cls(ip=addr.ip, port=addr.port, family=addr.family, flowinfo=addr.flowinfo, scopeid=addr.scopeid, 
+                       interface=addr.interface)
+        except:
+            logger.debug("Not an Address instance!")
+            return cls()
     
     @classmethod
     def localport(cls, port_str):
@@ -75,6 +93,8 @@ class Address(object):
     
     @classmethod
     def unknown(cls, addr):
+        if isinstance(addr, Address):
+            cls.copy(addr)
         try:
             p = int(addr)
             # If it is an integer, it is a port
@@ -163,10 +183,13 @@ class Address(object):
             self._if = Interface("All", self._ip, self._ip, self._ip)
             return True
         for if_ in Dispersy._get_interface_addresses():
-            if (self.ipstr_to_int(if_.address) & self.ipstr_to_int(if_.netmask) == 
-                self.ipstr_to_int(self._ip) & self.ipstr_to_int(if_.netmask)): # Same subnet
-                self._if = Interface(if_.name, if_.address, if_.netmask, if_.broadcast)
-                return True
+            try:
+                if (self.ipstr_to_int(if_.address) & self.ipstr_to_int(if_.netmask) == 
+                    self.ipstr_to_int(self._ip) & self.ipstr_to_int(if_.netmask)): # Same subnet
+                    self._if = Interface(if_.name, if_.address, if_.netmask, if_.broadcast)
+                    return True
+            except:
+                logger.exception("Failed to find %s", self._ip)
         return False
     
     def ipstr_to_int(self, address):
@@ -192,6 +215,7 @@ class Interface(object):
         self.address = address
         self.netmask = netmask
         self.broadcast = broadcast
+        self.device = name # Initialize to the interface name
         
     def __eq__(self, other):
         if not isinstance(other, Interface):

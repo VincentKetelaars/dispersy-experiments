@@ -8,7 +8,6 @@ import random
 import subprocess
 import sys
 import json
-import Queue
 from collections import defaultdict
 from threading import RLock, currentThread, Thread, Event
 
@@ -91,7 +90,12 @@ class MySwiftProcess(SwiftProcess):
         if sys.platform == "win32":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
-            creationflags = 0
+            creationflags = 0            
+        
+        # Endpoint callbacks
+        self._sockaddr_info_callback = None
+        self._swift_restart_callback = None
+        self._tcp_connection_open_callback = None
 
         # See also SwiftDef::finalize popen
         # We would really like to get the stdout and stderr without creating a new thread for them.
@@ -160,7 +164,7 @@ class MySwiftProcess(SwiftProcess):
         # TODO: Should this thread be cleaned up somewhere?
     
     def set_on_swift_restart_callback(self, callback):
-        self.swift_restart_callback = callback
+        self._swift_restart_callback = callback
         
     def set_on_tcp_connection_callback(self, callback):
         self._tcp_connection_open_callback = callback
@@ -297,7 +301,7 @@ class MySwiftProcess(SwiftProcess):
             return
         logger.debug("CONNECTION LOST")
         self.donestate = DONE_STATE_SHUTDOWN # Mark as done for
-        self.swift_restart_callback()
+        self._swift_restart_callback()
         
     def send_tunnel(self, session, address, data, addr=Address()):
         if addr.port == 0:
@@ -337,7 +341,7 @@ class MySwiftProcess(SwiftProcess):
         cmd += '\r\n'
         self.write(cmd)
 
-    def add_socket(self, saddr, d):
+    def add_socket(self, saddr, overwrite=False):
         self.splock.acquire()
         try:
             if self.donestate != DONE_STATE_WORKING or not self.is_alive():
@@ -345,24 +349,30 @@ class MySwiftProcess(SwiftProcess):
             
             if saddr in self.listenaddrs:
                 logger.debug("Address already in use %s", saddr)
-                return
-            # saddr is of instance Address
-            self.listenaddrs.append(saddr)
+                if not overwrite:
+                    return
+                # TODO: remove from listenaddrs and add again
+            else:
+                # saddr is of instance Address
+                self.listenaddrs.append(saddr)
 
             saddrstr = str(saddr)
-            if d is None:
-                roothash_hex = None
-            else:
-                roothash_hex = d.get_def().get_roothash_as_hex()
-            self.send_add_socket(saddrstr, roothash_hex)
+            if_name = None
+            device = None
+            if saddr.interface is not None:
+                if_name = saddr.interface.name
+                device = saddr.interface.device
+            self.send_add_socket(saddrstr, if_name, device)
         finally:
             self.splock.release()
             
-    def send_add_socket(self, saddrstr, roothash_hex):
+    def send_add_socket(self, saddrstr, if_name, device):
         # assume splock is held to avoid concurrency on socket
         cmd = 'ADDSOCKET ' + saddrstr
-        if roothash_hex is not None:
-            cmd += ' ' + roothash_hex
+        if if_name is not None:
+            cmd+= ' ' + if_name 
+        if device is not None:
+            cmd += ' ' + device
         cmd += '\r\n'
         self.write(cmd)
             
