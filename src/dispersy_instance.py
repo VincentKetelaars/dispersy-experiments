@@ -148,7 +148,7 @@ class DispersyInstance(object):
     def create_mycommunity(self):    
         master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
         my_member = self._dispersy.get_new_member(SECURITY)
-        return MyCommunity.join_community(self._dispersy, master_member, my_member, {"enable":self._walker, })
+        return MyCommunity.join_community(self._dispersy, master_member, my_member, *(), **{"enable":self._walker})
         
     def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
         logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)
@@ -175,7 +175,8 @@ class DispersyInstance(object):
         return faddrs
     
     def send_introduction_request(self, address):
-        # Each new candidate will be sent an introduction request, if update_bloomfilter > 0
+        # Each new candidate will be sent an introduction request once
+        # If update_bloomfilter > 0, then every so many seconds an introduction request will be sent
         self._community.create_candidate(address, True, address, address, u"unknown")
         
 def verify_addresses_are_free(addrs):
@@ -260,7 +261,7 @@ if __name__ == '__main__':
             peers.append(addr)
         
     d = DispersyInstance(DEST_DIR, SWIFT_BINPATH, dispersy_work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE,
-                         swift_work_dir=DEST_DIR, listen=listen, peers=peers, directory=args.directory,
+                         swift_work_dir=DEST_DIR, listen=listen, peers=peers, files_directory=args.directory,
                          files=args.files, run_time=TOTAL_RUN_TIME, bloomfilter_update=BLOOM_FILTER_UPDATE,
                          walker=ENABLE_CANDIDATE_WALKER)
     d.start()

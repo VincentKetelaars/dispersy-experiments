@@ -30,6 +30,7 @@ class MySwiftProcess(SwiftProcess):
         self.zerostatedir = zerostatedir
         self.spmgr = spmgr
         self.listenaddrs = []
+        self.confirmedaddrs = []
 
         # Main UDP listen socket
         if listenaddrs is None:
@@ -96,6 +97,17 @@ class MySwiftProcess(SwiftProcess):
         self._sockaddr_info_callback = None
         self._swift_restart_callback = None
         self._tcp_connection_open_callback = None
+        
+        self.roothash2dl = {}
+        self.donestate = DONE_STATE_WORKING  # shutting down
+        self.fastconn = None
+
+        # callbacks for when swift detect a channel close
+        self._channel_close_callbacks = defaultdict(list)
+
+        # Only warn once when TUNNELRECV messages are received without us having a Dispersy endpoint.  This occurs after
+        # Dispersy shutdown
+        self._warn_missing_endpoint = True
 
         # See also SwiftDef::finalize popen
         # We would really like to get the stdout and stderr without creating a new thread for them.
@@ -122,17 +134,6 @@ class MySwiftProcess(SwiftProcess):
                                     Thread(target=read_and_print, args=(self.popen.stderr,), name="SwiftProcess_%d_stderr" % self.listenaddr.port)]
         [thread.start() for thread in self.popen_outputthreads]
 
-        self.roothash2dl = {}
-        self.donestate = DONE_STATE_WORKING  # shutting down
-        self.fastconn = None
-
-        # callbacks for when swift detect a channel close
-        self._channel_close_callbacks = defaultdict(list)
-
-        # Only warn once when TUNNELRECV messages are received without us having a Dispersy endpoint.  This occurs after
-        # Dispersy shutdown
-        self._warn_missing_endpoint = True
-        
                 
     def read_and_print_out(self, line):
         # As soon as a TCP connection has been made, will the FastI2I be allowed to start
@@ -143,8 +144,10 @@ class MySwiftProcess(SwiftProcess):
         elif line.find(listenstr) != -1:
             addrstr = line[len(listenstr) + 1:]
             saddr = Address.unknown(addrstr)
-            if saddr != Address() and self._sockaddr_info_callback:
-                self._sockaddr_info_callback(saddr, 0)
+            if saddr != Address():
+                self.confirmedaddrs.append(saddr)
+                if self._sockaddr_info_callback:
+                    self._sockaddr_info_callback(saddr, 0)
             
     def start_cmd_connection(self):
         # Wait till Libswift is actually ready to create a TCP connection
@@ -296,7 +299,7 @@ class MySwiftProcess(SwiftProcess):
                 logger.warning("FastConnection is down")
             
     def connection_lost(self, port, error=False, output_read=False):
-        if self.donestate == DONE_STATE_EARLY_SHUTDOWN or self.donestate == DONE_STATE_SHUTDOWN:
+        if self.donestate != DONE_STATE_WORKING:
             # Only if it is still running should we consider restarting swift
             return
         logger.debug("CONNECTION LOST")

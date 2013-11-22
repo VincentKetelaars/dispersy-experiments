@@ -17,6 +17,7 @@ class FakeSwift(object):
     
     def __init__(self, addresses):
         self.listenaddrs = addresses
+        self.confirmedaddrs = addresses
         
     def set_on_swift_restart_callback(self, callback):
         pass

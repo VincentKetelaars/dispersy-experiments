@@ -7,12 +7,12 @@ Created on Nov 15, 2013
 import Queue
 from threading import Thread
 
-from dispersy.logger import get_logger
 
-from src.address import Address
 from src.dispersy_instance import DispersyInstance
+from src.address import Address
 from src.definitions import STATE_RUNNING
 
+from dispersy.logger import get_logger
 logger = get_logger(__name__)
 
 class API(Thread):
@@ -20,7 +20,7 @@ class API(Thread):
     Command Gateway is a separate thread which will be take commands from another process connected to the pipe.
     '''
 
-    def __init__(self, di_args=(), di_kwargs={}):
+    def __init__(self, *di_args, **di_kwargs):
         Thread.__init__(self)
         self.setDaemon(True)  # Automatically die when the main thread dies
         self.dispersy_instance = DispersyInstance(*di_args, **di_kwargs)
@@ -67,7 +67,8 @@ class API(Thread):
     def add_socket(self, address):
         assert isinstance(address, Address)
         if self.state == STATE_RUNNING:
-            self.dispersy_instance._endpoint.add_endpoint(address)
+            e = self.dispersy_instance._endpoint.add_endpoint(address)
+            e.open(self.dispersy_instance._dispersy)
         else:
             self._enqueue(self.add_socket, (address,), {})
     

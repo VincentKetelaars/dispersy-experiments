@@ -35,6 +35,7 @@ class MyCommunity(Community):
         '''
         Constructor
         '''
+        logger.debug("I will %swalk today", "" if enable else "not ")
         self._enable_candidate_walker = enable # Needs to be set before call to Community
         super(MyCommunity, self).__init__(dispersy, master_member)
         self._dest_dir = None
@@ -192,7 +193,7 @@ class MyCommunity(Community):
     def send_introduction_request(self, walker):
         if isinstance(walker, EligibleWalkCandidate):
             logger.debug("Send introduction request %s", walker)
-            walker.set_update_bloomfilter(self._update_bloomfilter)
+            walker.set_update_bloomfilter(self.update_bloomfilter)
         
             def send_request():
                 self._dispersy.callback.register(self._dispersy.create_introduction_request, 
@@ -204,11 +205,10 @@ class MyCommunity(Community):
                     Event().wait(1)
                     send_request()
     
-            if self.update_bloomfilter > 0:
-                # First add the IntroductionRequestTimeout to the list, then send request. 
-                # Otherwise this method is recursively called to often
-                if not self._add_candidate_intro_requests_update(walker, send_request):                    
-                    send_request()
+            # First add the IntroductionRequestTimeout to the list, then send request. 
+            # Otherwise this method is recursively called to often
+            if not self._add_candidate_intro_requests_update(walker, send_request):                    
+                send_request()
         else:
             if self.dispersy.endpoint.is_bootstrap_candidate(candidate=walker):
                 logger.debug("This is a BootstrapCandidate: %s", walker)

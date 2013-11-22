@@ -42,4 +42,3 @@ class CallFunctionThread(Thread):
     def stop(self):
         logger.debug("Stop with %d empty exceptions", self.count)
         self.event.set()
-        self.join()
