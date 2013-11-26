@@ -22,7 +22,8 @@ from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConver
 from src.dispersy_extends.payload import SimpleFilePayload, FileHashPayload, AddressesPayload
 
 from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, \
-    FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME
+    FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME,\
+    MESSAGE_KEY_RECEIVE_MESSAGE
 
 logger = get_logger(__name__)    
     
@@ -31,7 +32,7 @@ class MyCommunity(Community):
     classdocs
     '''
 
-    def __init__(self, dispersy, master_member, enable=False):
+    def __init__(self, dispersy, master_member, enable=False, api_callback=None):
         '''
         Constructor
         '''
@@ -41,6 +42,7 @@ class MyCommunity(Community):
         self._dest_dir = None
         self._update_bloomfilter = -1
         self._intro_request_updates = {}
+        self._api_callback = api_callback
         
     def initiate_conversions(self):
         """
@@ -77,7 +79,9 @@ class MyCommunity(Community):
         Handle Callback
         """
         for x in messages:
-            print x.payload.filename +": "+x.payload.data
+            if self._api_callback:
+                self._api_callback(MESSAGE_KEY_RECEIVE_MESSAGE, x.payload.filename +": "+x.payload.data, 
+                                                                 SIMPLE_MESSAGE_NAME)
             
     def file_hash_check(self, messages):
         for x in messages:

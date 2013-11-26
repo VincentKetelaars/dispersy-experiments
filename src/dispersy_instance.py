@@ -21,7 +21,8 @@ from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
 from src.definitions import DISPERSY_WORK_DIR, SQLITE_DATABASE, TOTAL_RUN_TIME, MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, \
 DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH, BLOOM_FILTER_UPDATE, ENABLE_CANDIDATE_WALKER,\
-    STATE_INITIALIZED, STATE_RUNNING, STATE_STOPPED, STATE_DONE
+    STATE_INITIALIZED, STATE_RUNNING, STATE_STOPPED, STATE_DONE,\
+    MESSAGE_KEY_STATE
 
 logger = get_logger(__name__)
 
@@ -32,7 +33,7 @@ class DispersyInstance(object):
 
     def __init__(self, dest_dir, swift_binpath, dispersy_work_dir=u".", sqlite_database=u":memory:", swift_work_dir=None,
                  swift_zerostatedir=None, listen=[], peers=[], files_directory=None, files=[], run_time=-1, bloomfilter_update=-1,
-                 walker=False):
+                 walker=False, callback=None):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
         self._dispersy_work_dir = dispersy_work_dir 
@@ -46,12 +47,11 @@ class DispersyInstance(object):
         self._run_time = run_time # Time after which this process stops, -1 is infinite
         self._bloomfilter_update = bloomfilter_update # Update every # seconds the bloomfilter to peers, -1 for never
         self._walker = walker # Turn walker on
+        self._api_callback = callback # Subscription to various callbacks
         
         self._filepusher = None
         
         self._loop_event = Event() # Loop
-        
-        self._api_callback = None # Any kind of callback to the API goes through this
         
         # redirect swift output:
         sys.stderr = open(self._dest_dir + "/" + str(os.getpid()) + ".err", "w")
@@ -66,14 +66,14 @@ class DispersyInstance(object):
         except Exception:
             logger.exception("Dispersy instance failed to run properly")
         finally:
-            self._stop()
+            return self._stop()
         
     def run(self):        
         # Create Dispersy object
         self._callback = Callback("Dispersy-Callback-" + str(random.randint(0,1000000)))
         
         self._swift = self.create_swift_instance(self._listen)
-        self._endpoint = MultiEndpoint(self._swift)
+        self._endpoint = MultiEndpoint(self._swift, self._api_callback)
 
         self._dispersy = Dispersy(self._callback, self._endpoint, self._dispersy_work_dir, self._sqlite_database)
         
@@ -119,7 +119,7 @@ class DispersyInstance(object):
         try:
             if self._filepusher is not None:
                 self._filepusher.stop()
-            self._dispersy.stop()
+            return self._dispersy.stop()
         except:
             logger.error("STOPPING HAS FAILED!")
         finally:
@@ -136,14 +136,11 @@ class DispersyInstance(object):
         self._state = state
         logger.info("STATECHANGE %d", state)
         if self._api_callback is not None:
-            self._api_callback("state", (state,))
+            self._api_callback(MESSAGE_KEY_STATE, state)
             
     @property
     def dest_dir(self):
         return self._dest_dir
-            
-    def set_callback(self, callback):
-        self._api_callback = callback      
 
     def create_mycommunity(self):    
         master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)

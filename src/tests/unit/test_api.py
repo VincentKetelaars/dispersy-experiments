@@ -5,15 +5,17 @@ Created on Nov 20, 2013
 '''
 import unittest
 import os
-import time
-
 from threading import Event
+
+from dispersy.logger import get_logger
 
 from src.api import API
 from src.tests.unit.definitions import DISPERSY_WORKDIR, FILES
-from src.definitions import SWIFT_BINPATH, SLEEP_TIME, TIMEOUT_TESTS
+from src.definitions import SWIFT_BINPATH, TIMEOUT_TESTS
 from src.address import Address
 from src.tests.unit.test_endpoint import remove_files
+
+logger = get_logger(__name__)
 
 class TestAPI(unittest.TestCase):
 
@@ -35,34 +37,34 @@ class TestAPI(unittest.TestCase):
         for f in self.files_to_remove:
             remove_files(f)
         
-        
-    def _wait(self, endpoint):
-        for _ in range(int(TIMEOUT_TESTS / SLEEP_TIME)):
-            check = True
-            for d in endpoint.downloads.values():
-                if not d.is_finished():
-                    check = False
-            if check and not len(endpoint.downloads) == 0:
-                break
-            time.sleep(SLEEP_TIME)
-
 
     def test_add_file_both(self):
         addr = Address(ip="127.0.0.1", port=12421)
         self.api1.start()
-        self.api1.add_socket(addr)
+        self.api1.add_socket(addr.ip, addr.port, addr.family)
         self.api2.start()
-        self.api2.add_peer(addr)
-        self.event.wait(1)
-        self.api1.add_files([self.files[0]])
-        self.api2.add_files([self.files[1]])
-        self._wait(self.api1.dispersy_instance._dispersy.endpoint)
+        self.api2.add_peer(addr.ip, addr.port, addr.family)
+        
+        self.files_done = 0
+        def callback(file_):
+            logger.debug("File done: %s", str(file_))
+            self.files_done += 1
+            if self.files_done == 4:
+                self.event.set()
+
+        self.api1.file_received_callback(callback)
+        self.api2.file_received_callback(callback)
+        
+        self.api1.add_file(self.files[0])
+        self.api2.add_file(self.files[1])
         file0 = os.path.join(self.workdir, os.path.basename(self.files[0]))
         file1 = os.path.join(self.workdir, os.path.basename(self.files[1]))
 #         self.files_to_remove.append(file0)
 #         self.files_to_remove.append(file1)
-        self.assertTrue(os.path.exists(file0))
+        self.event.wait(TIMEOUT_TESTS)
+        
         self.assertTrue(os.path.exists(file1))
+        self.assertTrue(os.path.exists(file0))
 
 
 if __name__ == "__main__":

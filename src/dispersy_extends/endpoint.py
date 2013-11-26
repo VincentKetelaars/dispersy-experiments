@@ -29,7 +29,7 @@ from src.address import Address
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download, Peer
-from src.definitions import SLEEP_TIME, HASH_LENGTH
+from src.definitions import SLEEP_TIME, HASH_LENGTH, MESSAGE_KEY_RECEIVE_FILE
 from src.dispersy_extends.payload import AddressesCarrier
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_contact import DispersyContact
@@ -87,7 +87,8 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
     data will be send via those as to provide the fastest means of delivering data. 
     '''
 
-    def __init__(self, swift_process):
+    def __init__(self, swift_process, api_callback=None):
+        self._api_callback = api_callback
         self._thread_stop_event = Event()
         self._resetting = False
         self._waiting_on_cmd_connection = False
@@ -300,7 +301,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         logger.debug("Distribute all hashes")
         self.lock.acquire()
         for roothash in self.downloads.keys():
-            if self.downloads[roothash].seeder():
+            if self.downloads[roothash].seeder(): # TODO: Is this a good idea?
                 for peer in self.downloads[roothash].peers():
                     for addr in peer.addresses:
                         self.add_peer(addr, roothash)
@@ -325,8 +326,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             logger.debug("Add bootstrap candidate rejected")
             self.lock.release()
             return
-        if (roothash is not None and not any([addr == a and roothash == h for (a, h) in self.added_peers]) 
-            and not addr.addr() in self._dispersy._bootstrap_candidates): # Don't add bootstrap peers
+        if roothash is not None and not any([addr == a and roothash == h for a, h in self.added_peers]):
             d = self.retrieve_download_impl(roothash)
             if d is not None:
                 logger.info("Add peer %s with roothash %s ", addr, roothash)
@@ -363,7 +363,6 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             self._swift.start_download(d)
             self._swift.set_moreinfo_stats(d, True)
         self.lock.release()
-        self.distribute_all_hashes_to_peers() # We have a new download, add all its peers to it!
             
     def do_checkpoint(self, d):
         if not self._swift.is_ready():
@@ -437,6 +436,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         
         @return: DownloadImpl, otherwise None
         """
+        logger.debug("Retrieve download implementation, %s", roothash)
         self.lock.acquire()
         d = None
         try:
@@ -530,6 +530,8 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             if not (rm_state or rm_download):
                 self.do_checkpoint(d)
             self._swift.remove_download(d, rm_state, rm_download)
+            if self._api_callback:
+                self._api_callback(MESSAGE_KEY_RECEIVE_FILE, self.downloads[roothash].filename)
         self.added_peers = Set([p for p in self.added_peers if p[1] != roothash])
         
     def update_dispersy_contacts_candidates_messages(self, candidates, packets, recv=True):
@@ -557,17 +559,25 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         self.lock.release()
             
     def update_known_downloads(self, roothash, filename, download_impl, addresses=None, seed=False, download=False, add_known=True):
-        # Know about all hashes that go through this endpoint
-        # TODO: Logging the roothash can generate errors
-        logger.debug("Update known downloads, %s %s %s %s %S", binascii.hexlify(roothash), filename, addresses, seed, download)
+        """
+        @param roothash: Binary form of the roothash of filename
+        @param filename: Absolute path of filename
+        @param donwload_impl: Download implementation as created in create_download_impl
+        @param addresses: List of Address objects
+        @param seed: Boolean that determines if this download should seed after finishing download
+        @param download: Boolean that determines if this file needs to be downloaded
+        @param add_known: Boolean that determines if all known peers should be added to this download
+        """
+        logger.debug("Update known downloads, %s %s %s %s %s %s", binascii.hexlify(roothash), filename, addresses, seed, download, add_known)
         self.lock.acquire()
-        self.downloads[roothash] = Download(roothash, filename, download_impl, seed=seed, download=download)
-        self.downloads[roothash].moreinfo = True
-        self.downloads[roothash].add_peer(Peer(addresses))
+        d = Download(roothash, filename, download_impl, seed=seed, download=download)
+        d.moreinfo = True
+        d.add_peer(Peer(addresses))
         if add_known: # Add all known peers to this download
             for dc in self.dispersy_contacts:
                 if dc.peer is not None:
-                    self.downloads[roothash].add_peer(dc.peer)
+                    d.add_peer(dc.peer)
+        self.downloads[roothash] = d
         self.lock.release()
         
     def swift_started_running_callback(self):
@@ -656,7 +666,7 @@ class SwiftEndpoint(CommonEndpoint):
     def __init__(self, swift_process, address):
         super(SwiftEndpoint, self).__init__(swift_process) # Dispersy and session code 
         EndpointStatistics.__init__(self)
-        self._queue = Queue.Queue()
+        self.waiting_queue = Queue.Queue()
         self.address = address
         if self.address.resolve_interface():
             if not address in self._swift.listenaddrs:
@@ -730,11 +740,11 @@ class SwiftEndpoint(CommonEndpoint):
             self._swift.add_socket(self.address, None)
         
     def _enqueue(self, func, args, kwargs):
-        self._queue.put((func, args, kwargs))
+        self.waiting_queue.put((func, args, kwargs))
     
     def _dequeue(self):
-        while self._swift.is_ready() and not self._queue.empty():
-            f, a, k = self._queue.get()
+        while self._swift.is_ready() and not self.waiting_queue.empty():
+            f, a, k = self.waiting_queue.get()
             f(*a, **k)
             
     def swift_started_running_callback(self):

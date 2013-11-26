@@ -16,7 +16,7 @@ class CallFunctionThread(Thread):
     Call function in separate thread.
     In case the queue has nothing to, the timeout will determine how long it waits for something to come up.
     """
-    def __init__(self, daemon=True, timeout=0.001):
+    def __init__(self, daemon=True, timeout=1.0):
         Thread.__init__(self)
         self.timeout = timeout
         self.event = Event()
