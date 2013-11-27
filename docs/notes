@@ -34,7 +34,7 @@ If both eth and wlan are available, a UDP socket will switch between both, depen
 Perhaps it is good to choose a single interface for each socket. This will create problems with NAT traversal.
 http://stackoverflow.com/questions/12371385/how-to-specify-which-interface-to-use-for-a-socket-in-linux
 
-
+Problem with wildcard: invalid peer address 0.0.0.0:18795!=127.0.0.1:18795
 
 GENERAL:
 

@@ -14,8 +14,13 @@ from src.definitions import STATE_NOT, STATE_RUNNING, MESSAGE_KEY_ADD_FILE, MESS
 MESSAGE_KEY_ADD_SOCKET, MESSAGE_KEY_INTERFACE_UP, MESSAGE_KEY_MONITOR_DIRECTORY, MESSAGE_KEY_RECEIVE_FILE, \
 MESSAGE_KEY_RECEIVE_MESSAGE, MESSAGE_KEY_STATE, MESSAGE_KEY_STOP, STATE_DONE
 
+from src.definitions import DEST_DIR, SWIFT_BINPATH, TOTAL_RUN_TIME, DISPERSY_WORK_DIR, SQLITE_DATABASE, \
+BLOOM_FILTER_UPDATE, ENABLE_CANDIDATE_WALKER
+
 from dispersy.logger import get_logger
 from src.tools.runner import CallFunctionThread
+from dispersy.dispersy import Dispersy
+import argparse
 logger = get_logger(__name__)
 
 class PipeHandler(object):
@@ -29,7 +34,7 @@ class PipeHandler(object):
         self.conn = connection        
         
         # Receive from pipe
-        self.stop_receiving = Event()
+        self.stop_receiving_event = Event()
         self.is_alive_event = Event() # Wait until subclass tells you it is ready
         t = Thread(target=self.wait_on_recv)
         t.start()
@@ -38,15 +43,17 @@ class PipeHandler(object):
         self.sender = CallFunctionThread(timeout=1.0)
         self.sender.start()
         
-    def stop_receiving(self):
-        self.stop_receiving.set()
+    def stop_connection(self):
+        self.stop_receiving_event.set()
+        self.sender.stop(Event(), timeout=1.0) # Wait at most timeout till queue is empty
         self.conn.close()
+        logger.debug("Connection closed")
     
     def wait_on_recv(self):
         """
         Listen to pipe for incoming messages, which are dispatched to handle_message
         """
-        while not self.stop_receiving.is_set():
+        while not self.stop_receiving_event.is_set():
             message = self.conn.recv()
             self.is_alive_event.wait()
             self.handle_message(message)
@@ -96,9 +103,19 @@ class API(Thread, PipeHandler):
         self.is_alive_event.set()
         
     def stop(self):
+        """
+        API call that will tell Dispersy to stop
+        """
         self.send_message(MESSAGE_KEY_STOP)
-        if self.receiver_api.is_alive():
-            self.receiver_api.join()
+        # TODO: If something goes wrong, finish should still be called
+        
+    def finish(self):
+        """
+        Finish call that will ensure that the child process is killed.
+        This is called when Dispersy signals STATE_DONE.
+        """
+        self.receiver_api.join()
+        logger.debug("finished")
     
     @property
     def state(self):
@@ -145,12 +162,10 @@ class API(Thread, PipeHandler):
 
         
     def _received_file(self, file_):
-        logger.info("RECEIVED FILE: %s", file_)
         if self._callback_file_received:
             self._callback_file_received(file)
         
     def _received_message(self, message, message_kind):
-        logger.info("RECEIVED MESSAGE: %s", message[0:100])
         if self._callback_message_received:
             self._callback_message_received(message, message_kind)
     
@@ -159,7 +174,8 @@ class API(Thread, PipeHandler):
         if self._callback_state_change:
             self._callback_state_change(state)
         if self._state == STATE_DONE:
-            self.stop_receiving()
+            self.stop_connection()
+            self.finish()
     
     
 class ReceiverAPI(PipeHandler):
@@ -199,7 +215,7 @@ class ReceiverAPI(PipeHandler):
         logger.debug("Started DispersyInstance")
         correctStop = self.dispersy_instance.start() # Blocking call
         logger.debug("DispersyInstance has stopped %s!", "correctly" if correctStop else "incorrectly")
-        self.stop_receiving() # Cleaning up pipe
+        self.stop_connection() # Cleaning up pipe
                 
     def stop(self):
         self.dispersy_instance.stop()
@@ -224,7 +240,7 @@ class ReceiverAPI(PipeHandler):
     """        
     
     def send_state(self):
-        self.send_message(MESSAGE_KEY_STATE, (self.state,))
+        self.send_message(MESSAGE_KEY_STATE, self.state)
     
     def add_message(self, message, message_kind):
         assert len(message) < 2**16
@@ -301,13 +317,83 @@ class ReceiverAPI(PipeHandler):
             logger.exception("Failed to handle dispersy callback")
 
     def _state_change(self, state):
+        logger.info("STATECHANGE: %d -> %d", self.state, state)
         self.state = state
+        self.send_state()
         if state == STATE_RUNNING:
             self._dequeue()
         
     def _received_file(self, file_):
+        logger.info("RECEIVED FILE: %s", file_)
         self.send_message(MESSAGE_KEY_RECEIVE_FILE, file_)
         
     def _received_message(self, message, message_kind):
+        logger.info("RECEIVED MESSAGE: %s %s", message[0:100], message_kind)
         self.send_message(MESSAGE_KEY_RECEIVE_MESSAGE, message, message_kind)
+        
+        
+        
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Start Dispersy instance')
+    parser.add_argument("-b", "--bloomfilter", help="Send bloom filter every # seconds")
+    parser.add_argument("-d", "--directory", help="List directory of files to send")
+    parser.add_argument("-D", "--destination", help="List directory to put downloads")
+    parser.add_argument("-f", "--files", nargs="+", help="List files to send")
+    parser.add_argument("-l", "--listen", nargs="+", help="List of sockets to listen to (port, ip4, ip6), space separated")
+    parser.add_argument("-p", "--peers", nargs="+", help="List of Dispersy peers(port, ip4, ip6), space separated")
+    parser.add_argument("-q", "--sqlite_database", default=u":memory:", help="SQLite Database directory")
+    parser.add_argument("-s", "--swift", help="Swift binary path")
+    parser.add_argument("-t", "--time", type=float, help="Set runtime")
+    parser.add_argument("-w", "--work_dir", help="Working directory")
+    parser.add_argument("-W", "--walker", action='store_true', help="Enable candidate walker")
+    args = parser.parse_args()
+    
+    if args.time:
+        TOTAL_RUN_TIME = args.time
+        
+    if args.destination:
+        DEST_DIR = args.destination
+    
+    if args.swift:
+        SWIFT_BINPATH = args.swift
+        
+    if args.work_dir:
+        DISPERSY_WORK_DIR = args.work_dir
+        
+    if args.sqlite_database:
+        SQLITE_DATABASE = args.sqlite_database
+        
+    if args.bloomfilter:
+        BLOOM_FILTER_UPDATE = args.bloomfilter
+        
+    if args.walker:
+        ENABLE_CANDIDATE_WALKER = args.walker
+        
+    localip = "127.0.0.1"
+    local_interface = Dispersy._guess_lan_address(Dispersy._get_interface_addresses())
+    if local_interface is not None:
+        localip = local_interface.address
+        
+    listen = []
+    if args.listen:
+        for a in args.listen:
+            addr = Address.unknown(a)
+            if addr.is_wildcard_ip():
+                addr.set_ipv4(localip)
+            listen.append(addr)
+    
+    peers = []
+    if args.peers:
+        for p in args.peers:
+            addr = Address.unknown(p)
+            if addr.is_wildcard_ip():
+                addr.set_ipv4(localip)
+            peers.append(addr)
+        
+    a = API(DEST_DIR, SWIFT_BINPATH, dispersy_work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE,
+            swift_work_dir=DEST_DIR, listen=listen, peers=peers, files_directory=args.directory,
+            files=args.files, run_time=TOTAL_RUN_TIME, bloomfilter_update=BLOOM_FILTER_UPDATE,
+            walker=ENABLE_CANDIDATE_WALKER)
+    a.start()
+
     

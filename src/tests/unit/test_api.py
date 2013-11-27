@@ -35,7 +35,7 @@ class TestAPI(unittest.TestCase):
         self.api1.stop()
         self.api2.stop()
         for f in self.files_to_remove:
-            remove_files(f)
+            remove_files(f, True)
         
 
     def test_add_file_both(self):
@@ -47,9 +47,8 @@ class TestAPI(unittest.TestCase):
         
         self.files_done = 0
         def callback(file_):
-            logger.debug("File done: %s", str(file_))
             self.files_done += 1
-            if self.files_done == 4:
+            if self.files_done == 2:
                 self.event.set()
 
         self.api1.file_received_callback(callback)
@@ -59,8 +58,8 @@ class TestAPI(unittest.TestCase):
         self.api2.add_file(self.files[1])
         file0 = os.path.join(self.workdir, os.path.basename(self.files[0]))
         file1 = os.path.join(self.workdir, os.path.basename(self.files[1]))
-#         self.files_to_remove.append(file0)
-#         self.files_to_remove.append(file1)
+        self.files_to_remove.append(file0)
+        self.files_to_remove.append(file1)
         self.event.wait(TIMEOUT_TESTS)
         
         self.assertTrue(os.path.exists(file1))

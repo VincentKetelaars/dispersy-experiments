@@ -545,19 +545,22 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         @type contacts_and_messages: tuple(Address, Iterable(Packet))
         @type recv: boolean
         """
-        logger.debug("Update known addresses, %s", [cam[0] for cam in contacts_and_messages])
+        logger.debug("Update known addresses, %s", [str(cam[0]) for cam in contacts_and_messages])
         self.lock.acquire()
         contacts = [DispersyContact(cam[0], recv_messages=cam[1]) if recv else DispersyContact(cam[0], send_messages=cam[1]) 
                     for cam in contacts_and_messages if isinstance(cam, tuple) 
                     and not self.is_bootstrap_candidate(addr=cam[0])]
         diff = Set(contacts).difference(self.dispersy_contacts)
         if len(diff) > 0:
+            logger.debug("New dispersy contacts: %s", [str(dc.address) for dc in diff])
             self.dispersy_contacts.update(diff)
             self.send_addresses_to_communities([dc.address for dc in diff])
-            # TODO: Perhaps add diff to download peers as well
+            for download in self.downloads.itervalues():
+                # TODO: Protect against unreachable local addresses
+                download.merge_peers(Peer([dc.address for dc in diff]))
             self.distribute_all_hashes_to_peers()
         self.lock.release()
-            
+
     def update_known_downloads(self, roothash, filename, download_impl, addresses=None, seed=False, download=False, add_known=True):
         """
         @param roothash: Binary form of the roothash of filename
@@ -575,9 +578,10 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         d.add_peer(Peer(addresses))
         if add_known: # Add all known peers to this download
             for dc in self.dispersy_contacts:
-                if dc.peer is not None:
-                    d.add_peer(dc.peer)
+                d.add_address(dc.address)
+                # TODO: DC has both an address and a peer. What to do?
         self.downloads[roothash] = d
+        logger.debug("Download %s has %s as peers", filename, [str(a) for a in [asets for asets in [p.addresses for p in d.peers()]]])
         self.lock.release()
         
     def swift_started_running_callback(self):

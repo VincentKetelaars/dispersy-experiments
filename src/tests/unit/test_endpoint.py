@@ -270,11 +270,13 @@ class TestSocketAvailable(unittest.TestCase):
         self.assertTrue(try_sockets(self._addrs, timeout=1.0))
 
 
-def remove_files(filename):
+def remove_files(filename, content=False):
     dir_ = os.path.dirname(filename)
     for f in os.listdir(dir_):
-        if f.endswith(".mhash") or f.endswith(".mbinmap") or f.find("swifturl-") != -1:
+        if f == os.path.basename(filename) + ".mhash" or f == os.path.basename(filename) + ".mbinmap" or f.find("swifturl-") != -1:
             os.remove(os.path.join(dir_, f))
+    if content:
+        os.remove(filename)
 
 if __name__ == "__main__":
     unittest.main()

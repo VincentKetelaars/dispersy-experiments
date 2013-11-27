@@ -11,6 +11,7 @@ import test_endpoint
 import test_runner
 import test_address
 import test_download
+import test_api
 
 def suite():
     suite = unittest.TestSuite()
@@ -23,6 +24,7 @@ def suite():
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_runner))
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_address))
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_download))
+    suite.addTest(unittest.TestLoader().loadTestsFromModule(test_api))
     # For testing of tests
 #     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(test_endpoint.TestEndpointNoConnection))
     return suite
