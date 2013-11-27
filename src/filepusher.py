@@ -4,7 +4,6 @@ Created on Aug 30, 2013
 @author: Vincent Ketelaars
 '''
 
-import Queue
 from threading import Thread, Event
 
 from string import find
@@ -85,7 +84,7 @@ class FilePusher(object):
                     dirs = None
                     if loc != -1:
                         dirs = absfilename[len(self._dir) + 1:-len(basename(absfilename))]
-                    self._thread_func.put(self.send_file_hash_message, (absfilename,), {"dirs":dirs})
+                    self._thread_func.put(self.send_file_hash_message, absfilename, dirs=dirs)
                 else:
                     with file(absfilename) as f:
                         s = f.read()

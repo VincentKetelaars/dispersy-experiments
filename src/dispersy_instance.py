@@ -6,7 +6,6 @@ Created on Aug 29, 2013
 import os
 import random
 import sys
-import argparse
 from threading import Event
 
 from dispersy.logger import get_logger
@@ -19,10 +18,8 @@ from src.dispersy_extends.community import MyCommunity
 from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
-from src.definitions import DISPERSY_WORK_DIR, SQLITE_DATABASE, TOTAL_RUN_TIME, MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, \
-DEFAULT_MESSAGE_DELAY, SLEEP_TIME, RANDOM_PORTS, DEST_DIR, SWIFT_BINPATH, BLOOM_FILTER_UPDATE, ENABLE_CANDIDATE_WALKER,\
-    STATE_INITIALIZED, STATE_RUNNING, STATE_STOPPED, STATE_DONE,\
-    MESSAGE_KEY_STATE
+from src.definitions import MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, DEFAULT_MESSAGE_DELAY, \
+SLEEP_TIME, RANDOM_PORTS, STATE_INITIALIZED, STATE_RUNNING, STATE_STOPPED, STATE_DONE, MESSAGE_KEY_STATE
 
 logger = get_logger(__name__)
 

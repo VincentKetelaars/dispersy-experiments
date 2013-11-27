@@ -59,7 +59,7 @@ class PipeHandler(object):
         
         @param key: MESSAGE_KEY
         """
-        self.sender.put(self.conn.send, args=((key, args, kwargs),))
+        self.sender.put(self.conn.send, (key, args, kwargs))
         
     def handle_message(self, message):
         try:
@@ -220,7 +220,7 @@ class ReceiverAPI(PipeHandler):
     DISPERSY MESSAGE QUEUE
     """
     
-    def _enqueue(self, func, args, kwargs):
+    def _enqueue(self, func, *args, **kwargs):
         logger.debug("Enqueue %s %s %s", func, args, kwargs)
         self.waiting_queue.put((func, args, kwargs))
     
@@ -247,20 +247,20 @@ class ReceiverAPI(PipeHandler):
         if self.state == STATE_RUNNING:
             return self.dispersy_instance._filepusher.set_directory(directory)
         else:
-            self._enqueue(self.monitor_directory_for_files, (directory,), {})
+            self._enqueue(self.monitor_directory_for_files, directory)
         
     def add_file(self, file_):
         if self.state == STATE_RUNNING:
             return self.dispersy_instance._filepusher.add_files([file_])
         else:
-            self._enqueue(self.add_file, (file_,), {})
+            self._enqueue(self.add_file, file_)
     
     def add_peer(self, address):
         assert isinstance(address, Address)
         if self.state == STATE_RUNNING:
             self.dispersy_instance.send_introduction_request(address.addr())
         else:
-            self._enqueue(self.add_peer, (address,), {})
+            self._enqueue(self.add_peer, address)
         
     def add_socket(self, address):
         assert isinstance(address, Address)
@@ -268,13 +268,13 @@ class ReceiverAPI(PipeHandler):
             e = self.dispersy_instance._endpoint.add_endpoint(address)
             e.open(self.dispersy_instance._dispersy)
         else:
-            self._enqueue(self.add_socket, (address,), {})
+            self._enqueue(self.add_socket, address)
     
     def return_progress_data(self):
         if self.state == STATE_RUNNING:
             downloads = self.dispersy_instance._endpoint.downloads
         else:
-            self._enqueue(self.return_progress_data, (), {})
+            self._enqueue(self.return_progress_data)
         # These downloads should contain most information
         # TODO: Find something to return
     
@@ -288,7 +288,7 @@ class ReceiverAPI(PipeHandler):
         if self.state == STATE_RUNNING:
             return self.dispersy_instance._endpoint.if_came_up(addr)
         else:
-            self._enqueue(self.interface_came_up, (ip, if_name, device), {})
+            self._enqueue(self.interface_came_up, ip, if_name, device)
         
     def set_API_logger(self, logger):
         logger = logger

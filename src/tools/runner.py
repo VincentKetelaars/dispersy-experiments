@@ -40,7 +40,7 @@ class CallFunctionThread(Thread):
                 if self._empty_event and self.queue.empty():
                     self._empty_event.set()
             
-    def put(self, func, args=(), kargs={}):
+    def put(self, func, *args, **kargs):
         self.queue.put((func, args, kargs))
         
     def empty(self):

@@ -42,7 +42,7 @@ class MultiCast(object):
         mreq = struct.pack("!4sl", socket.inet_aton(self.group), socket.INADDR_ANY)
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
         
-        self.thread = CallFunctionThread(timeout=0.01)
+        self.thread = CallFunctionThread(timeout=1.0)
         self.thread.start()
         self.event = Event()
         self.thread.put(self._receive)
