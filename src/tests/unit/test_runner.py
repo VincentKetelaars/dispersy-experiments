@@ -9,7 +9,7 @@ from threading import Event
 from src.tests.unit.definitions import SMALL_TASK_TIMEOUT
 from src.tools.runner import CallFunctionThread
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 logger = get_logger(__name__)
 
 class RunnerTest(unittest.TestCase):

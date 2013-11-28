@@ -8,7 +8,7 @@ import os
 import binascii
 import pickle
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 from Tribler.Core.DownloadConfig import DownloadStartupConfig, DownloadConfigInterface
 from Tribler.Core.Swift.SwiftDownloadImpl import SwiftDownloadImpl
 from Tribler.Core.simpledefs import DLSTATUS_STOPPED, DLSTATUS_SEEDING

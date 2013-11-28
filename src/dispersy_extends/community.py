@@ -6,7 +6,7 @@ Created on Aug 7, 2013
 from threading import Event
 from os.path import isfile, basename
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 from dispersy.community import Community
 from dispersy.conversion import DefaultConversion
 from dispersy.message import Message

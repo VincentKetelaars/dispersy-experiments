@@ -11,7 +11,7 @@ import json
 from collections import defaultdict
 from threading import RLock, currentThread, Thread, Event
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 from Tribler.Core.simpledefs import VODEVENT_START, DLSTATUS_STOPPED_ON_ERROR
 from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING, DONE_STATE_SHUTDOWN,\
     DONE_STATE_EARLY_SHUTDOWN, DEBUG

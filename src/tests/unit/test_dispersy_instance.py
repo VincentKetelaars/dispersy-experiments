@@ -8,7 +8,7 @@ import random
 import socket
 
 from dispersy.dispersy import Dispersy
-from dispersy.logger import get_logger
+from src.logger import get_logger
 
 from src.address import Address
 from src.dispersy_instance import verify_addresses_are_free

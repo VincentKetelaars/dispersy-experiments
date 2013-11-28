@@ -9,7 +9,7 @@ import unittest
 import time
 
 from src.swift.swift_process import MySwiftProcess
-from dispersy.logger import get_logger
+from src.logger import get_logger
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy
 

@@ -4,7 +4,7 @@ Created on Oct 14, 2013
 @author: Vincent Ketelaars
 '''
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 
 from struct import unpack
 from socket import AF_INET, AF_INET6, inet_aton

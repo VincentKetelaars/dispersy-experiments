@@ -5,7 +5,7 @@ Created on Sep 17, 2013
 '''
 import unittest
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 from dispersy.candidate import Candidate
 
 from src.tests.unit.definitions import SMALL_TASK_TIMEOUT

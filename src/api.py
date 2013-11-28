@@ -14,7 +14,7 @@ from src.definitions import STATE_NOT, STATE_RUNNING, MESSAGE_KEY_ADD_FILE, MESS
 MESSAGE_KEY_ADD_SOCKET, MESSAGE_KEY_INTERFACE_UP, MESSAGE_KEY_MONITOR_DIRECTORY, MESSAGE_KEY_RECEIVE_FILE, \
 MESSAGE_KEY_RECEIVE_MESSAGE, MESSAGE_KEY_STATE, MESSAGE_KEY_STOP, STATE_DONE
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 from src.tools.runner import CallFunctionThread
 logger = get_logger(__name__)
 
@@ -96,6 +96,10 @@ class API(Thread, PipeHandler):
     def start(self):
         self.receiver_api.start()
         self.is_alive_event.set()
+        Thread.start(self)
+        
+    def run(self):
+        logger.debug("Implement that shit!")
         
     def stop(self):
         """

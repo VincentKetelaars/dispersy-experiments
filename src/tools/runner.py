@@ -7,7 +7,7 @@ Created on Oct 9, 2013
 import Queue
 from threading import Thread, Event
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 
 logger = get_logger(__name__)
     

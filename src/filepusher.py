@@ -10,7 +10,7 @@ from string import find
 from os import listdir
 from os.path import exists, isfile, isdir, getmtime, join, getsize, basename
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 from src.tools.runner import CallFunctionThread
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.dispersy_extends.endpoint import get_hash

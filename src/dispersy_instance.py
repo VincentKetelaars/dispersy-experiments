@@ -8,7 +8,7 @@ import random
 import sys
 from threading import Event
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 from src.swift.swift_process import MySwiftProcess  # This should be imported first, or it will screw up the logs. # TODO: Fix this
 from dispersy.callback import Callback
 from dispersy.dispersy import Dispersy

@@ -8,7 +8,7 @@ from threading import Event
 from src.definitions import TIMEOUT_INTRODUCTION_REQUEST
 from src.tools.runner import CallFunctionThread
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 logger = get_logger(__name__)
 
 class IntroductionRequestTimeout(object):

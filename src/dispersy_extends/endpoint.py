@@ -16,7 +16,7 @@ import time
 import logging
 import Queue
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 from src.swift.swift_process import MySwiftProcess # This should be imported first, or it will screw up the logs.
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics

@@ -7,7 +7,7 @@ import unittest
 import os
 from threading import Event
 
-from dispersy.logger import get_logger
+from src.logger import get_logger
 
 from src.api import API
 from src.tests.unit.definitions import DISPERSY_WORKDIR, FILES

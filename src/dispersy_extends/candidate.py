@@ -5,7 +5,7 @@ Created on Oct 11, 2013
 '''
 
 from dispersy.candidate import WalkCandidate
-from dispersy.logger import get_logger
+from src.logger import get_logger
 
 logger = get_logger(__name__)
 
