@@ -282,13 +282,14 @@ class ReceiverAPI(PipeHandler):
         # These downloads should contain most information
         # TODO: Find something to return
     
-    def interface_came_up(self, ip, if_name, device):
+    def interface_came_up(self, ip, if_name, device, gateway=None):
         addr = Address.unknown(ip)
         if addr.resolve_interface():
             if addr.interface.name != if_name:
                 return # Provided the wrong interface..
             else:
                 addr.interface.device = device
+            addr.interface.gateway = gateway
         if self.state == STATE_RUNNING:
             return self.dispersy_instance._endpoint.if_came_up(addr)
         else:

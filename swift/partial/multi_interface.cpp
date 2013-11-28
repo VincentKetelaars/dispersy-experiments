@@ -449,7 +449,32 @@ short get_family(int fd, bool debug=false) {
 	return sa.sa_family;
 }
 
+sockaddr testshit(sockaddr_in6 saddr, string gateway) {
+	struct sockaddr *gw;
+	if (saddr.sin6_family == AF_INET) {
+		struct sockaddr_in si;
+		si.sin_family = AF_INET;
+		inet_aton(gateway.c_str(), &si.sin_addr);
+		gw = (sockaddr *) &si;
+	} else { // AF_INET6
+		struct sockaddr_in6 si;
+		si.sin6_family = AF_INET6;
+		inet_pton(AF_INET6, gateway.c_str(), &si.sin6_addr);
+		gw = (sockaddr *) &si;
+	}
+	return *gw;
+}
+
 int main(int argc, char *argv[]) {
+	if (true) {
+		sockaddr_in6 saddr = create_ipv6_sockaddr(0, "::1", 0, 0, false);
+		sockaddr sa = testshit(saddr, "0.0.0.0");
+		fprintf(stderr, "Shit ouwe %d\n", sa.sa_family);
+		return 0;
+	}
+
+
+
 	std::vector<int> fd = create_own_sockets();//create_socket_for_each_if();
 	if (fd.size() <= 0) {
 		perror("No sockets..");

@@ -215,6 +215,7 @@ class Interface(object):
         self.address = address
         self.netmask = netmask
         self.broadcast = broadcast
+        self.gateway = None
         self.device = name # Initialize to the interface name
         
     def __eq__(self, other):
