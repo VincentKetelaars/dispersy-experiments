@@ -24,6 +24,7 @@ from src.dispersy_extends.payload import SimpleFilePayload, FileHashPayload, Add
 from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, \
     FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME,\
     MESSAGE_KEY_RECEIVE_MESSAGE
+from src.tools.periodic_task import Looper, PeriodicIntroductionRequest
 
 logger = get_logger(__name__)    
     
@@ -43,6 +44,8 @@ class MyCommunity(Community):
         self._update_bloomfilter = -1
         self._intro_request_updates = {}
         self._api_callback = api_callback
+        self._looper = Looper(0.1)
+        self._looper.start()
         
     def initiate_conversions(self):
         """
@@ -184,14 +187,24 @@ class MyCommunity(Community):
         for o in others:
             del self._intro_request_updates[o.sock_addr]
         
-        self._intro_request_updates.update({candidate.sock_addr : IntroductionRequestTimeout(candidate, send_request)})
+        # TODO: Think about what you do next some more.
+        request_update = None
+        if self._update_bloomfilter > 0: # Use our own looper to ensure that requests are sent periodically
+            request_update = PeriodicIntroductionRequest(send_request, self._update_bloomfilter, candidate)
+            self._looper.add_task(request_update)
+        
+        else: # Only add a timeout regardless if walker is enabled or not
+            request_update = IntroductionRequestTimeout(candidate, send_request)
+        
+        # request_update should have a candidate field
+        self._intro_request_updates.update({candidate.sock_addr : request_update})
         
         return l > 0
                 
     def add_candidate(self, candidate):
         Community.add_candidate(self, candidate)
         # Each candidate should only create one IntroductionRequestTimeout
-        if not candidate.sock_addr in self._intro_request_updates:
+        if not candidate.sock_addr in self._intro_request_updates.iterkeys():
             self.send_introduction_request(candidate) 
         
     def send_introduction_request(self, walker):

@@ -42,7 +42,7 @@ def main(call, callback=None):
         SQLITE_DATABASE = args.sqlite_database
         
     if args.bloomfilter:
-        BLOOM_FILTER_UPDATE = args.bloomfilter
+        BLOOM_FILTER_UPDATE = float(args.bloomfilter)
         
     if args.walker:
         ENABLE_CANDIDATE_WALKER = args.walker

@@ -20,6 +20,8 @@ Started on providing IPv6 capabilities. Swift instances should be able to handle
 Dispersy itself will be a problem most likely.
 Address class should be used more in Endpoint. 
 
+Add MTU to parameters
+
 WALKER:
 
 you should still be able to use the associated Member to determine that multiple Candidate instances belong to a single device

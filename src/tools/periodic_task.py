@@ -32,11 +32,18 @@ class PeriodicTask(object):
         self.last_time = now()
         self.iteration += 1
         self.function(*self.args, **self.kwargs)
+        
 
+class PeriodicIntroductionRequest(PeriodicTask):
+    
+    def __init__(self, func, period, candidate, args=(), kwargs={}):
+        PeriodicTask.__init__(self, func, period, args=args, kwargs=kwargs)
+        self.candidate = candidate
 
 class Looper(Thread):
     """
-    This Looper holds any number of periodic tasks and checks every timeout time if 
+    This Looper holds any number of periodic tasks and checks every timeout time if the task needs to be called
+    or deleted
     """
     
     def __init__(self, sleep=0.1):
@@ -60,8 +67,9 @@ class Looper(Thread):
             del marked_for_delete
             self.event.wait(self.sleep)
 
-    def add_task(self, func, period, max_iterations=-1, args=(), kwargs={}):
-        self.tasks.append(PeriodicTask(func, period, max_iterations, args, kwargs))
+    def add_task(self, periodic_task):
+        assert isinstance(periodic_task, PeriodicTask)
+        self.tasks.append(periodic_task)
 
     def stop(self):
         self.event.set()
