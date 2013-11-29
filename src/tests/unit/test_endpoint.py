@@ -275,7 +275,7 @@ def remove_files(filename, content=False):
     for f in os.listdir(dir_):
         if f == os.path.basename(filename) + ".mhash" or f == os.path.basename(filename) + ".mbinmap" or f.find("swifturl-") != -1:
             os.remove(os.path.join(dir_, f))
-    if content:
+    if content and os.path.exists(filename):
         os.remove(filename)
 
 if __name__ == "__main__":

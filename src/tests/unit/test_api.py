@@ -62,8 +62,25 @@ class TestAPI(unittest.TestCase):
         self.files_to_remove.append(file1)
         self.event.wait(TIMEOUT_TESTS)
         
-        self.assertTrue(os.path.exists(file1))
         self.assertTrue(os.path.exists(file0))
+        self.assertTrue(os.path.exists(file1))
+        
+    def test_add_socket_if_came_up_and_process_unstarted(self):
+        address = Address(ip="127.0.0.1", port=12345)
+        
+        self.fails = 0
+        def callback(addr, errno):
+            logger.debug("Adding address failed %s %d", addr, errno)
+            self.fails += 1
+            self.event.set()
+        
+        self.api1.socket_error_callback(callback)
+        self.api1.add_socket(address.ip, address.port, address.family)
+        self.api1.interface_came_up(address.ip, "lo", "lo", gateway="127.0.0.1")
+        self.api1.start()
+        
+        self.event.wait(2) # Should be plenty of time
+        self.assertEqual(self.fails, 0)
 
 
 if __name__ == "__main__":

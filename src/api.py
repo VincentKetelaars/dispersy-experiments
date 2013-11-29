@@ -12,7 +12,8 @@ from src.dispersy_instance import DispersyInstance
 from src.address import Address
 from src.definitions import STATE_NOT, STATE_RUNNING, MESSAGE_KEY_ADD_FILE, MESSAGE_KEY_ADD_MESSAGE, MESSAGE_KEY_ADD_PEER, \
 MESSAGE_KEY_ADD_SOCKET, MESSAGE_KEY_INTERFACE_UP, MESSAGE_KEY_MONITOR_DIRECTORY, MESSAGE_KEY_RECEIVE_FILE, \
-MESSAGE_KEY_RECEIVE_MESSAGE, MESSAGE_KEY_STATE, MESSAGE_KEY_STOP, STATE_DONE
+MESSAGE_KEY_RECEIVE_MESSAGE, MESSAGE_KEY_STATE, MESSAGE_KEY_STOP, STATE_DONE,\
+    MESSAGE_KEY_SWIFT_RESET, MESSAGE_KEY_SOCKET_ERROR
 
 from src.logger import get_logger
 from src.tools.runner import CallFunctionThread
@@ -49,7 +50,12 @@ class PipeHandler(object):
         Listen to pipe for incoming messages, which are dispatched to handle_message
         """
         while not self.stop_receiving_event.is_set():
-            message = self.conn.recv()
+            message = None
+            try:
+                if self.conn.poll(1.0):
+                    message = self.conn.recv()
+            except:
+                logger.exception("Could not receive message over pipe")
             self.is_alive_event.wait()
             self.handle_message(message)
             
@@ -59,9 +65,18 @@ class PipeHandler(object):
         
         @param key: MESSAGE_KEY
         """
-        self.sender.put(self.conn.send, (key, args, kwargs))
+        
+        def send():
+            try:
+                self.conn.send((key, args, kwargs))
+            except:
+                logger.exception("Failed to send %s", key, args, kwargs)
+        
+        self.sender.put(send)
         
     def handle_message(self, message):
+        if not message:
+            return
         try:
             func = self.MESSAGE_KEY_MAP[message[0]]
             func(*message[1], **message[2])
@@ -83,7 +98,9 @@ class API(Thread, PipeHandler):
         
         self.MESSAGE_KEY_MAP = {MESSAGE_KEY_STATE : self._state_change,
                                 MESSAGE_KEY_RECEIVE_FILE : self._received_file,
-                                MESSAGE_KEY_RECEIVE_MESSAGE : self._received_message}
+                                MESSAGE_KEY_RECEIVE_MESSAGE : self._received_message,
+                                MESSAGE_KEY_SWIFT_RESET : self._swift_reset,
+                                MESSAGE_KEY_SOCKET_ERROR : self._socket_error}
         PipeHandler.__init__(self, parent_conn)
 
         self.receiver_api = Process(target=ReceiverAPI, args=(child_conn,) + di_args, kwargs=di_kwargs)
@@ -92,6 +109,8 @@ class API(Thread, PipeHandler):
         self._callback_file_received = None
         self._callback_message_received = None
         self._callback_state_change = None
+        self._callback_swift_reset = None
+        self._callback_socket_error = None
         
     def start(self):
         self.receiver_api.start()
@@ -105,14 +124,20 @@ class API(Thread, PipeHandler):
         """
         API call that will tell Dispersy to stop
         """
-        self.send_message(MESSAGE_KEY_STOP)
+        if self.is_alive_event.is_set():
+            self.send_message(MESSAGE_KEY_STOP)
         # TODO: If something goes wrong, finish should still be called
+        else:
+            self.is_alive_event.set()
+            self.stop_connection()
+            logger.debug("Never started process, stopped pipe")
         
     def finish(self):
         """
         Finish call that will ensure that the child process is killed.
         This is called when Dispersy signals STATE_DONE.
         """
+        logger.debug("Joining")
         self.receiver_api.join()
         logger.debug("finished")
     
@@ -133,6 +158,12 @@ class API(Thread, PipeHandler):
     def state_change_callback(self, callback):
         self._callback_state_change = callback
         
+    def swift_reset_callback(self, callback):
+        self._callback_swift_reset = callback
+        
+    def socket_error_callback(self, callback):
+        self._callback_socket_error = callback
+        
     """
     API calls
     """
@@ -152,8 +183,8 @@ class API(Thread, PipeHandler):
     def monitor_directory(self, directory):
         self.send_message(MESSAGE_KEY_MONITOR_DIRECTORY, directory)
         
-    def interface_came_up(self, ip, interface_name, device_name):
-        self.send_message(MESSAGE_KEY_INTERFACE_UP, ip, interface_name, device_name)
+    def interface_came_up(self, ip, interface_name, device_name, gateway=None):
+        self.send_message(MESSAGE_KEY_INTERFACE_UP, ip, interface_name, device_name, gateway=gateway)
     
     """
     HANDLE MESSAGES
@@ -175,7 +206,14 @@ class API(Thread, PipeHandler):
         if self._state == STATE_DONE:
             self.stop_connection()
             self.finish()
-    
+            
+    def _swift_reset(self, error):
+        if self._callback_swift_reset:
+            self._callback_swift_reset(error)
+            
+    def _socket_error(self, address, errno):
+        if self._callback_socket_error:
+            self._callback_socket_error
     
 class ReceiverAPI(PipeHandler):
     """
@@ -204,7 +242,9 @@ class ReceiverAPI(PipeHandler):
         
         self.dispersy_callbacks_map = {MESSAGE_KEY_STATE : self._state_change,
                                        MESSAGE_KEY_RECEIVE_FILE : self._received_file,
-                                       MESSAGE_KEY_RECEIVE_MESSAGE : self._received_message}
+                                       MESSAGE_KEY_RECEIVE_MESSAGE : self._received_message,
+                                       MESSAGE_KEY_SWIFT_RESET : self._swift_reset,
+                                       MESSAGE_KEY_SOCKET_ERROR : self._socket_error}
         
         self.run()
         
@@ -291,9 +331,9 @@ class ReceiverAPI(PipeHandler):
                 addr.interface.device = device
             addr.interface.gateway = gateway
         if self.state == STATE_RUNNING:
-            return self.dispersy_instance._endpoint.if_came_up(addr)
+            return self.dispersy_instance._endpoint.interface_came_up(addr)
         else:
-            self._enqueue(self.interface_came_up, ip, if_name, device)
+            self._enqueue(self.interface_came_up, ip, if_name, device, gateway=gateway)
         
     def set_API_logger(self, logger):
         logger = logger
@@ -331,7 +371,13 @@ class ReceiverAPI(PipeHandler):
         logger.info("RECEIVED MESSAGE: %s %s", message[0:100], message_kind)
         self.send_message(MESSAGE_KEY_RECEIVE_MESSAGE, message, message_kind)
         
+    def _swift_reset(self, error=['0' * 20,"unknown"]): # Defaults to 00000000000000000000 unknown
+        logger.info("SWIFT RESET: %s", error)
+        self.send_message(MESSAGE_KEY_SWIFT_RESET, error)
         
+    def _socket_error(self, address, errno):
+        logger.info("SOCKET ERROR: %s %d", address, errno)
+        self.send_message(MESSAGE_KEY_SOCKET_ERROR, address, errno)
         
 if __name__ == "__main__":
     from src.main import main

@@ -93,6 +93,7 @@ class Address(object):
     
     @classmethod
     def unknown(cls, addr):
+        addr = addr.strip()
         if isinstance(addr, Address):
             cls.copy(addr)
         try:
@@ -105,7 +106,6 @@ class Address(object):
             return cls.tuple(addr)
         # Not an integer or tuple, so most likely a string
         try:               
-            addr = addr.strip()
             if addr.find(":") > 0:
                 if addr.find("[") >= 0:
                     return cls.ipv6(addr)
@@ -212,11 +212,15 @@ class Address(object):
 class Interface(object):
     def __init__(self, name, address, netmask, broadcast):
         self.name = name
-        self.address = address
-        self.netmask = netmask
-        self.broadcast = broadcast
-        self.gateway = None
+        self.address = address # ip string
+        self.netmask = netmask # ip string
+        self.broadcast = broadcast # ip string
+        self.gateway = None # ip string
         self.device = name # Initialize to the interface name
+        
+    def __str__(self):
+        return "Interface (%s, %s, %s, %s, %s, %s) " %(self.name, self.address, self.netmask, self.broadcast, 
+                                                       self.gateway, self.device)
         
     def __eq__(self, other):
         if not isinstance(other, Interface):

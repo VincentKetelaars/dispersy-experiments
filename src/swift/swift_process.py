@@ -208,21 +208,28 @@ class MySwiftProcess(SwiftProcess):
                     print >> sys.stderr, "sp: Dispersy endpoint is not available"
                     
         elif words[0] == "SOCKETINFO":
-            saddr = words[1]
+            saddr = Address.unknown(words[1])
             errno = -1
             try:
                 errno = int(words[2])
             except:
                 pass
-            if self._sockaddr_info_callback:
-                self._sockaddr_info_callback(Address.unknown(saddr), errno)
+            if saddr != Address():
+                if errno == 0 and not saddr in self.confirmedaddrs:
+                    self.confirmedaddrs.append(saddr)
+                if self._sockaddr_info_callback:
+                    self._sockaddr_info_callback(saddr, errno)
 
         else:
             roothash = binascii.unhexlify(words[1])
 
             if words[0] == "ERROR":
                 print >> sys.stderr, "sp: i2ithread_readlinecallback:", cmd
-                self.connection_lost(self.get_cmdport(), error=True)
+                if words[2] == "bad" and words[3] == "swarm": # bad swarm does not lead to shutdown!!!!
+                    logger.debug("This is a bad swarm %s", words[1])
+                    # TODO: Handle bad swarms!
+                else:
+                    self.connection_lost(self.get_cmdport(), error=words[2:])
 
             elif words[0] == "CLOSE_EVENT":
                 roothash_hex = words[1]
@@ -298,13 +305,13 @@ class MySwiftProcess(SwiftProcess):
             except:
                 logger.warning("FastConnection is down")
             
-    def connection_lost(self, port, error=False, output_read=False):
+    def connection_lost(self, port, error=None, output_read=False):
         if self.donestate != DONE_STATE_WORKING:
             # Only if it is still running should we consider restarting swift
             return
         logger.debug("CONNECTION LOST")
         self.donestate = DONE_STATE_SHUTDOWN # Mark as done for
-        self._swift_restart_callback()
+        self._swift_restart_callback(error)
         
     def send_tunnel(self, session, address, data, addr=Address()):
         if addr.port == 0:
@@ -354,7 +361,11 @@ class MySwiftProcess(SwiftProcess):
                 logger.debug("Address already in use %s", saddr)
                 if not overwrite:
                     return
-                # TODO: remove from listenaddrs and add again
+                else: # Remove from listenaddrs and put it back in. Remove also from confirmedaddrs if there
+                    self.listenaddrs.remove(saddr)
+                    if saddr in self.confirmedaddrs:
+                        self.confirmedaddrs.remove(saddr)
+                    self.listenaddrs.append(saddr)                    
             else:
                 # saddr is of instance Address
                 self.listenaddrs.append(saddr)

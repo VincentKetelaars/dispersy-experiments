@@ -36,3 +36,6 @@ nosetests.xml
 
 # Objects / Executables
 *.o
+
+# Small testing file
+testing.py

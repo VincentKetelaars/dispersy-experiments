@@ -34,6 +34,7 @@ class EligibleWalkCandidate(WalkCandidate):
     def walk_response(self):
         logger.debug("Introduction response received %s", self.sock_addr)
         self.intro_response_recv = True
-        self.timeout.stop()
+        if self.timeout is not None:
+            self.timeout.stop()
         WalkCandidate.walk_response(self)
     
