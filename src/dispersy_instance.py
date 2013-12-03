@@ -28,13 +28,13 @@ class DispersyInstance(object):
     Instance of Dispersy that runs on its own process
     '''
 
-    def __init__(self, dest_dir, swift_binpath, dispersy_work_dir=u".", sqlite_database=u":memory:", swift_work_dir=None,
+    def __init__(self, dest_dir, swift_binpath, dispersy_work_dir=u".", sqlite_database=":memory:", swift_work_dir=None,
                  swift_zerostatedir=None, listen=[], peers=[], files_directory=None, files=[], run_time=-1, bloomfilter_update=-1,
                  walker=False, callback=None):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
-        self._dispersy_work_dir = dispersy_work_dir 
-        self._sqlite_database = sqlite_database # :memory: is in memory
+        self._dispersy_work_dir = unicode(dispersy_work_dir)
+        self._sqlite_database = unicode(sqlite_database) # :memory: is in memory
         self._swift_work_dir = swift_work_dir
         self._swift_zerostatedir = swift_zerostatedir 
         self._listen = listen # Local socket addresses, instances of Address

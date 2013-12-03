@@ -4,6 +4,7 @@ Created on Oct 9, 2013
 @author: Vincent Ketelaars
 '''
 import unittest
+import time
 from threading import Event
 
 from src.tests.unit.definitions import SMALL_TASK_TIMEOUT
@@ -49,6 +50,19 @@ class RunnerTest(unittest.TestCase):
         
         self.assertTrue(res[0])
 
+    def test_stop_after_tasks_are_done(self):
+        s = 0.5
+        
+        def sleep():
+            time.sleep(s)
+            
+        self._thread.put(sleep)
+        t = time.time()
+        self._thread.stop(wait_for_tasks=True, timeout=s * 2)
+        d = time.time() - t
+        self.assertTrue(self._thread.empty())
+        self.assertGreater(d, s)
+        self.assertLess(d, 2 * s)
 
 if __name__ == "__main__":
     unittest.main()

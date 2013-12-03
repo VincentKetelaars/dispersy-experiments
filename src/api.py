@@ -41,7 +41,7 @@ class PipeHandler(object):
         
     def stop_connection(self):
         self.stop_receiving_event.set()
-        self.sender.stop(Event(), timeout=1.0) # Wait at most timeout till queue is empty
+        self.sender.stop(wait_for_tasks=True, timeout=1.0) # Wait at most timeout till queue is empty
         self.conn.close()
         logger.debug("Connection closed")
     
@@ -90,8 +90,8 @@ class API(Thread, PipeHandler):
     It can send commands and receive feedback via a pipe connection.
     '''
 
-    def __init__(self, *di_args, **di_kwargs):
-        Thread.__init__(self)
+    def __init__(self, name, *di_args, **di_kwargs):
+        Thread.__init__(self, name=name)
         self.setDaemon(True)  # Automatically die when the main thread dies
         self._state = STATE_NOT
         parent_conn, child_conn = Pipe()
@@ -103,6 +103,7 @@ class API(Thread, PipeHandler):
                                 MESSAGE_KEY_SOCKET_ERROR : self._socket_error}
         PipeHandler.__init__(self, parent_conn)
 
+        logger.debug("Calling ReceiverAPI with %s %s %s", child_conn, di_args, di_kwargs)
         self.receiver_api = Process(target=ReceiverAPI, args=(child_conn,) + di_args, kwargs=di_kwargs)
         
         # Callbacks
@@ -111,6 +112,9 @@ class API(Thread, PipeHandler):
         self._callback_state_change = None
         self._callback_swift_reset = None
         self._callback_socket_error = None
+        
+        # Any child class that wants to stop when Dispersy stops should implement stop and set this to True
+        self.stop_on_dispersy_stop = False
         
     def start(self):
         self.receiver_api.start()
@@ -122,15 +126,22 @@ class API(Thread, PipeHandler):
         
     def stop(self):
         """
-        API call that will tell Dispersy to stop
-        """
-        if self.is_alive_event.is_set():
+        API call that will tell Dispersy to stop, if necessary
+        """               
+        if self._state == STATE_RUNNING: # Tell Dispersy to stop
             self.send_message(MESSAGE_KEY_STOP)
-        # TODO: If something goes wrong, finish should still be called
         else:
-            self.is_alive_event.set()
+            self._api_stop()
+        # TODO: If something goes wrong, finish should still be called
+        
+    def _api_stop(self):
+        # wait_on_receive will block unless this is set (Is already set in case process was started)
+        if not self.is_alive_event.is_set():
+            self.is_alive_event.set()        
             self.stop_connection()
-            logger.debug("Never started process, stopped pipe")
+        else:
+            self.stop_connection()
+            self.finish()
         
     def finish(self):
         """
@@ -138,12 +149,15 @@ class API(Thread, PipeHandler):
         This is called when Dispersy signals STATE_DONE.
         """
         logger.debug("Joining")
-        self.receiver_api.join()
+        self.receiver_api.join() # If the process hasn't started, you cannot join it
         logger.debug("finished")
     
     @property
     def state(self):
         return self._state
+    
+    def on_dispersy_stopped(self):
+        raise NotImplementedError()
             
     """
     SUBSCRIBE TO MESSAGE CALLBACKS
@@ -192,27 +206,28 @@ class API(Thread, PipeHandler):
 
         
     def _received_file(self, file_):
-        if self._callback_file_received:
+        if self._callback_file_received is not None:
             self._callback_file_received(file)
         
     def _received_message(self, message, message_kind):
-        if self._callback_message_received:
+        if self._callback_message_received is not None:
             self._callback_message_received(message, message_kind)
     
     def _state_change(self, state):
         self._state = state
-        if self._callback_state_change:
+        if self._callback_state_change is not None:
             self._callback_state_change(state)
         if self._state == STATE_DONE:
-            self.stop_connection()
-            self.finish()
+            self._api_stop()
+            if self.stop_on_dispersy_stop:
+                self.on_dispersy_stopped()
             
     def _swift_reset(self, error):
-        if self._callback_swift_reset:
+        if self._callback_swift_reset is not None:
             self._callback_swift_reset(error)
             
     def _socket_error(self, address, errno):
-        if self._callback_socket_error:
+        if self._callback_socket_error is not None:
             self._callback_socket_error
     
 class ReceiverAPI(PipeHandler):
@@ -237,6 +252,7 @@ class ReceiverAPI(PipeHandler):
     
         self.state = STATE_NOT
         kwargs["callback"] = self._generic_callback
+        logger.debug("Calling DispersyInstance with %s %s", args, kwargs)
         self.dispersy_instance = DispersyInstance(*args, **kwargs)
         self.waiting_queue = Queue.Queue() # Hold on to calls that are made prematurely
         
@@ -254,7 +270,6 @@ class ReceiverAPI(PipeHandler):
         logger.debug("Started DispersyInstance")
         correctStop = self.dispersy_instance.start() # Blocking call
         logger.debug("DispersyInstance has stopped %s!", "correctly" if correctStop else "incorrectly")
-        self.stop_connection() # Cleaning up pipe
                 
     def stop(self):
         self.dispersy_instance.stop()
@@ -330,11 +345,13 @@ class ReceiverAPI(PipeHandler):
             else:
                 addr.interface.device = device
             addr.interface.gateway = gateway
-        if self.state == STATE_RUNNING:
-            return self.dispersy_instance._endpoint.interface_came_up(addr)
+            if self.state == STATE_RUNNING:
+                return self.dispersy_instance._endpoint.interface_came_up(addr)
+            else:
+                self._enqueue(self.interface_came_up, ip, if_name, device, gateway=gateway)
         else:
-            self._enqueue(self.interface_came_up, ip, if_name, device, gateway=gateway)
-        
+            logger.debug("Bogus interface, cannot locate it")
+            
     def set_API_logger(self, logger):
         logger = logger
         
@@ -362,6 +379,8 @@ class ReceiverAPI(PipeHandler):
         self.send_state()
         if state == STATE_RUNNING:
             self._dequeue()
+        if state == STATE_DONE:            
+            self.stop_connection() # Cleaning up pipe
         
     def _received_file(self, file_):
         logger.info("RECEIVED FILE: %s", file_)

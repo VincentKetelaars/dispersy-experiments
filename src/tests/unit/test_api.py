@@ -24,9 +24,9 @@ class TestAPI(unittest.TestCase):
         self.workdir = DISPERSY_WORKDIR + "/temp"
         if not os.path.exists(self.workdir):
             os.makedirs(self.workdir)
-        self.api1 = API(*(self.workdir, SWIFT_BINPATH),**{"walker":False})
-        self.api2 = API(*(self.workdir, SWIFT_BINPATH),**{"walker":False})
-        self.event = Event()
+        self.api1 = API("API1", self.workdir, SWIFT_BINPATH, walker=False)
+        self.api2 = API("API2", self.workdir, SWIFT_BINPATH, walker=False)
+        self._run_event = Event()
         self.files = FILES
         self.files_to_remove = []
 
@@ -49,7 +49,7 @@ class TestAPI(unittest.TestCase):
         def callback(file_):
             self.files_done += 1
             if self.files_done == 2:
-                self.event.set()
+                self._run_event.set()
 
         self.api1.file_received_callback(callback)
         self.api2.file_received_callback(callback)
@@ -60,7 +60,7 @@ class TestAPI(unittest.TestCase):
         file1 = os.path.join(self.workdir, os.path.basename(self.files[1]))
         self.files_to_remove.append(file0)
         self.files_to_remove.append(file1)
-        self.event.wait(TIMEOUT_TESTS)
+        self._run_event.wait(TIMEOUT_TESTS)
         
         self.assertTrue(os.path.exists(file0))
         self.assertTrue(os.path.exists(file1))
@@ -72,14 +72,14 @@ class TestAPI(unittest.TestCase):
         def callback(addr, errno):
             logger.debug("Adding address failed %s %d", addr, errno)
             self.fails += 1
-            self.event.set()
+            self._run_event.set()
         
         self.api1.socket_error_callback(callback)
         self.api1.add_socket(address.ip, address.port, address.family)
         self.api1.interface_came_up(address.ip, "lo", "lo", gateway="127.0.0.1")
         self.api1.start()
         
-        self.event.wait(2) # Should be plenty of time
+        self._run_event.wait(2) # Should be plenty of time
         self.assertEqual(self.fails, 0)
 
 

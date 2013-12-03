@@ -66,6 +66,7 @@ class EndpointStatistics(Statistics):
     
     @socket_running.setter
     def socket_running(self, errno):
+        logger.debug("Socket running %s", errno)
         self._socket_running = errno
         
 class CommonEndpoint(TunnelEndpoint, EndpointStatistics):
@@ -614,6 +615,8 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
     
     def interface_came_up(self, addr):
         logger.debug("Interface %s came up", addr.interface)
+        if addr.interface is None:
+            return
         for e in self.swift_endpoints:
             if e.address.ip == addr.ip:
                 addr.set_port(e.address.port)
@@ -693,8 +696,10 @@ class SwiftEndpoint(CommonEndpoint):
         if self.address.resolve_interface():
             if not address in self._swift.listenaddrs:
                 self.swift_add_socket()
-            if address in self._swift.confirmedaddrs:
-                self.socket_running = True
+            elif address in self._swift.confirmedaddrs:
+                self.socket_running = 0
+            else:
+                logger.debug("Socket is not ready yet!")
         else:
             logger.debug("This address can not be resolved to an interface")
         
@@ -712,7 +717,7 @@ class SwiftEndpoint(CommonEndpoint):
         return self.address.addr()
     
     def send(self, candidates, packets):
-        if self._swift.is_alive():
+        if self._swift is not None and self._swift.is_alive():
             if any(len(packet) > 2**16 - 60 for packet in packets):
                 raise RuntimeError("UDP does not support %d byte packets" % len(max(len(packet) for packet in packets)))
 
