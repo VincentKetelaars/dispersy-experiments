@@ -614,7 +614,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         self._dequeueing = False
     
     def interface_came_up(self, addr):
-        logger.debug("Interface %s came up", addr.interface)
+        logger.debug("%s came up", addr.interface)
         if addr.interface is None:
             return
         for e in self.swift_endpoints:
@@ -627,7 +627,8 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
                 e.address.interface.device == addr.interface.device):
                 e.socket_running = -1 # This new socket is not yet running, so initialize to -1
                 return e.swift_add_socket(addr) # Replace with new address                
-        self.add_endpoint(addr) # If it is new create endpoint
+        e = self.add_endpoint(addr, api_callback=self._api_callback) # If it is new create endpoint
+        e.open(self._dispersy) # Don't forget to open it...
     
     def send_addresses_to_communities(self, addresses):
         """
@@ -764,7 +765,7 @@ class SwiftEndpoint(CommonEndpoint):
         if addr is not None:
             self.address = addr
         if not self._swift.is_ready():
-            self._enqueue(self.swift_add_socket, (), {})
+            self._enqueue(self.swift_add_socket, (addr,), {})
         else:
             if not self.socket_running:
                 self._swift.add_socket(self.address, True)

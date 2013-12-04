@@ -352,6 +352,7 @@ class MySwiftProcess(SwiftProcess):
         self.write(cmd)
 
     def add_socket(self, saddr, overwrite=False):
+        logger.debug("Add socket %s %s",saddr, saddr.interface)
         self.splock.acquire()
         try:
             if self.donestate != DONE_STATE_WORKING or not self.is_alive():

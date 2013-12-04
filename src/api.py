@@ -103,7 +103,6 @@ class API(Thread, PipeHandler):
                                 MESSAGE_KEY_SOCKET_ERROR : self._socket_error}
         PipeHandler.__init__(self, parent_conn)
 
-        logger.debug("Calling ReceiverAPI with %s %s %s", child_conn, di_args, di_kwargs)
         self.receiver_api = Process(target=ReceiverAPI, args=(child_conn,) + di_args, kwargs=di_kwargs)
         
         # Callbacks
@@ -338,19 +337,21 @@ class ReceiverAPI(PipeHandler):
         # TODO: Find something to return
     
     def interface_came_up(self, ip, if_name, device, gateway=None):
-        addr = Address.unknown(ip)
-        if addr.resolve_interface():
-            if addr.interface.name != if_name:
-                return # Provided the wrong interface..
-            else:
+        logger.debug("Interface came up with %s %s %s %s", ip, if_name, device, gateway)
+        if self.state == STATE_RUNNING:
+            addr = Address.unknown(ip)
+            if addr.resolve_interface():
+                if addr.interface.name != if_name:
+                    return # Provided the wrong interface..
                 addr.interface.device = device
-            addr.interface.gateway = gateway
-            if self.state == STATE_RUNNING:
-                return self.dispersy_instance._endpoint.interface_came_up(addr)
+                addr.interface.gateway = gateway
+                if addr.interface.address is None: # In case netifaces does not recognize interface such as ppp
+                    addr.interface.address = ip         
+                self.dispersy_instance._endpoint.interface_came_up(addr)               
             else:
-                self._enqueue(self.interface_came_up, ip, if_name, device, gateway=gateway)
+                logger.debug("Bogus interface, cannot locate it")
         else:
-            logger.debug("Bogus interface, cannot locate it")
+            self._enqueue(self.interface_came_up, ip, if_name, device, gateway=gateway)
             
     def set_API_logger(self, logger):
         logger = logger

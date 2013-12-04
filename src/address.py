@@ -179,6 +179,8 @@ class Address(object):
         return self.port == 0
     
     def resolve_interface(self):
+        if self.interface_exists():
+            return True
         if self.is_wildcard_ip():
             self._if = Interface("All", self._ip, self._ip, self._ip)
             return True
@@ -190,6 +192,14 @@ class Address(object):
                     return True
             except:
                 logger.exception("Failed to find %s", self._ip)
+        return False
+    
+    def interface_exists(self):
+        if self._if is None:
+            return False
+        for if_ in Dispersy._get_interface_addresses():
+            if (self._if.name == if_.name and self._if.address == if_.address):
+                return True
         return False
     
     def ipstr_to_int(self, address):

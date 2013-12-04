@@ -6,7 +6,7 @@ echo $PYTHONPATH # Needs fixing..
 
 cd $UAV
 # ./deps.sh
-# ./prepare_mysql.sh
+./prepare_mysql.sh
 # ./disable_uav_processes.sh
 ./start_uav.sh &> ~/Desktop/logs5 &
 cd -

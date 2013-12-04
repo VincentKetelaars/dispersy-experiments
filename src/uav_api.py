@@ -3,13 +3,14 @@ Created on Nov 28, 2013
 
 @author: Vincent Ketelaars
 '''
+import time
 from threading import Event
 
 from Common.Status.StatusDbReader import StatusDbReader
 from Common.API import get_config, get_status
 
 import sys
-print sys.path
+# print sys.path
 sys.path.insert(2, "/home/vincent/git/dispersy-experiments")
 sys.path.insert(3, "/home/vincent/git/dispersy-experiments/tribler")
 
@@ -19,6 +20,8 @@ from src.logger import get_logger
 from src.api import API
 
 logger = get_logger(__name__)
+
+OLDDATATIME = 10 # The time in seconds that may have elapsed after which data from the database becomes to old for use
 
 class UAVAPI(API):
     '''
@@ -68,17 +71,17 @@ class UAVAPI(API):
                     if c.startswith("Network") or c.encode('UTF-8') == self.name:
                         params = self.db_reader.get_parameters(c)
                         logger.debug("I have got channel %s with params %s", c, 
-                                     [(p, self.db_reader.get_last_status_value(c, p)[1]) for p in params])
+                                     [(p, self.db_reader.get_last_status_value(c, p)) for p in params])
                 
             except:
                 logger.exception("To bad")
                 
             current_dialers = self._get_dialers()
-            logger.debug("Current dialers %s", current_dialers)
             for cd in current_dialers:
-                time, state = self.db_reader.get_last_status_value(cd, u"state")
-                if state == u"up" and (not cd in self.use_interfaces or # Either don't know about it yet, or was down
-                                       (cd in self.use_interfaces and self.use_interfaces[cd][1] == u"down")):
+                t, state = self.db_reader.get_last_status_value(cd, u"state")
+                if (state == u"up" and time.time() - t < OLDDATATIME and 
+                    # Either don't know about it yet, or was down
+                    (not cd in self.use_interfaces.iterkeys() or (cd in self.use_interfaces.iterkeys() and self.use_interfaces[cd][1] != u"up"))):
                     self._tell_dispersy_if_came_up(cd)
                 self.use_interfaces[cd] = (time, state) # Set the newest state
                 
@@ -120,9 +123,7 @@ class UAVAPI(API):
         run_time = int(self.cfg["parameters.run_time"])
         bloomfilter_update = int(self.cfg["parameters.bloomfilter_update"])
         walker = self.cfg["parameters.walker"]        
-        logger.debug("Arguments %s %s %s %s %s %s %d %d %s", di_args, dispersy_work_dir, sqlite_database, 
-                     swift_work_dir, swift_zerostatedir, files_directory, run_time, 
-                     bloomfilter_update, walker)
+        
         di_kwargs = {}
         if dispersy_work_dir is not None:
             di_kwargs["dispersy_work_dir"] = dispersy_work_dir
