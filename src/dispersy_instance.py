@@ -171,6 +171,7 @@ class DispersyInstance(object):
     def send_introduction_request(self, address):
         # Each new candidate will be sent an introduction request once
         # If update_bloomfilter > 0, then every so many seconds an introduction request will be sent
+        # Introduction request contains the Dispersy address
         self._community.create_candidate(address, True, address, address, u"unknown")
         
 def verify_addresses_are_free(addrs):
@@ -186,7 +187,7 @@ def verify_addresses_are_free(addrs):
         return addrs
     
     if addrs is None or not addrs:
-        addrs = recur(None, 1, 0)
+        addrs = None
     else:
         addrs = recur(addrs, len(addrs), 0)
     

@@ -119,7 +119,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
     
     def get_address(self):
         if self._endpoint is None:
-            return ("0.0.0.0", -1)
+            return ("0.0.0.0", 0)
         else:
             return self._endpoint.get_address()
         
@@ -308,7 +308,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             self.distribute_all_hashes_to_peers() # After adding the file, directly add the peer as well
         self.lock.release()
         
-    def distribute_all_hashes_to_peers(self):
+    def distribute_all_hashes_to_peers(self, sock_addr=None):
         """
         All known addresses and downloads are added.
         """
@@ -318,16 +318,18 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             if self.downloads[roothash].seeder(): # TODO: Is this a good idea?
                 for peer in self.downloads[roothash].peers():
                     for addr in peer.addresses:
-                        self.add_peer(addr, roothash)
+                        self.add_peer(addr, roothash, sock_addr)
         self.lock.release()
     
-    def add_peer(self, addr, roothash):                
+    def add_peer(self, addr, roothash, sock_addr=None):                
         """
         Send message to the swift process to add a peer.
-        Make sure it is not a bootstrap peer
+        If necessary you can specify the socket that should connect to the peer
+        Make sure it is not a bootstrap peer.
         
         @param addr: address of the peer: (ip, port)
         @param roothash: Must be unhexlified roothash
+        @param sock_addr: Address of local socket
         """
         self.lock.acquire()
         if not self._swift.is_ready():
@@ -340,13 +342,14 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             logger.debug("Add bootstrap candidate rejected")
             self.lock.release()
             return
-        if roothash is not None and not any([addr == a and roothash == h for a, h in self.added_peers]):
+        if roothash is not None and not any([addr == a and roothash == h and sock_addr == s for a, h, s in self.added_peers]):
             d = self.retrieve_download_impl(roothash)
             if d is not None:
-                logger.info("Add peer %s with roothash %s ", addr, roothash)
-                self._swift.add_peer(d, addr, self._endpoint.address)
+                logger.info("Add peer %s with roothash %s to %s", addr, roothash, sock_addr)
+                self._swift.add_peer(d, addr, sock_addr)
                 self.downloads[roothash].add_address(addr)
-                self.added_peers.add((addr, roothash))
+                self.added_peers.add((addr, roothash, sock_addr))
+                # TODO: Note somewhere which local sockets already have peers
         self.lock.release()
             
     def start_download(self, filename, directories, roothash, dest_dir, addresses):
@@ -503,10 +506,10 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
                     self.swift_queue.put((self._swift.start_download, (d.downloadimpl,), {}))
                     for peer in self.downloads[h].peers():
                         for addr in peer.addresses:
-                            if not (addr, h) in self.added_peers:
+                            if not (addr, h, None) in self.added_peers:
                                 logger.debug("Enqueue add peer %s %s", addr, h)
                                 self.swift_queue.put((self._swift.add_peer, (d.downloadimpl, addr, None), {}))                            
-                                self.added_peers.add((addr, h))
+                                self.added_peers.add((addr, h, None))
                             
             while not temp_queue.empty():
                 self.swift_queue.put(temp_queue.get())
@@ -629,6 +632,8 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
                 return e.swift_add_socket(addr) # Replace with new address                
         e = self.add_endpoint(addr, api_callback=self._api_callback) # If it is new create endpoint
         e.open(self._dispersy) # Don't forget to open it...
+        # Now that we have a new socket we should tell it about the files to disseminate
+        self.distribute_all_hashes_to_peers(e.address)
     
     def send_addresses_to_communities(self, addresses):
         """

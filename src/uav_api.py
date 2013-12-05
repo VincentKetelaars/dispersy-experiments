@@ -119,7 +119,10 @@ class UAVAPI(API):
         sqlite_database = self.cfg["parameters.sqlite_database"]
         swift_work_dir = self.cfg["parameters.swift_work_dir"]
         swift_zerostatedir = self.cfg["parameters.swift_zerostatedir"]
+        listen = self._get_argument_children("listen")
+        peers = self._get_argument_children("peers")
         files_directory = self.cfg["parameters.files_directory"]
+        files = self._get_argument_children("files")
         run_time = int(self.cfg["parameters.run_time"])
         bloomfilter_update = int(self.cfg["parameters.bloomfilter_update"])
         walker = self.cfg["parameters.walker"]        
@@ -133,17 +136,20 @@ class UAVAPI(API):
             di_kwargs["swift_work_dir"] = swift_work_dir
         if swift_zerostatedir is not None:
             di_kwargs["swift_zerostatedir"] = swift_zerostatedir
+        if listen is not None:
+            di_kwargs["listen"] = [Address.unknown(l.encode('UTF-8')) for l in listen]
+        if peers is not None:
+            di_kwargs["peers"] = [Address.unknown(p.encode('UTF-8')) for p in peers]
         if files_directory is not None:
             di_kwargs["files_directory"] = files_directory
+        if files is not None:
+            di_kwargs["files"] = files
         if run_time is not None:
             di_kwargs["run_time"] = run_time
         if bloomfilter_update is not None:
             di_kwargs["bloomfilter_update"] = bloomfilter_update
         if walker is not None:
-            di_kwargs["walker"] = walker            
-        di_kwargs["listen"] = [Address.unknown(l.encode('UTF-8')) for l in self._get_argument_children("listen")]
-        di_kwargs["peers"] = [Address.unknown(p.encode('UTF-8')) for p in self._get_argument_children("peers")]
-        di_kwargs["files"] = self._get_argument_children("files")
+            di_kwargs["walker"] = walker
         return di_args, di_kwargs
     
     def _get_channel_value(self, channel, *values):

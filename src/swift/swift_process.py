@@ -34,8 +34,8 @@ class MySwiftProcess(SwiftProcess):
 
         # Main UDP listen socket
         if listenaddrs is None:
-            self.listenaddr = Address.localport(random.randint(10001, 10999))
-            self.listenaddrs = [self.listenaddr]
+            self.listenaddr = None
+            self.listenaddrs = []
         else:
             self.listenaddrs = listenaddrs
             self.listenaddr = listenaddrs[0]
@@ -62,11 +62,12 @@ class MySwiftProcess(SwiftProcess):
         args.append("-j")
 #         args.append("-B") # Set Channel debug_file
 #         args.append("-D" + self.workdir + "/channeldebug")
-        args.append("-l")  # listen port
-        ports = ""
-        for l in self.listenaddrs:
-            ports += str(l) + ","
-        args.append(ports[:-1]) # Remove last comma
+        if self.listenaddrs: # In case there is nothing to listen too
+            args.append("-l")  # listen port
+            ports = ""
+            for l in self.listenaddrs:
+                ports += str(l) + ","
+            args.append(ports[:-1]) # Remove last comma
         
         args.append("-c")  # command port
         args.append("127.0.0.1:" + str(self.cmdport))
@@ -130,8 +131,8 @@ class MySwiftProcess(SwiftProcess):
                     self.connection_lost(self.get_cmdport(), output_read=True)
                     break
                 print >> sys.stderr, prefix, line.rstrip()
-        self.popen_outputthreads = [Thread(target=read_and_print, args=(self.popen.stdout,), name="SwiftProcess_%d_stdout" % self.listenaddr.port), 
-                                    Thread(target=read_and_print, args=(self.popen.stderr,), name="SwiftProcess_%d_stderr" % self.listenaddr.port)]
+        self.popen_outputthreads = [Thread(target=read_and_print, args=(self.popen.stdout,), name="SwiftProcess_%d_stdout" % self.popen.pid), 
+                                    Thread(target=read_and_print, args=(self.popen.stderr,), name="SwiftProcess_%d_stderr" % self.popen.pid)]
         [thread.start() for thread in self.popen_outputthreads]
 
                 
@@ -333,8 +334,10 @@ class MySwiftProcess(SwiftProcess):
         try:
             if self.donestate != DONE_STATE_WORKING or not self.is_alive():
                 return
-
-            addrstr = str(addr)
+            
+            addrstr = None
+            if addr is not None:
+                addrstr = str(addr)
             saddrstr = None
             if saddr is not None:
                 saddrstr = str(saddr)
@@ -345,7 +348,11 @@ class MySwiftProcess(SwiftProcess):
 
     def send_peer_addr(self, roothash_hex, addrstr, saddrstr):
         # assume splock is held to avoid concurrency on socket
-        cmd = 'PEERADDR ' + roothash_hex + ' ' + addrstr
+        cmd = 'PEERADDR ' + roothash_hex + ' '
+        if addrstr is not None:
+            cmd += addrstr
+        else:
+            cmd += "-1"
         if saddrstr is not None:
             cmd += ' ' + saddrstr
         cmd += '\r\n'
