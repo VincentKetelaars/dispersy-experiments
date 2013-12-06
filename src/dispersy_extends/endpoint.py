@@ -30,7 +30,7 @@ from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download, Peer
 from src.definitions import SLEEP_TIME, HASH_LENGTH, MESSAGE_KEY_RECEIVE_FILE,\
-    MESSAGE_KEY_SWIFT_RESET, MESSAGE_KEY_SOCKET_ERROR
+    MESSAGE_KEY_SWIFT_RESET, MESSAGE_KEY_SOCKET_ERROR, MESSAGE_KEY_SWIFT_PID
 from src.dispersy_extends.payload import AddressesCarrier
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_contact import DispersyContact
@@ -113,6 +113,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         self.lock = RLock() # Reentrant Lock
         
         if swift_process:
+            self.do_callback(MESSAGE_KEY_SWIFT_PID, swift_process.get_pid())
             self.set_callbacks()
             for addr in self._swift.listenaddrs:
                 self.add_endpoint(addr, api_callback=api_callback)
@@ -483,7 +484,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             self.added_peers = Set() # Reset the peers added before shutdown
             
             # Try the sockets to see if they are in use
-            if not try_sockets(self._swift.listenaddrs, timeout=1.0):
+            if not try_sockets([e.address for e in self.swift_endpoints], timeout=1.0):
                 logger.warning("Socket(s) is/are still in use")
                 self._swift.network_shutdown() # Ensure that swift really goes down
                 
@@ -491,7 +492,8 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             
             # Make sure not to make the same mistake as what let to this
             # Any roothash added twice will create an error, leading to this. 
-            self._swift = MySwiftProcess(self._swift.binpath, self._swift.workdir, None, self._swift.listenaddrs, None, None, None)
+            self._swift = MySwiftProcess(self._swift.binpath, self._swift.workdir, None, 
+                                         [e.address for e in self.swift_endpoints], None, None, None)
             self.set_callbacks()
             self._swift.add_download(self) # Normally in open
             # First add all calls to the queue and then start the TCP connection
@@ -666,7 +668,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         
     def sockaddr_info_callback(self, address, errno):
         logger.debug("Socket info callback %s %d", address, errno)
-        if errno < 0:
+        if errno < 0 or address.ip == "AF_UNSPEC":
             logger.debug("Something is going on, but don't know what.")
         elif errno == 0:
             logger.debug("Socket is bound and active")
@@ -687,7 +689,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
                 logger.debug("Cannot resolve interface")
             if try_socket(address):
                 logger.debug("Yelp, socket is gone!")
-            self.do_callback(MESSAGE_KEY_SOCKET_ERROR, address, errno)
+        self.do_callback(MESSAGE_KEY_SOCKET_ERROR, address, errno)
                 
     @property
     def socket_running(self):
@@ -766,8 +768,12 @@ class SwiftEndpoint(CommonEndpoint):
                                              data)], True, timestamp)
         
     def swift_add_socket(self, addr=None):
-        logger.debug("SwiftEndpoint add socket %s", self.address)
+        logger.debug("SwiftEndpoint add socket %s", addr)
         if addr is not None:
+            try:
+                self._swift.listenaddrs.remove(self.address) # Remove old value
+            except:
+                logger.exception("Why can't we remove this address? %s", self.address)
             self.address = addr
         if not self._swift.is_ready():
             self._enqueue(self.swift_add_socket, (addr,), {})

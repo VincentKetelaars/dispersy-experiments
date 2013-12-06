@@ -34,11 +34,9 @@ class MySwiftProcess(SwiftProcess):
 
         # Main UDP listen socket
         if listenaddrs is None:
-            self.listenaddr = None
             self.listenaddrs = []
         else:
             self.listenaddrs = listenaddrs
-            self.listenaddr = listenaddrs[0]
         
         # NSSA control socket
         if cmdgwport is None:

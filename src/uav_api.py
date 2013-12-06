@@ -183,6 +183,8 @@ class UAVAPI(API):
             self.interface_came_up(res[1], res[2], device[device.rfind('.') + 1:], gateway=res[0])
         else:
             logger.debug("Couldn't get all the information")
+
+                
         
 if __name__ == "__main__":
 #     from src.main import main

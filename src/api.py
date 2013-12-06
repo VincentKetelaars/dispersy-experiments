@@ -5,6 +5,9 @@ Created on Nov 15, 2013
 '''
 
 import Queue
+import socket
+import os
+import signal
 from threading import Thread, Event
 from multiprocessing import Process, Pipe
 
@@ -13,7 +16,7 @@ from src.address import Address
 from src.definitions import STATE_NOT, STATE_RUNNING, MESSAGE_KEY_ADD_FILE, MESSAGE_KEY_ADD_MESSAGE, MESSAGE_KEY_ADD_PEER, \
 MESSAGE_KEY_ADD_SOCKET, MESSAGE_KEY_INTERFACE_UP, MESSAGE_KEY_MONITOR_DIRECTORY, MESSAGE_KEY_RECEIVE_FILE, \
 MESSAGE_KEY_RECEIVE_MESSAGE, MESSAGE_KEY_STATE, MESSAGE_KEY_STOP, STATE_DONE,\
-    MESSAGE_KEY_SWIFT_RESET, MESSAGE_KEY_SOCKET_ERROR
+    MESSAGE_KEY_SWIFT_RESET, MESSAGE_KEY_SOCKET_ERROR, MESSAGE_KEY_SWIFT_PID
 
 from src.logger import get_logger
 from src.tools.runner import CallFunctionThread
@@ -70,7 +73,7 @@ class PipeHandler(object):
             try:
                 self.conn.send((key, args, kwargs))
             except:
-                logger.exception("Failed to send %s", key, args, kwargs)
+                logger.exception("Failed to send %s %s %s", key, args, kwargs)
         
         self.sender.put(send)
         
@@ -100,7 +103,8 @@ class API(Thread, PipeHandler):
                                 MESSAGE_KEY_RECEIVE_FILE : self._received_file,
                                 MESSAGE_KEY_RECEIVE_MESSAGE : self._received_message,
                                 MESSAGE_KEY_SWIFT_RESET : self._swift_reset,
-                                MESSAGE_KEY_SOCKET_ERROR : self._socket_error}
+                                MESSAGE_KEY_SOCKET_ERROR : self._socket_error,
+                                MESSAGE_KEY_SWIFT_PID : self._swift_pid}
         PipeHandler.__init__(self, parent_conn)
 
         self.receiver_api = Process(target=ReceiverAPI, args=(child_conn,) + di_args, kwargs=di_kwargs)
@@ -114,9 +118,11 @@ class API(Thread, PipeHandler):
         
         # Any child class that wants to stop when Dispersy stops should implement stop and set this to True
         self.stop_on_dispersy_stop = False
+        self._children_recur = [] # process id of every child, grandchild, etc.
         
     def start(self):
         self.receiver_api.start()
+        self._children_recur.append(self.receiver_api.pid)
         self.is_alive_event.set()
         Thread.start(self)
         
@@ -135,6 +141,9 @@ class API(Thread, PipeHandler):
         
     def _api_stop(self):
         # wait_on_receive will block unless this is set (Is already set in case process was started)
+        # TODO: Make sure that you kill (have killed) the child process before you sever the connection
+        # Or try join for a short while, and forcefully kill it if it does not succeed.
+        # This could leave subprocesses of the childprocess running.
         if not self.is_alive_event.is_set():
             self.is_alive_event.set()        
             self.stop_connection()
@@ -148,7 +157,14 @@ class API(Thread, PipeHandler):
         This is called when Dispersy signals STATE_DONE.
         """
         logger.debug("Joining")
-        self.receiver_api.join() # If the process hasn't started, you cannot join it
+        self.receiver_api.join(1) # If the process hasn't started, you cannot join it
+        # join should timeout after 1 second if necessary
+        for pid in self._children_recur: # Go through the processes.. (i.e. probably start with the oldest, in case they respawn killed processes)
+            try:
+                os.kill(pid, signal.SIGKILL) # Kill child process
+                logger.debug("Had to kill process %d", pid)
+            except:
+                pass
         logger.debug("finished")
     
     @property
@@ -190,7 +206,7 @@ class API(Thread, PipeHandler):
     def add_message(self, message, message_kind):
         self.send_message(MESSAGE_KEY_ADD_MESSAGE, message, message_kind)
         
-    def add_socket(self, ip, port, family):
+    def add_socket(self, ip, port, family=socket.AF_INET):
         self.send_message(MESSAGE_KEY_ADD_SOCKET, Address(ip=ip, port=port, family=family))
     
     def monitor_directory(self, directory):
@@ -227,7 +243,10 @@ class API(Thread, PipeHandler):
             
     def _socket_error(self, address, errno):
         if self._callback_socket_error is not None:
-            self._callback_socket_error
+            self._callback_socket_error(address, errno)
+            
+    def _swift_pid(self, pid):
+        self._children_recur.append(pid)
     
 class ReceiverAPI(PipeHandler):
     """
@@ -259,7 +278,8 @@ class ReceiverAPI(PipeHandler):
                                        MESSAGE_KEY_RECEIVE_FILE : self._received_file,
                                        MESSAGE_KEY_RECEIVE_MESSAGE : self._received_message,
                                        MESSAGE_KEY_SWIFT_RESET : self._swift_reset,
-                                       MESSAGE_KEY_SOCKET_ERROR : self._socket_error}
+                                       MESSAGE_KEY_SOCKET_ERROR : self._socket_error,
+                                       MESSAGE_KEY_SWIFT_PID : self._swift_pid}
         
         self.run()
         
@@ -398,6 +418,9 @@ class ReceiverAPI(PipeHandler):
     def _socket_error(self, address, errno):
         logger.info("SOCKET ERROR: %s %d", address, errno)
         self.send_message(MESSAGE_KEY_SOCKET_ERROR, address, errno)
+    
+    def _swift_pid(self, pid):
+        self.send_message(MESSAGE_KEY_SWIFT_PID, pid)
         
 if __name__ == "__main__":
     from src.main import main
