@@ -145,3 +145,21 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         SwiftDownloadImpl.network_create_engine_wrapper(self, lm_network_engine_wrapper_created_callback, pstate, lm_network_vod_event_callback, initialdlstatus=initialdlstatus)
         # If this is used, most likely self.sp will be None. 
         # self.sp.start_download(self)
+        
+    def network_create_spew_from_channels(self):
+        if not 'channels' in self.midict:
+            return []
+
+        plist = []
+        channels = self.midict['channels']
+        for channel in channels:
+            d = {}
+            d['ip'] = channel['ip']
+            d['port'] = channel['port']
+            d['sock_ip'] = channel['socket_ip']
+            d['sock_port'] = channel['socket_port']
+            d['utotal'] = channel['bytes_up'] / 1024.0
+            d['dtotal'] = channel['bytes_down'] / 1024.0
+            plist.append(d)
+
+        return plist

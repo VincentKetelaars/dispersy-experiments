@@ -15,7 +15,8 @@ sys.path.insert(2, "/home/vincent/git/dispersy-experiments")
 sys.path.insert(3, "/home/vincent/git/dispersy-experiments/tribler")
 
 from src.address import Address
-from src.definitions import STATE_DONE, STATE_INITIALIZED, STATE_NOT, STATE_RUNNING, STATE_STOPPED
+from src.definitions import STATE_DONE, STATE_INITIALIZED, STATE_NOT, STATE_RUNNING, STATE_STOPPED,\
+    STATE_RESETTING
 from src.logger import get_logger
 from src.api import API
 
@@ -31,7 +32,7 @@ class UAVAPI(API):
     '''
 
     STATES = {STATE_DONE : "done", STATE_INITIALIZED : "initialized", STATE_NOT : "none",
-              STATE_RUNNING : "running", STATE_STOPPED : "stopped"}
+              STATE_RUNNING : "running", STATE_STOPPED : "stopped", STATE_RESETTING : "resetting"}
 
     def __init__(self, *di_args, **di_kwargs):
         '''
@@ -61,7 +62,8 @@ class UAVAPI(API):
         self.use_interfaces = {}
         
         # Set callbacks
-        self.state_change_callback(self.state_changed)        
+        self.state_change_callback(self._state_changed)
+        self.swift_state_callback(self._swift_state_changed)   
         
     def run(self):
         while not self.run_event.is_set():
@@ -83,7 +85,8 @@ class UAVAPI(API):
                     # Either don't know about it yet, or was down
                     (not cd in self.use_interfaces.iterkeys() or (cd in self.use_interfaces.iterkeys() and self.use_interfaces[cd][1] != u"up"))):
                     self._tell_dispersy_if_came_up(cd)
-                self.use_interfaces[cd] = (time, state) # Set the newest state
+                ip = self._get_channel_value(cd, u"ip")
+                self.use_interfaces[cd] = (time, state, ip) # Set the newest state
                 
             self.run_event.wait(self.sleep)
         logger.debug("Stopped running")
@@ -101,9 +104,80 @@ class UAVAPI(API):
         logger.debug("Dispersy has stopped")
         self._stop()
         
-    def state_changed(self, state):
+    """
+    CALLBACKS
+    """
+        
+    def _state_changed(self, state):
         self.status["state"] = self.STATES[state]
         
+    def _swift_state_changed(self, state, error=None):
+        self.status["swift.state"] = self.STATES[state]
+        
+    def swift_info_callback(self, download):
+        base = "swift.downloads." + download["roothash"] + "."
+        if not self.status.has_key(base + "filename"):
+            self.status[base + "filename"] = download["filename"]
+            self.status[base + "seeding"] = download["seeding"]
+            self.status[base + "path"] = download["path"]
+        self.status[base + "leeching"] = download["leeching"]   
+        self.status[base + "dynasize"] = download["dynasize"]        
+        self.status[base + "progress"] = download["progress"]        
+        self.status[base + "current_down_speed"] = download["current_down_speed"]
+        self.status[base + "current_up_speed"] = download["current_up_speed"]
+        self.status[base + "leechers"] = download["leechers"]
+        self.status[base + "seeders"] = download["seeders"]        
+        self.status[base + "total_up"] = download["total_up"]        
+        self.status[base + "total_down"] = download["total_down"]      
+        
+        basechannel = "swift.sockets."
+        channels = download["channels"]
+        for c in channels:
+            if_name = self._get_device_by_ip(c["sock_ip"])
+            peer_name = c["ip"].replace(".","_") + ":" + str(c["port"])
+            self.status[basechannel + if_name + "." + peer_name + ".total_up"] = c["utotal"] # KB
+            self.status[basechannel + if_name + "." + peer_name + ".total_down"] = c["dtotal"] # KB
+            
+    def dispersy_info_callback(self, info):
+        base_endpoint = "dispersy.endpoint."
+        try:
+            me = info["multiendpoint"]
+            for e in me:
+                name = self._get_device_by_address(e["address"])
+                self.status[base_endpoint + name + ".total_up"] = e["total_up"]
+                self.status[base_endpoint + name + ".total_down"] = e["total_down"]
+                self.status[base_endpoint + name + ".total_send"] = e["total_send"]
+        except:
+            pass
+            
+    def socket_state_callback(self, address, state):
+        base = "swift.sockets."
+        name = self._get_device_by_address(address)
+        
+        if name is None:
+            name = "unknown"
+            
+        self.status[base + name + ".ip"] = address.ip
+        self.status[base + name + ".port"] = address.port
+        self.status[base + name + ".state"] = state
+            
+    
+    """
+    PRIVATE FUNCTIONS
+    """
+    
+    def _get_device_by_address(self, address):
+        if address.interface is not None and address.interface.name in self.use_interfaces.iterkeys():
+            name = address.interface.name
+        else:
+            name = self._get_device_by_ip(address.ip)
+        return name              
+    
+    def _get_device_by_ip(self, ip):
+        for i, v in self.use_interfaces.iteritems():
+            if v[2] == ip:
+                return i[i.rfind('.') + 1:]
+        return None
     
     def _get_argument_children(self, arg):
         try:
@@ -152,20 +226,16 @@ class UAVAPI(API):
             di_kwargs["walker"] = walker
         return di_args, di_kwargs
     
-    def _get_channel_value(self, channel, *values):
+    def _get_channel_value(self, channel, value):
         """
-        Returns the resulting list of string values in the same order they were requested.
-        If an error occurs, order cannot be maintained and the result is None
+        @return the database value, otherwise None.
         """
-        r = []
-        for v in values:
-            try:
-                res = self.db_reader.get_last_status_value(channel, v)
-                r.append(res[1].encode("UTF-8"))
-            except:
-                logger.exception("Can't get %s %s", channel, v)
-                return None 
-        return r    
+        try:
+            res = self.db_reader.get_last_status_value(channel, value)
+        except:
+            logger.exception("Can't get %s %s", channel, value)
+            return None 
+        return res[1].encode("UTF-8")
         
     def _get_dialers(self):
         channels = []
@@ -177,14 +247,11 @@ class UAVAPI(API):
     
     def _tell_dispersy_if_came_up(self, device):
         logger.debug("Telling dispersy we have a brand new interface %s", device)
-        res = self._get_channel_value(device, u"default_gateway", u"ip", u"ppp_interface")
-        if res is not None:
-            # Send only the device name, without any parents prepended
-            self.interface_came_up(res[1], res[2], device[device.rfind('.') + 1:], gateway=res[0])
-        else:
-            logger.debug("Couldn't get all the information")
-
-                
+        gateway = self._get_channel_value(device, u"default_gateway")
+        ip = self._get_channel_value(device, u"ip")
+        interface = self._get_channel_value(device, u"ppp_interface")
+        # Send only the device name, without any parents prepended
+        self.interface_came_up(ip, interface, device[device.rfind('.') + 1:], gateway=gateway)
         
 if __name__ == "__main__":
 #     from src.main import main

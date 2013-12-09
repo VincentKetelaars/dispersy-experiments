@@ -19,7 +19,8 @@ from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
 from src.filepusher import FilePusher
 from src.definitions import MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, DEFAULT_MESSAGE_DELAY, \
-SLEEP_TIME, RANDOM_PORTS, STATE_INITIALIZED, STATE_RUNNING, STATE_STOPPED, STATE_DONE, MESSAGE_KEY_STATE
+SLEEP_TIME, RANDOM_PORTS, STATE_INITIALIZED, STATE_RUNNING, STATE_STOPPED, STATE_DONE, MESSAGE_KEY_STATE,\
+    MESSAGE_KEY_SWIFT_STATE
 
 logger = get_logger(__name__)
 
@@ -70,6 +71,7 @@ class DispersyInstance(object):
         self._callback = Callback("Dispersy-Callback-" + str(random.randint(0,1000000)))
         
         self._swift = self.create_swift_instance(self._listen)
+        self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_INITIALIZED)
         self._endpoint = MultiEndpoint(self._swift, self._api_callback)
 
         self._dispersy = Dispersy(self._callback, self._endpoint, self._dispersy_work_dir, self._sqlite_database)
@@ -132,8 +134,7 @@ class DispersyInstance(object):
     def state(self, state):
         self._state = state
         logger.info("STATECHANGE %d", state)
-        if self._api_callback is not None:
-            self._api_callback(MESSAGE_KEY_STATE, state)
+        self.do_callback(MESSAGE_KEY_STATE, state)
             
     @property
     def dest_dir(self):
@@ -174,6 +175,10 @@ class DispersyInstance(object):
         # Introduction request contains the Dispersy address
         self._community.create_candidate(address, True, address, address, u"unknown")
         
+    def do_callback(self, key, *args, **kwargs):
+        if self._api_callback is not None:
+            self._api_callback(key, *args, **kwargs)
+        
 def verify_addresses_are_free(addrs):
     def recur(addrs, n, iteration):
         if iteration >= 5:
@@ -192,7 +197,7 @@ def verify_addresses_are_free(addrs):
         addrs = recur(addrs, len(addrs), 0)
     
     if addrs is None:
-        logger.warning("Could not obtain free ports!")
+        logger.warning("No address to return!")
     else:
         logger.debug("Swift will listen to %s", [str(a) for a in addrs])
         

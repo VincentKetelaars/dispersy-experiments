@@ -3,6 +3,8 @@ Created on Oct 3, 2013
 
 @author: Vincent Ketelaars
 '''
+
+import os
             
 class FakeDispersy(object):
 
@@ -36,3 +38,6 @@ class FakeSwift(object):
     
     def add_download(self, d):
         pass
+    
+    def get_pid(self):
+        return os.getpid()

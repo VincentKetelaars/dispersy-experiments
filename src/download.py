@@ -4,6 +4,7 @@ Created on Sep 10, 2013
 @author: Vincent Ketelaars
 '''
 import binascii
+import os
 from datetime import datetime
 from sets import Set
 
@@ -38,15 +39,17 @@ class Download(object):
         Constructor
         '''
         self._roothash = roothash
-        self._filename = filename
+        self._filename = os.path.basename(filename)
         self._directories = directories
+        if directories == "":
+            self._directories = os.path.split(filename)[0] # Everything before the final slash
         self._seed = seed
         self._download = download
         self._downloadimpl = downloadimpl
         self._peers = Set() # Set of Peers
         
-        self._start_time = datetime.now()
-        self._finished_time = None
+        self._start_time = datetime.utcnow()
+        self._finished_time = datetime.max
         if not download:
             self._finished_time = self._start_time
             
@@ -68,11 +71,11 @@ class Download(object):
         return binascii.hexlify(self.roothash)
     
     def is_finished(self):
-        return self._finished_time is not None
+        return self._finished_time < datetime.max
     
     def set_finished(self):
-        if self._finished_time is None:
-            self._finished_time = datetime.now()
+        if self._finished_time == datetime.max:
+            self._finished_time = datetime.utcnow()
             return True
         else:
             return False
@@ -105,4 +108,18 @@ class Download(object):
                     diff.add(peer)
             self._peers.difference_update(diff)
             self._peers.add(new_peer)
+    
+    def package(self):
+        """
+        @return dictionary with data from this class
+        """
+        data = {"filename" : self.filename, "roothash" : self.roothash_as_hex(), "seeding" : self.seeder(), "path" : self.path(), 
+                "leeching" : self.is_finished(), "dynasize" : self.downloadimpl.get_dynasize(),                        
+                "progress" : self.downloadimpl.get_progress(),                             
+                "current_down_speed" : self.downloadimpl.get_current_speed("down"),
+                "current_up_speed" : self.downloadimpl.get_current_speed("up"),   
+                "leechers" : self.downloadimpl.numleech, "seeders" : self.downloadimpl.numseeds,                                   
+                "total_up" : self.downloadimpl.get_total_up(), "total_down" : self.downloadimpl.get_total_down(),
+                "channels" : self.downloadimpl.network_create_spew_from_channels()}
+        return data
         

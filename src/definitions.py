@@ -4,6 +4,7 @@ Created on Sep 10, 2013
 @author: Vincent Ketelaars
 '''
 import os
+import socket
 from datetime import datetime
 
 """
@@ -20,12 +21,14 @@ MESSAGE_KEY_INTERFACE_UP = 6
 MESSAGE_KEY_MONITOR_DIRECTORY = 7
 MESSAGE_KEY_RECEIVE_FILE = 8
 MESSAGE_KEY_RECEIVE_MESSAGE = 9
-MESSAGE_KEY_SWIFT_RESET = 10
-MESSAGE_KEY_SOCKET_ERROR = 11
+MESSAGE_KEY_SWIFT_STATE = 10
+MESSAGE_KEY_SOCKET_STATE = 11
 MESSAGE_KEY_SWIFT_PID = 12
+MESSAGE_KEY_SWIFT_INFO = 13
+MESSAGE_KEY_DISPERSY_INFO = 14
 
 """
-DISPERSY_INSTANCE
+STATE
 """
 # States
 STATE_NOT = -1
@@ -33,6 +36,7 @@ STATE_INITIALIZED = 0
 STATE_RUNNING = 1
 STATE_STOPPED = 2
 STATE_DONE = 3
+STATE_RESETTING = 4
 
 """
 DISPERSY
@@ -61,7 +65,7 @@ SECURITY = u"medium"
 
 MASTER_MEMBER_PUBLIC_KEY = "307e301006072a8648ce3d020106052b81040024036a0004004b2c2fbbf036a0ae1dedf4420ff724869e324bc63064ec2e7bad062a7a9c7f31a7c3ff17a11fd582c9eb8b727dacb228afceb2002ad6e916efd4531e79f040341c7259c99938aae9f6ece17c5075b7ab8e9c92f7ff4493468d1e354a31d139e73928266b824fe3".decode("HEX")
 
-RANDOM_PORTS = (10000, 20000) # TODO: Determine exact range of available ports
+RANDOM_PORTS = (socket.IPPORT_USERRESERVED, 2**16 - 1)
 
 DEFAULT_MESSAGE_COUNT = 1
 DEFAULT_MESSAGE_DELAY = 0.0 # Seconds
@@ -70,6 +74,7 @@ DEFAULT_MESSAGE_DELAY = 0.0 # Seconds
 SLEEP_TIME = 0.5
 TOTAL_RUN_TIME = 10
 BLOOM_FILTER_UPDATE = 5.0
+REPORT_DISPERSY_INFO_TIME = 1.0
 
 DEST_DIR = os.getenv("HOME") + "/Desktop/tests_dest"
 SWIFT_BINPATH = os.getenv("HOME") + "/git/dispersy-experiments/libswift/swift" #os.getenv("HOME") + "/svn/libswift/ppsp/swift" # "/git/dispersy-experiments/tribler/Tribler/SwiftEngine/swift"
@@ -102,6 +107,7 @@ TIMEOUT_TESTS = 10 # Seconds
 """
 Swift
 """
+
 
 """
 Timeout

@@ -115,7 +115,7 @@ class MySwiftProcess(SwiftProcess):
         # A proper solution would be to switch to twisted for the communication with the swift binary
         self.popen = subprocess.Popen(args, cwd=workdir, creationflags=creationflags, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
-        # This event must be set when is verified that swift is running
+        # This event must be set when is verified that swift is running and the cmdgw is up
         self._swift_running = Event()
 
         def read_and_print(socket):
@@ -141,8 +141,9 @@ class MySwiftProcess(SwiftProcess):
         if line.find("Creating new TCP listener") != -1:
             self._swift_running.set()
         elif line.find(listenstr) != -1:
-            addrstr = line[len(listenstr) + 1:]
+            addrstr = line[len(listenstr):]
             saddr = Address.unknown(addrstr)
+            logger.debug("Found listen address %s", saddr)
             if saddr != Address():
                 self.confirmedaddrs.append(saddr)
                 if self._sockaddr_info_callback:
@@ -208,16 +209,16 @@ class MySwiftProcess(SwiftProcess):
                     
         elif words[0] == "SOCKETINFO":
             saddr = Address.unknown(words[1])
-            errno = -1
+            state = -1
             try:
-                errno = int(words[2])
+                state = int(words[2])
             except:
                 pass
             if saddr != Address():
-                if errno == 0 and not saddr in self.confirmedaddrs:
+                if state == 0 and not saddr in self.confirmedaddrs:
                     self.confirmedaddrs.append(saddr)
                 if self._sockaddr_info_callback:
-                    self._sockaddr_info_callback(saddr, errno)
+                    self._sockaddr_info_callback(saddr, state)
 
         else:
             roothash = binascii.unhexlify(words[1])

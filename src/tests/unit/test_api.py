@@ -12,33 +12,53 @@ from src.logger import get_logger
 
 from src.api import API
 from src.tests.unit.definitions import DISPERSY_WORKDIR, FILES
-from src.definitions import SWIFT_BINPATH, TIMEOUT_TESTS
+from src.definitions import SWIFT_BINPATH, TIMEOUT_TESTS, STATE_RESETTING
 from src.address import Address
 from src.tests.unit.test_endpoint import remove_files
 
 logger = get_logger(__name__)
 
 class TestAPI(unittest.TestCase):
+    
+    class MyAPI(API):
+        
+        def __init__(self, name, *di_args, **di_kwargs):
+            API.__init__(self, name, *di_args, **di_kwargs)
+            self.fails = 0
+            self._run_event = Event()
+            self.files_done = 0
+        
+        def socket_state_callback(self, addr, state):
+            if state > 0:
+                self.fails += 1
+                self._run_event.set()       
+        
+        def file_received_callback(self, file_):
+            self.files_done += 1
+            self.api1._run_event.set()
 
 
     def setUp(self):
         self.workdir = DISPERSY_WORKDIR + "/temp"
         if not os.path.exists(self.workdir):
             os.makedirs(self.workdir)
-        self.api1 = API("API1", self.workdir, SWIFT_BINPATH, walker=False)
-        self._run_event = Event()
+        self.api1 = self.MyAPI("API1", self.workdir, SWIFT_BINPATH, walker=False)
         self.files = FILES
         self.files_to_remove = []
 
 
     def tearDown(self):
         self.api1.stop()
+        try:
+            self.api2.stop() # Only necessary when test creates this second api
+        except:
+            pass
         for f in self.files_to_remove:
             remove_files(f, True)
         
 
     def test_add_file_both(self):
-        self.api2 = API("API2", self.workdir, SWIFT_BINPATH, walker=False)        
+        self.api2 = self.MyAPI("API2", self.workdir, SWIFT_BINPATH, walker=False, listen=[Address(ip="127.0.0.1")])        
         
         addr = Address(ip="127.0.0.1", port=12421)
         self.api1.start()
@@ -46,44 +66,28 @@ class TestAPI(unittest.TestCase):
         self.api2.start()
         self.api2.add_peer(addr.ip, addr.port, addr.family)
         
-        self.files_done = 0
-        def callback(file_):
-            self.files_done += 1
-            if self.files_done == 2:
-                self._run_event.set()
-
-        self.api1.file_received_callback(callback)
-        self.api2.file_received_callback(callback)
-        
         self.api1.add_file(self.files[0])
         self.api2.add_file(self.files[1])
         file0 = os.path.join(self.workdir, os.path.basename(self.files[0]))
         file1 = os.path.join(self.workdir, os.path.basename(self.files[1]))
         self.files_to_remove.append(file0)
         self.files_to_remove.append(file1)
-        self._run_event.wait(TIMEOUT_TESTS)
+        
+        self.api1._run_event.wait(TIMEOUT_TESTS / 2)
+        self.api2._run_event.wait(TIMEOUT_TESTS / 2)
         
         self.assertTrue(os.path.exists(file0))
         self.assertTrue(os.path.exists(file1))
         
-        self.api2.stop()
-        
     def test_add_socket_if_came_up_and_process_unstarted(self):
         address = Address(ip="127.0.0.1", port=12345)
-        
-        self.fails = 0
-        def callback(addr, errno):
-            logger.debug("Adding address failed %s %d", addr, errno)
-            self.fails += 1
-            self._run_event.set()
-        
-        self.api1.socket_error_callback(callback)
+
         self.api1.add_socket(address.ip, address.port, address.family)
         self.api1.interface_came_up(address.ip, "lo", "lo", gateway="127.0.0.1")
         self.api1.start()
         
-        self._run_event.wait(2) # Should be plenty of time
-        self.assertEqual(self.fails, 0)
+        self.api1._run_event.wait(2) # Should be plenty of time
+        self.assertEqual(self.api1.fails, 0)
         
 class TestAPINetworkInterface(unittest.TestCase):
     
@@ -92,16 +96,18 @@ class TestAPINetworkInterface(unittest.TestCase):
         def __init__(self, name, *di_args, **di_kwargs):
             API.__init__(self, name, *di_args, **di_kwargs)
             self._run_event = Event()
+            self.sock_states = []
             
         def run(self):
             ip = "193.156.108.78"
             port = 0
             self.add_socket(ip, port)
+            self.add_peer(ip, 12346)
             event = Event()
             event.wait(2)
             if_ = "wlan0"
             os.system("ifconfig %s down" % if_)
-            event.wait(20)
+            event.wait(25)
             while True:
                 output = os.popen('ifconfig').read()
                 index = output.find(if_)
@@ -114,7 +120,10 @@ class TestAPINetworkInterface(unittest.TestCase):
                     break
                 event.wait(1)
             event.wait(1)
-            self._run_event.set()
+            self._run_event.set()       
+        
+        def socket_state_callback(self, socket, state):
+            self.sock_states.append(state)
     
     def setUp(self):
         self.workdir = DISPERSY_WORKDIR + "/temp"
@@ -129,23 +138,19 @@ class TestAPINetworkInterface(unittest.TestCase):
         
     def test_wifi_up_down(self):       
         self.restarted = False
-        def restart_callback(error):
-            self.restarted = True
-            
-        self.sock_errors = []
-        def socket_callback(socket, error):
-            self.sock_errors.append(error)
+        def restart_callback(state, error=None):
+            if state == STATE_RESETTING:
+                self.restarted = True
         
-        self.api.swift_reset_callback(restart_callback)
-        self.api.socket_error_callback(socket_callback)
+        self.api.swift_state_callback(restart_callback)
         self.api.start()
         
         self.api._run_event.wait(40)
         
         self.assertFalse(self.restarted)
-        self.assertEqual(self.sock_errors[0], 0) # Should be okay first
-        self.assertEqual(self.sock_errors[-1], 0) # Last should be okay also
-        
+        self.assertGreater(len(self.api.sock_states), 0) # Test so that the next one cannot give an error
+        self.assertEqual(self.api.sock_states[0], 0) # Should be okay first
+        self.assertEqual(self.api.sock_states[-1], 0) # Last should be okay also       
 
 
 if __name__ == "__main__":
