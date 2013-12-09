@@ -235,7 +235,7 @@ class UAVAPI(API):
         except:
             logger.exception("Can't get %s %s", channel, value)
             return None 
-        return res[1].encode("UTF-8")
+        return None if res[1] is None else res[1].encode("UTF-8")
         
     def _get_dialers(self):
         channels = []
