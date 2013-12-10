@@ -1,0 +1,645 @@
+<?xml version="1.0" ?>
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="configuration.xsd">
+	<Version>0.34</Version>
+	<ValidationRequired>False</ValidationRequired>
+
+	<Config>
+		<configService_port>10001</configService_port>
+		<callback_configService_port>10002</callback_configService_port>
+		<configService_socket_timeout>10.0</configService_socket_timeout>
+		<configService_file>./Config/configuration.xml</configService_file>
+		<default_configService_file>./Config/defaultConfiguration_vincent.xml</default_configService_file>
+	</Config>
+
+	<Instruments>
+		<SampleDB>
+			<imu>auto</imu>
+		</SampleDB>
+
+		<IMU>
+			<serialport>/dev/ttyS9</serialport>
+
+			<temperature>False</temperature>
+			<calibrated>
+				<global>True</global>
+				<acceleration>True</acceleration>
+				<rate_of_turn>True</rate_of_turn>
+				<magneto>True</magneto>
+			</calibrated>
+
+			<orientation>True</orientation>
+			<orientation_type>quaternion</orientation_type>
+			<auxiliary>False</auxiliary>
+			<position>True</position>
+			<velocity>True</velocity>
+			<status>True</status>
+			<sample_counter>True</sample_counter>
+			<UTC>True</UTC>
+			<NED>True</NED>
+			<debug_messages>False</debug_messages>
+			<report_interval>1.0</report_interval>
+			<db_name>uav</db_name>
+			<db_host>localhost</db_host>
+			<db_user>pilot</db_user>
+			<db_password>pi10t</db_password>
+		</IMU>
+
+		<AutoPilot>
+			<serialport>/dev/ttyS1</serialport>
+			<baudrate>19200</baudrate>
+			<timeout>0.05</timeout>
+			<port>9000</port>
+		</AutoPilot>
+
+		<Trios>
+			<serialport>/dev/ttyS11</serialport>
+			<max_buffer_size>1048576</max_buffer_size>
+			<database>postgresql</database>
+			<baudrate>115200</baudrate>
+			<db_name>uav</db_name>
+			<db_host>localhost</db_host>
+			<db_user>pilot</db_user>
+			<db_password>pi10t</db_password>
+		</Trios>
+
+		<Camera>
+			<enabled>False</enabled>
+			<iso>200</iso>
+			<interval>0</interval>
+			<shutterspeed>1/250</shutterspeed>
+			<capturetarget>Internal RAM</capturetarget>
+			<picture_directory>../data/images/</picture_directory>
+			<picture_target_template>$YEAR/$MONTH/$DAY/$HOUR/</picture_target_template>
+			<thumbnail>./GUI/Web/html/img/last_image</thumbnail>
+			<thumbnail_interval>15</thumbnail_interval>
+
+			<irTrigger>
+				<port>/dev/ttyUSB0</port>
+				<model>nikon</model>
+				<baudrate>38000</baudrate>
+				<image_name>../data/images/img_%04d.jpg</image_name>
+			</irTrigger>
+		</Camera>
+
+		<irCamera>
+			<offset_x>0</offset_x>
+			<offset_y>0</offset_y>
+			<width>324</width>
+			<height>256</height>
+			<img_format>jpeg</img_format>
+			<jpeg_quality>75</jpeg_quality>
+			<thumbnail>./GUI/Web/html/img/last_ir_image.jpg</thumbnail>
+			<thumbnail_interval>15</thumbnail_interval>
+		</irCamera>
+		<ueye>
+			<executablePath>./Instruments/ueye/ueye</executablePath>
+			<imagePath>../data/ueye/</imagePath>
+			<frameRate>1.0</frameRate>
+		</ueye>
+
+		<GPS>
+			<serialport>auto</serialport>
+			<device_model>USB-Serial_Controller_D</device_model>
+			<baudrate>4800</baudrate>
+			<Trimble>
+				<executablePath>./Instruments/GPS/Trimble/NativeTrimble</executablePath>
+				<binex>
+					<logPath>../data/binex/</logPath>
+					<ipPort>5018</ipPort>
+					<serialPort>/dev/ttySUNDEFINEDBinex</serialPort>
+					<baud>38400</baud>
+				</binex>
+				<nmea>
+					<ipPort>5017</ipPort>
+					<serialPort>/dev/ttySUNDEFINEDNMEA</serialPort>
+					<baud>38400</baud>
+				</nmea>
+				<ipAddress>193.156.106.156</ipAddress>
+				<db_name>uav</db_name>
+			</Trimble>
+		</GPS>
+
+		<MetPack>
+			<serialport>auto</serialport>
+			<device_model>FT232R_USB_UART_MetPack-ARR</device_model>
+			<baudrate>9600</baudrate>
+		</MetPack>
+
+		<Housekeeping>
+			<serialport>/dev/ttyS7</serialport>
+			<device_model>HOUSEKEEPING</device_model>
+			<baudrate>38400</baudrate>
+		</Housekeeping>
+
+		<SkyOPC>
+			<serialport>/dev/ttyS11</serialport>
+			<baudrate>9600</baudrate>
+		</SkyOPC>
+
+		<LaserScanner>
+			<port>auto</port>
+			<baudrate>115200</baudrate>
+			<device_model>Morph-IC</device_model>
+			<firmware>./Instruments/LaserScan700/LaserScan.rbf</firmware>
+			<firmware_upload>./Instruments/LaserScan700/ftdi</firmware_upload>
+			<upload_firmware>True</upload_firmware>
+			<db_name>uav</db_name>
+		</LaserScanner>
+
+		<Laser>
+			<port>auto</port>
+			<baudrate>115200</baudrate>
+			<device_model>USR232R</device_model>
+			<db_name>uav</db_name>
+			<model>uls</model>
+			<pulse_frequency>4000</pulse_frequency>
+			<pulse_pr_measurement>4</pulse_pr_measurement>
+			<average_weight>4</average_weight>
+		</Laser>
+
+		<IRCameraV4L>
+			<resolution>pal</resolution>
+			<image_dir>../data/ir_images/</image_dir>
+			<image_type>jpg</image_type>
+			<thumbnail>./GUI/Web/html/img/last_ir_image.jpg</thumbnail>
+			<thumbnail_interval>15</thumbnail_interval>
+		</IRCameraV4L>
+
+		<BatteryMonitor>
+			<port>/dev/ttyS1</port>
+			<baudrate>19200</baudrate>
+		</BatteryMonitor>
+
+		<Hauppauge>
+			<device>/dev/video0</device>
+			<video_bitrate>3000000</video_bitrate>
+			<video_dir>../data/video</video_dir>
+			<image_dir>../data/images</image_dir>
+			<interval>1</interval>
+			<input>1</input>
+		</Hauppauge>
+
+	</Instruments>
+
+	<Network>
+		<Channel>
+			<link_performance>0</link_performance>
+		</Channel>
+
+		<AutoDetect>
+			<Telit_HSDPA_Wireless_Modem>
+				<type>GPRS</type>
+				<major>188</major>
+				<iface>0</iface>
+			</Telit_HSDPA_Wireless_Modem>
+			<HUAWEI_Mobile>
+				<type>GPRS</type>
+				<major>188</major>
+				<iface>0</iface>
+			</HUAWEI_Mobile>
+			<CMOTECH_CDMA_Technologies>
+				<type>ICE</type>
+				<major>188</major>
+				<iface>0</iface>
+			</CMOTECH_CDMA_Technologies>
+			<MaxStream_PKG-U>
+				<type>RadioModem</type>
+			</MaxStream_PKG-U>
+			<IRIDIUM-USB>
+				<type>Iridium</type>
+			</IRIDIUM-USB>
+			<Iridium_9555_Handset>
+				<type>Iridium</type>
+			</Iridium_9555_Handset>
+			<SkipList>
+				<skip_port1>/dev/ttyS0</skip_port1>
+				<skip_port2>/dev/ttyS1</skip_port2>
+				<skip_port3>/dev/ttyS11</skip_port3>
+				<skip_port4>/dev/ttyS8</skip_port4>
+				<skip_port5>/dev/ttyS9</skip_port5>
+				<skip_port6>/dev/ttyeS4</skip_port6>
+			</SkipList>
+		</AutoDetect>
+
+		<Dialer>
+			<GPRS>
+				<enabled>True</enabled>
+				<device>auto</device>
+				<redial_pause>3</redial_pause>
+				<check_interval>1.0</check_interval>
+				<config_file_base_path>./Network/DeviceConfig</config_file_base_path>
+				<config_file_tmp_path>/tmp/</config_file_tmp_path>
+				<wvdial>wvdial</wvdial>
+				<ChannelChecker>
+					<ping_interval>5</ping_interval>
+					<create_custom_route>True</create_custom_route>
+				</ChannelChecker>
+				<route>193.156.106.69</route>
+				<tunnel>openvpn /etc/openvpn/openvpn_gprs.conf</tunnel>
+			</GPRS>
+
+			<ICE>
+				<enabled>True</enabled>
+				<device>auto</device>
+				<redial_pause>3</redial_pause>
+				<check_interval>1.0</check_interval>
+				<config_file_base_path>./Network/DeviceConfig</config_file_base_path>
+				<config_file_tmp_path>/tmp/</config_file_tmp_path>
+				<wvdial>wvdial</wvdial>
+				<ChannelChecker>
+					<ping_interval>5</ping_interval>
+					<create_custom_route>True</create_custom_route>
+				</ChannelChecker>
+				<route>193.156.106.92</route>
+				<tunnel>openvpn /etc/openvpn/openvpn_ice.conf</tunnel>
+			</ICE>
+
+			<Iridium>
+				<enabled>True</enabled>
+				<redial_pause>10</redial_pause>
+				<phone_number>698881631829553</phone_number>
+				<device>auto</device>
+				<check_interval>1.0</check_interval>
+				<config_file_base_path>./Network/DeviceConfig</config_file_base_path>
+				<config_file_tmp_path>/tmp/</config_file_tmp_path>
+				<wvdial>wvdial</wvdial>
+				<ChannelChecker>
+					<ping_interval>10</ping_interval>
+					<create_custom_route>False</create_custom_route>
+				</ChannelChecker>
+			</Iridium>
+
+			<RadioModem>
+				<reset_interval>120</reset_interval>
+				<reset_bytes>0</reset_bytes>
+				<device>auto</device>
+				<device_model>MaxStream_PKG-U</device_model>
+				<baudrate>9600</baudrate>
+				<packet_size>256</packet_size>
+				<ChannelChecker>
+					<ping_interval>5</ping_interval>
+					<create_custom_route>False</create_custom_route>
+				</ChannelChecker>
+			</RadioModem>
+		</Dialer>
+
+		<Pipes>
+			<Buffer>
+				<min_retransmit_delay>1.0</min_retransmit_delay>
+				<max_size>42</max_size>
+			</Buffer>
+		</Pipes>
+
+		<NetworkManager>
+			<run_interval>30.0</run_interval>
+			<xmlrpc_port>9003</xmlrpc_port>
+			<xmlrpc_timeout>4.0</xmlrpc_timeout>
+			<radio_modem_enabled>False</radio_modem_enabled>
+		</NetworkManager>
+
+		<Dispersy>
+			<enabled>True</enabled>
+			<parameters>
+				<dest_dir>/home/vincent/Desktop/tests_dest</dest_dir>
+				<swift_binpath>/home/vincent/git/dispersy-experiments/libswift/swift</swift_binpath>
+				<dispersy_work_dir>/home/vincent/Desktop/tests_dest</dispersy_work_dir>
+				<sqlite_database>:memory:</sqlite_database>
+				<swift_work_dir>/home/vincent/Desktop/tests_dest</swift_work_dir>
+				<swift_zerostatedir></swift_zerostatedir>
+				<listen>
+					
+				</listen>
+				<peers>
+					<address>193.156.108.78:12346</address>
+				</peers>
+				<files_directory>/home/vincent/Desktop/test_large</files_directory>
+				<files></files>
+				<run_time>5</run_time>
+				<bloomfilter_update>10</bloomfilter_update>
+				<walker>False</walker>
+			</parameters>
+		</Dispersy>
+
+		<TrackingAntenna>
+			<device>auto</device>
+			<device_model>USB__-__Serial</device_model>
+			<multicast>ff02::101</multicast>
+			<port>5515</port>
+			<lat>69.680601</lat>
+			<lon>18.98759</lon>
+			<alt>15</alt>
+			<max_angle>90</max_angle>
+			<min_angle>0</min_angle>
+			<monitor_lat>Instruments.GPS:lat</monitor_lat>
+			<monitor_lon>Instruments.GPS:lon</monitor_lon>
+			<monitor_alt>Instruments.GPS:alt</monitor_alt>
+			<calibration>
+				<azimuth>500,210,650,70.0</azimuth>
+				<altitude>650,34.5,800,-60.4</altitude>
+			</calibration>
+		</TrackingAntenna>
+
+	</Network>
+
+	<System>
+		<SystemInformation>
+			<sample_rate>10</sample_rate>
+			<monitor_sensors>True</monitor_sensors>
+		</SystemInformation>
+
+		<WebServer>
+			<web_root>./GUI/Web/html/</web_root>
+			<port>4321</port>
+
+			<status>
+				<db_name>uav</db_name>
+				<db_user>pilot</db_user>
+				<db_password>pi10t</db_password>
+				<db_host>localhost</db_host>
+			</status>
+		</WebServer>
+
+		<OpenGLRenderer>
+			<zoom>35</zoom>
+		</OpenGLRenderer>
+
+		<InternalDB>
+			<db_user>pilot</db_user>
+			<db_password>pi10t</db_password>
+			<db_host>localhost</db_host>
+			<db_name>uav</db_name>
+		</InternalDB>
+
+		<LogDB>
+			<db_name>uav</db_name>
+			<db_user>pilot</db_user>
+			<db_host>localhost</db_host>
+			<db_password>pi10t</db_password>
+		</LogDB>
+
+		<DbSource>
+			<port>10100</port>
+			<interval>1</interval>
+		</DbSource>
+
+		<Status>
+			<Postgres>
+				<db_name>statusdb</db_name>
+				<db_user>pilot</db_user>
+				<db_host>localhost</db_host>
+				<db_password>pi10t</db_password>
+			</Postgres>
+
+			<MySQL>
+				<db_name>uav</db_name>
+				<db_user>pilot</db_user>
+				<db_host>localhost</db_host>
+				<db_password>pi10t</db_password>
+			</MySQL>
+
+			<Sqlite>
+				<default_filename>./status.db</default_filename>
+			</Sqlite>
+
+			<SyncStatus>
+				<fast_host>10.0.0.2</fast_host>
+				<fast_port>5432</fast_port>
+				<fast_host>10.42.0.106</fast_host>
+				<slow_port>5432</slow_port>
+			</SyncStatus>
+
+			<GroundDB>
+				<db_host>localhost</db_host>
+				<db_port>5432</db_port>
+				<db_name>uav</db_name>
+				<db_user>pilot</db_user>
+				<db_password>pi10t</db_password>
+			</GroundDB>
+
+			<RemoteStatusReporter>
+				<port>auto</port>
+				<url>http://localhost:9002</url>
+			</RemoteStatusReporter>
+
+			<StatusService>
+				<port>9002</port>
+				<timeout>10.0</timeout>
+			</StatusService>
+		</Status>
+
+		<PowerSupply>
+			<serialport>/dev/ttyS8</serialport>
+			<baudrate>38400</baudrate>
+			<timeout>1.0</timeout>
+
+			<radio_modem>
+				<state>on</state>
+				<controllable>True</controllable>
+			</radio_modem>
+			<camera>
+				<state>on</state>
+				<controllable>True</controllable>
+			</camera>
+			<payload>
+				<state>on</state>
+				<controllable>True</controllable>
+			</payload>
+			<modem>
+				<state>on</state>
+				<controllable>True</controllable>
+			</modem>
+			<ignition>
+				<state>on</state>
+				<controllable>False</controllable>
+			</ignition>
+			<strobe>
+				<state>on</state>
+				<controllable>True</controllable>
+			</strobe>
+		</PowerSupply>
+
+		<SystemControl>
+			<sample_rate>10</sample_rate>
+			<monitor_sensors>True</monitor_sensors>
+			<default_user>pilot</default_user>
+			<default_environment>PYTHONPATH=.</default_environment>
+			<default_start_delay>1</default_start_delay>
+			<process>
+				<p01_PowerSupply>
+					<enabled>True</enabled>
+					<command>python System/PowerSupply.py</command>
+				</p01_PowerSupply>
+				<p40_GPS>
+					<enabled>True</enabled>
+					<command>python Instruments/GPS/NMEA.py</command>
+				</p40_GPS>
+				<p41_Trimble>
+					<enabled>True</enabled>
+					<command>python Instruments/GPS/Trimble/Trimble.py serial nmea
+						binex</command>
+				</p41_Trimble>
+				<p90_UEye>
+					<enabled>True</enabled>
+					<command>python Instruments/ueye/ueye.py</command>
+				</p90_UEye>
+				<p90_Trios>
+					<enabled>False</enabled>
+					<command>python Instruments/TriOS/TriOS.py</command>
+				</p90_Trios>
+				<p90_IMU>
+					<enabled>True</enabled>
+					<command>python Instruments/IMU/NativeIMU.py</command>
+				</p90_IMU>
+				<p11_AutoPilot>
+					<enabled>True</enabled>
+					<command>python Instruments/AutoPilot/AutoPilot.py</command>
+				</p11_AutoPilot>
+				<p90_Camera>
+					<enabled>True</enabled>
+					<command>LD_LIBRARY_PATH=/opt/lib python
+						Instruments/Camera/UAVCamera.py</command>
+					<user>root</user>
+				</p90_Camera>
+				<p91_irCamera>
+					<enabled>True</enabled>
+					<command>python Instruments/irCamera_v4l/irCamera.py</command>
+				</p91_irCamera>
+				<p99_WebServer>
+					<enabled>True</enabled>
+					<command>python GUI/Web/WebServer_plane.py</command>
+				</p99_WebServer>
+				<p20_NetworkManager>
+					<enabled>True</enabled>
+					<command>python Network/NetworkManager.py</command>
+					<user>root</user>
+					<delay>0</delay>
+				</p20_NetworkManager>
+				<p21_Dispersy>
+					<enabled>True</enabled>
+					<command>python /home/vincent/git/dispersy-experiments/src/uav_api.py</command>
+					<user>root</user>
+					<delay>0</delay>
+				</p21_Dispersy>
+				<p30_OpenVPN>
+					<enabled>False</enabled>
+					<command>openvpn /etc/openvpn/client.conf.mal</command>
+					<user>root</user>
+				</p30_OpenVPN>
+
+				<p35_housekeeping>
+					<enabled>True</enabled>
+					<command>python Instruments/Housekeeping/Housekeeping.py</command>
+				</p35_housekeeping>
+
+
+				<p15_RemoteStatusInfo>
+					<enabled>True</enabled>
+					<command>python Services/RemoteStatusInfo.py</command>
+				</p15_RemoteStatusInfo>
+
+				<p98_SkyOPC>
+					<enabled>False</enabled>
+					<command>python Instruments/GrimmAereosol/SkyOPC.py</command>
+				</p98_SkyOPC>
+
+				<p98_LaserScanner>
+					<enabled>False</enabled>
+					<command>python Instruments/LaserScan700/LaserScan700.py</command>
+					<user>root</user>
+				</p98_LaserScanner>
+
+				<p98_Laser>
+					<enabled>False</enabled>
+					<command>python Instruments/Laser/Laser.py</command>
+				</p98_Laser>
+
+				<p99_MetPack>
+					<enabled>False</enabled>
+					<command>python Instruments/Metpack/Metpack.py</command>
+				</p99_MetPack>
+			</process>
+		</SystemControl>
+
+		<RemoteStatusInfo>
+			<port>9090</port>
+			<report_interval>2</report_interval>
+			<GPS_source>Instruments.GPS</GPS_source>
+			<Report>
+				<Instruments>
+					<AutoPilot>
+						<state>=up</state>
+					</AutoPilot>
+					<Camera0>
+						<PicturesTaken>Pictures taken</PicturesTaken>
+					</Camera0>
+					<GPS>
+						<state>=online</state>
+					</GPS>
+					<IMU>
+						<state>=up</state>
+					</IMU>
+				</Instruments>
+				<Network>
+					<Dialer>
+						<GPRS>
+							<ChannelChecker>
+								<state>=up</state>
+							</ChannelChecker>
+						</GPRS>
+					</Dialer>
+				</Network>
+			</Report>
+		</RemoteStatusInfo>
+
+		<RemotePictures>
+			<port>4322</port>
+		</RemotePictures>
+	</System>
+
+	<BaseStation>
+		<AutoPilotForward>
+			<route>auto</route>
+		</AutoPilotForward>
+
+		<DialIn>
+			<Iridium>
+				<device>auto</device>
+				<type>Iridium</type>
+				<baudrate>19200</baudrate>
+				<init_strings>ATZ ATS0=0V1X4E1Q0&amp;c1 AT+cbst=6,0,1</init_strings>
+			</Iridium>
+			<RadioModem>
+				<device>auto</device>
+				<baudrate>9600</baudrate>
+				<command>pppd debug silent passive noccp local nocrtscts
+					10.0.0.1:10.0.0.2 INTERFACE 9600 noauth nodetach persist mru 296
+					disconnect ./Network/reset_radio_mode</command>
+			</RadioModem>
+		</DialIn>
+
+		<Channels>
+			<Iridium>
+				<enabled>True</enabled>
+				<remote_ip>10.41.0.2</remote_ip>
+			</Iridium>
+			<RadioModem>
+				<enabled>True</enabled>
+				<local_ip>10.0.0.2</local_ip>
+			</RadioModem>
+			<ICE>
+				<enabled>False</enabled>
+				<remote_ip>10.42.0.106</remote_ip>
+			</ICE>
+			<GPRS>
+				<enabled>True</enabled>
+				<remote_ip>10.43.0.106</remote_ip>
+			</GPRS>
+			<MicroHard>
+				<enabled>True</enabled>
+				<remote_ip>10.0.1.2</remote_ip>
+			</MicroHard>
+		</Channels>
+
+	</BaseStation>
+</configuration>
