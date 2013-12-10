@@ -7,3 +7,6 @@
 [submodule "libswift"]
 	path = libswift
 	url = git://github.com/VincentKetelaars/libswift.git
+[submodule "libevent"]
+	path = libevent
+	url = git://github.com/libevent/libevent.git
