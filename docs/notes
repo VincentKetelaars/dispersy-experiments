@@ -18,7 +18,6 @@ If an introduction message does not arrive, is not read, or whatever, there are 
 
 Started on providing IPv6 capabilities. Swift instances should be able to handle it.. (Needs testing)
 Dispersy itself will be a problem most likely.
-Address class should be used more in Endpoint. 
 
 Add MTU to parameters
 

@@ -394,7 +394,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         if d is not None:
             self._swift.checkpoint_download(d)
         
-    def download_is_ready_callback(self, roothash):
+    def download_is_ready_callback(self, roothash, moreinfo_arrived=False):
         """
         This method is called when a download is ready
         
@@ -403,7 +403,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         logger.debug("Download is ready %s", roothash)
         download = self.downloads[roothash]
         if download.set_finished() and not download.seeder():
-            if not download.moreinfo:
+            if not download.moreinfo or moreinfo_arrived: # MOREINFO is always sent after INFO, wait for that to arrive
                 self.clean_up_files(roothash, False, False)
                 
     def moreinfo_callback(self, roothash):
@@ -415,9 +415,9 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         """
         logger.debug("More info %s", roothash)
         download = self.downloads[roothash]
-        self.do_callback(MESSAGE_KEY_SWIFT_INFO, download.package())
-        if download.is_finished() and not download.seeder():
-            self.clean_up_files(roothash, False, False)
+        self.do_callback(MESSAGE_KEY_SWIFT_INFO, download.package()) # If more info is not set for the download this is never called
+        if download.is_finished():
+            self.download_is_ready_callback(roothash, moreinfo_arrived=True)
         
     def i2ithread_data_came_in(self, session, sock_addr, data, incoming_addr=Address()):
         logger.debug("Data came in with %s on %s from %s", session, incoming_addr, sock_addr)
@@ -550,11 +550,11 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         logger.debug("Clean up files, %s, %s, %s", roothash, rm_state, rm_download)
         d = self.retrieve_download_impl(roothash)
         if d is not None:
-            if not (rm_state or rm_download):
-                self.do_checkpoint(d)
+            if not (rm_state or rm_download): # no point in doing checkpoint if you are going to remove the files later
+                self.do_checkpoint(d) # Checkpoint might have been done already by libswift
             self._swift.remove_download(d, rm_state, rm_download)
             self.do_callback(MESSAGE_KEY_RECEIVE_FILE, self.downloads[roothash].filename)
-        self.added_peers = Set([p for p in self.added_peers if p[1] != roothash])
+        self.added_peers = Set([p for p in self.added_peers if p[1] != roothash]) # Remove peer roothash combination with this roothash
         
     def update_dispersy_contacts_candidates_messages(self, candidates, packets, recv=True):
         self.update_dispersy_contacts([(Address.tuple(c.sock_addr), packets) for c in candidates], recv)
