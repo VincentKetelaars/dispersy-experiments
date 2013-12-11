@@ -13,12 +13,12 @@ class PeriodicTask(object):
     It contains the last time executed, function reference, arguments, time period and maximum iterations.
     '''
 
-    def __init__(self, func, period, max_iterations=-1, args=(), kwargs={}):
-        self.last_time = datetime.min
+    def __init__(self, func, period, max_iterations=-1, delay=0.0, args=(), kwargs={}):
+        self.last_time = datetime.utcnow() + timedelta(seconds=delay - period) # Start after delay seconds
         self.iteration = 0
         self.max_iterations = max_iterations # -1 is infinite
         self.function = func
-        self.period = timedelta(microseconds = period * 1000000) # period should be in seconds
+        self.period = timedelta(seconds=period) # period should be in seconds
         self.args = args # tuple
         self.kwargs = kwargs # dictionary
         
@@ -33,11 +33,14 @@ class PeriodicTask(object):
         self.iteration += 1
         self.function(*self.args, **self.kwargs)
         
+    def stop(self):
+        self.max_iterations = 0
+        
 
 class PeriodicIntroductionRequest(PeriodicTask):
     
-    def __init__(self, func, period, candidate, args=(), kwargs={}):
-        PeriodicTask.__init__(self, func, period, args=args, kwargs=kwargs)
+    def __init__(self, func, period, candidate, delay=0.0, args=(), kwargs={}):
+        PeriodicTask.__init__(self, func, period, delay=delay, args=args, kwargs=kwargs)
         self.candidate = candidate
 
 class Looper(Thread):

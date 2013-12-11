@@ -4,23 +4,29 @@ Created on Nov 28, 2013
 @author: Vincent Ketelaars
 '''
 import time
+import signal
 from threading import Event
 
 from Common.Status.StatusDbReader import StatusDbReader
 from Common.API import get_config, get_status
 
-import sys
-# print sys.path
-sys.path.insert(2, "/home/vincent/git/dispersy-experiments")
-sys.path.insert(3, "/home/vincent/git/dispersy-experiments/tribler")
+# import sys
+# # print sys.path
+# REPOSITORY_HOME = "/home/vincent/git/dispersy-experiments"
+# if not REPOSITORY_HOME in sys.path: 
+#     sys.path.insert(2, REPOSITORY_HOME)
+#     sys.path.insert(3, REPOSITORY_HOME + "/tribler")
 
 from src.address import Address
 from src.definitions import STATE_DONE, STATE_INITIALIZED, STATE_NOT, STATE_RUNNING, STATE_STOPPED,\
     STATE_RESETTING
-from src.logger import get_logger
+from src.logger import get_logger, get_uav_logger
 from src.api import API
 
 logger = get_logger(__name__)
+print logger.handlers
+print logger.level
+print logger.manager
 
 OLDDATATIME = 10 # The time in seconds that may have elapsed after which data from the database becomes to old for use
 
@@ -44,6 +50,7 @@ class UAVAPI(API):
         
         self.cfg = get_config(name)
         self.status = get_status(name)
+        self.log = get_uav_logger(name)
         
         try:
             di_args, di_kwargs = self._get_arguments_from_config()
@@ -63,9 +70,13 @@ class UAVAPI(API):
         
         # Set callbacks
         self.state_change_callback(self._state_changed)
-        self.swift_state_callback(self._swift_state_changed)   
+        self.swift_state_callback(self._swift_state_changed)
+        
+        # Set signal quit handler
+        signal.signal(signal.SIGQUIT, self.on_quit)
         
     def run(self):
+        self.log.info("Running")
         while not self.run_event.is_set():
             try:
                 channels = self.db_reader.get_channels()
@@ -104,6 +115,9 @@ class UAVAPI(API):
         logger.debug("Dispersy has stopped")
         self._stop()
         
+    def on_quit(self, signal, frame):
+        self.stop()
+        
     """
     CALLBACKS
     """
@@ -135,6 +149,8 @@ class UAVAPI(API):
         for c in channels:
             if_name = self._get_device_by_ip(c["sock_ip"])
             peer_name = c["ip"].replace(".","_") + ":" + str(c["port"])
+            if if_name is None:
+                if_name = "unknown"
             self.status[basechannel + if_name + "." + peer_name + ".total_up"] = c["utotal"] # KB
             self.status[basechannel + if_name + "." + peer_name + ".total_down"] = c["dtotal"] # KB
             
@@ -144,6 +160,8 @@ class UAVAPI(API):
             me = info["multiendpoint"]
             for e in me:
                 name = self._get_device_by_address(e["address"])
+                self.status[base_endpoint + name + ".ip"] = e["address"].ip
+                self.status[base_endpoint + name + ".port"] = e["address"].port
                 self.status[base_endpoint + name + ".total_up"] = e["total_up"]
                 self.status[base_endpoint + name + ".total_down"] = e["total_down"]
                 self.status[base_endpoint + name + ".total_send"] = e["total_send"]
@@ -167,13 +185,15 @@ class UAVAPI(API):
     """
     
     def _get_device_by_address(self, address):
-        if address.interface is not None and address.interface.name in self.use_interfaces.iterkeys():
-            name = address.interface.name
+        logger.debug("Get device %s", address.interface)
+        if address.interface is not None and address.interface.device is not None:
+            name = address.interface.device
         else:
             name = self._get_device_by_ip(address.ip)
         return name              
     
     def _get_device_by_ip(self, ip):
+        logger.debug("Get device %s", ip)
         for i, v in self.use_interfaces.iteritems():
             if v[2] == ip:
                 return i[i.rfind('.') + 1:]
@@ -181,10 +201,10 @@ class UAVAPI(API):
     
     def _get_argument_children(self, arg):
         try:
-            listen = self.cfg.get("parameters." + arg)
-            return [a.get_value() for a in listen.get_children()]
+            res = self.cfg.get("parameters." + arg)
+            return [a.get_value() for a in res.get_children()]
         except:
-            logger.exception("Failed to recover listen parameter")
+            logger.exception("Failed to recover %s parameter", arg)
         return []
     
     def _get_arguments_from_config(self):

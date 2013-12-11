@@ -165,6 +165,11 @@ class MyCommunity(Community):
     
     def _add_candidate_intro_requests_update(self, candidate, send_request):
         """
+        The candidate will be added to the list of known candidates, that will be sent introduction requests.
+        In case self._update_bloomfilter is a positive number, every so many seconds an introduction request will be send.
+        If it does not, the single request that will be send will be accompanied by a timeout, 
+        which will force resend upon failure.
+        
         @param candidate: Add candidate to list
         @param send_request: Callback function assigned to IntroductionRequestTimeout
         @return: True if candidate already existed, False otherwise
@@ -181,16 +186,18 @@ class MyCommunity(Community):
             logger.debug("Merge existing %s with %s", others[0], candidate)
             candidate.merge(others[0])
         else: # len(others) > 1
-            logger.debug("Merge first of list, %s with %s", others[0], candidate)
+            logger.debug("Merge only first of list, %s with %s", others[0], candidate)
             candidate.merge(others[0])
-                
+        
+        # Remove all similar candidates
         for o in others:
+            o.stop()
             del self._intro_request_updates[o.sock_addr]
         
-        # TODO: Think about what you do next some more.
         request_update = None
         if self._update_bloomfilter > 0: # Use our own looper to ensure that requests are sent periodically
-            request_update = PeriodicIntroductionRequest(send_request, self._update_bloomfilter, candidate)
+            request_update = PeriodicIntroductionRequest(send_request, self._update_bloomfilter, candidate, 
+                                                         delay=self._update_bloomfilter) # Wait because one is already sent
             self._looper.add_task(request_update)
         
         else: # Only add a timeout regardless if walker is enabled or not
@@ -203,7 +210,7 @@ class MyCommunity(Community):
                 
     def add_candidate(self, candidate):
         Community.add_candidate(self, candidate)
-        # Each candidate should only create one IntroductionRequestTimeout
+        # Each candidate should only do send_introduction_request once
         if not candidate.sock_addr in self._intro_request_updates.iterkeys():
             self.send_introduction_request(candidate) 
         

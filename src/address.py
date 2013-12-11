@@ -226,7 +226,7 @@ class Interface(object):
         self.netmask = netmask # ip string
         self.broadcast = broadcast # ip string
         self.gateway = None # ip string
-        self.device = name # Initialize to the interface name
+        self.device = name[:-1] # Initialize to the interface name
         
     def __str__(self):
         return "Interface (%s, %s, %s, %s, %s, %s) " %(self.name, self.address, self.netmask, self.broadcast, 

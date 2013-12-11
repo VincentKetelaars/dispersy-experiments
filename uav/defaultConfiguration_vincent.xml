@@ -308,15 +308,15 @@
 				<swift_work_dir>/home/vincent/Desktop/tests_dest</swift_work_dir>
 				<swift_zerostatedir></swift_zerostatedir>
 				<listen>
-					
+					<address>193.156.108.78:12345</address>
 				</listen>
 				<peers>
-					<address>193.156.108.78:12346</address>
+					<address>193.156.106.116:12345</address>
 				</peers>
 				<files_directory>/home/vincent/Desktop/test_large</files_directory>
 				<files></files>
-				<run_time>5</run_time>
-				<bloomfilter_update>10</bloomfilter_update>
+				<run_time>60</run_time>
+				<bloomfilter_update>5</bloomfilter_update>
 				<walker>False</walker>
 			</parameters>
 		</Dispersy>
@@ -467,20 +467,20 @@
 			<default_start_delay>1</default_start_delay>
 			<process>
 				<p01_PowerSupply>
-					<enabled>True</enabled>
+					<enabled>False</enabled>
 					<command>python System/PowerSupply.py</command>
 				</p01_PowerSupply>
 				<p40_GPS>
-					<enabled>True</enabled>
+					<enabled>False</enabled>
 					<command>python Instruments/GPS/NMEA.py</command>
 				</p40_GPS>
 				<p41_Trimble>
-					<enabled>True</enabled>
+					<enabled>False</enabled>
 					<command>python Instruments/GPS/Trimble/Trimble.py serial nmea
 						binex</command>
 				</p41_Trimble>
 				<p90_UEye>
-					<enabled>True</enabled>
+					<enabled>False</enabled>
 					<command>python Instruments/ueye/ueye.py</command>
 				</p90_UEye>
 				<p90_Trios>
@@ -488,21 +488,21 @@
 					<command>python Instruments/TriOS/TriOS.py</command>
 				</p90_Trios>
 				<p90_IMU>
-					<enabled>True</enabled>
+					<enabled>False</enabled>
 					<command>python Instruments/IMU/NativeIMU.py</command>
 				</p90_IMU>
 				<p11_AutoPilot>
-					<enabled>True</enabled>
+					<enabled>False</enabled>
 					<command>python Instruments/AutoPilot/AutoPilot.py</command>
 				</p11_AutoPilot>
 				<p90_Camera>
-					<enabled>True</enabled>
+					<enabled>False</enabled>
 					<command>LD_LIBRARY_PATH=/opt/lib python
 						Instruments/Camera/UAVCamera.py</command>
 					<user>root</user>
 				</p90_Camera>
 				<p91_irCamera>
-					<enabled>True</enabled>
+					<enabled>False</enabled>
 					<command>python Instruments/irCamera_v4l/irCamera.py</command>
 				</p91_irCamera>
 				<p99_WebServer>
@@ -517,7 +517,7 @@
 				</p20_NetworkManager>
 				<p21_Dispersy>
 					<enabled>True</enabled>
-					<command>python /home/vincent/git/dispersy-experiments/src/uav_api.py</command>
+					<command>PYTHONPATH=.:/home/vincent/git/dispersy-experiments:/home/vincent/git/dispersy-experiments/tribler python /home/vincent/git/dispersy-experiments/src/uav_api.py</command>
 					<user>root</user>
 					<delay>0</delay>
 				</p21_Dispersy>
@@ -528,13 +528,13 @@
 				</p30_OpenVPN>
 
 				<p35_housekeeping>
-					<enabled>True</enabled>
+					<enabled>False</enabled>
 					<command>python Instruments/Housekeeping/Housekeeping.py</command>
 				</p35_housekeeping>
 
 
 				<p15_RemoteStatusInfo>
-					<enabled>True</enabled>
+					<enabled>False</enabled>
 					<command>python Services/RemoteStatusInfo.py</command>
 				</p15_RemoteStatusInfo>
 

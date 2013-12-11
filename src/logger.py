@@ -4,21 +4,23 @@ Created on Nov 28, 2013
 @author: Vincent Ketelaars
 '''
 import sys
-import logging
 
 import dispersy.logger as dlogger
-try:
-    sys.path.index("/home/vincent/svn/norut/uav/uav/trunk", 0)
-    from Common.API import get_log
-except:
-    pass
+
 
 def get_logger(name):
     logger = dlogger.get_logger(name)
+    return logger
+
+def get_uav_logger(name):
+    from src.definitions import UAV_REPOSITORY_HOME
+    uav_logger = None
     try:
-        logger = get_log(name)
+        sys.path.index(UAV_REPOSITORY_HOME, 0)
+        from Common.API import get_log
+        uav_logger = get_log(name)
     except:
-        pass
+        pass    
 #     logger.addHandler(logging.StreamHandler(sys.stderr))
 #     logger.setLevel(logging.DEBUG)
-    return logger
+    return uav_logger

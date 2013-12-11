@@ -108,8 +108,19 @@ TIMEOUT_TESTS = 10 # Seconds
 Swift
 """
 
+LIBEVENT_LIBRARY = "/usr/local/lib"
 
 """
 Timeout
 """
 TIMEOUT_INTRODUCTION_REQUEST = 5.0 # Seconds
+
+"""
+Git Repository
+"""
+REPOSITORY_HOME = "/home/vincent/git/dispersy-experiments"
+
+"""
+UAV Repository
+"""
+UAV_REPOSITORY_HOME = "/home/vincent/svn/norut/uav/trunk"

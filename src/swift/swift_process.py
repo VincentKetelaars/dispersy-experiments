@@ -7,6 +7,7 @@ import binascii
 import random
 import subprocess
 import sys
+import os
 import json
 from collections import defaultdict
 from threading import RLock, currentThread, Thread, Event
@@ -17,6 +18,12 @@ from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING, DO
     DONE_STATE_EARLY_SHUTDOWN, DEBUG
 
 from src.address import Address
+from src.definitions import LIBEVENT_LIBRARY
+
+try:
+    os.environ["LD_LIBRARY_PATH"]
+except:
+    os.environ["LD_LIBRARY_PATH"] = LIBEVENT_LIBRARY
 
 logger = get_logger(__name__)
 
@@ -311,7 +318,8 @@ class MySwiftProcess(SwiftProcess):
             return
         logger.debug("CONNECTION LOST")
         self.donestate = DONE_STATE_SHUTDOWN # Mark as done for
-        self._swift_restart_callback(error)
+        if self._swift_restart_callback is not None:
+            self._swift_restart_callback(error)
         
     def send_tunnel(self, session, address, data, addr=Address()):
         if addr.port == 0:
