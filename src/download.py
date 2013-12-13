@@ -114,12 +114,11 @@ class Download(object):
         @return dictionary with data from this class
         """
         data = {"filename" : self.filename, "roothash" : self.roothash_as_hex(), "seeding" : self.seeder(), "path" : self.path(), 
-                "leeching" : self.is_finished(), "dynasize" : self.downloadimpl.get_dynasize(),                        
+                "leeching" : not self.is_finished(), "dynasize" : self.downloadimpl.get_dynasize(),                        
                 "progress" : self.downloadimpl.get_progress(),                             
                 "current_down_speed" : self.downloadimpl.get_current_speed("down"),
                 "current_up_speed" : self.downloadimpl.get_current_speed("up"),   
-                "leechers" : self.downloadimpl.numleech, "seeders" : self.downloadimpl.numseeds,                                   
-                "total_up" : self.downloadimpl.get_total_up(), "total_down" : self.downloadimpl.get_total_down(),
-                "channels" : self.downloadimpl.network_create_spew_from_channels()}
+                "leechers" : self.downloadimpl.numleech, "seeders" : self.downloadimpl.numseeds,
+                "moreinfo" : self.downloadimpl.network_create_spew_from_channels()}
         return data
         

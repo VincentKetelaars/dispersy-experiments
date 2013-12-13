@@ -400,7 +400,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         
         @param roothash: Identifier of the download
         """
-        logger.debug("Download is ready %s", roothash)
+        logger.debug("Download is ready %s", binascii.hexlify(roothash))
         download = self.downloads[roothash]
         if download.set_finished() and not download.seeder():
             if not download.moreinfo or moreinfo_arrived: # MOREINFO is always sent after INFO, wait for that to arrive
@@ -413,7 +413,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         
         @param roothash: The roothash to which the more info is related
         """
-        logger.debug("More info %s", roothash)
+        logger.debug("More info %s", binascii.hexlify(roothash))
         download = self.downloads[roothash]
         self.do_callback(MESSAGE_KEY_SWIFT_INFO, download.package()) # If more info is not set for the download this is never called
         if download.is_finished():
@@ -530,8 +530,8 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             self._thread_stop_event.wait(REPORT_DISPERSY_INFO_TIME)
             data = []
             for e in self.swift_endpoints:
-                data.append({"address" : e.address, "total_send" : self._total_send, "total_up" : self._total_up, 
-                             "total_down" : self._total_down})
+                data.append({"address" : e.address, "total_send" : e._total_send, "total_up" : e._total_up, 
+                             "total_down" : e._total_down})
             info = {"multiendpoint" : data}
             self.do_callback(MESSAGE_KEY_DISPERSY_INFO, info)
                 

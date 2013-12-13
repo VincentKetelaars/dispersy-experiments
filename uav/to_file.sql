@@ -1,0 +1,4 @@
+SET @out = CONCAT("SELECT ", @col, " FROM ", @table, " INTO OUTFILE '", @file, "' FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'");
+PREPARE stmt FROM @out;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

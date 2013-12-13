@@ -1,0 +1,1 @@
+SELECT name FROM config WHERE id = @id

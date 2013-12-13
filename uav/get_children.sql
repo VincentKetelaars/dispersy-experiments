@@ -1,0 +1,1 @@
+SELECT id FROM config WHERE parent = @id

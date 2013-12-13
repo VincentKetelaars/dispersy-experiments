@@ -148,7 +148,7 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         
     def network_create_spew_from_channels(self):
         if not 'channels' in self.midict:
-            return []
+            return ([], None)
 
         plist = []
         channels = self.midict['channels']
@@ -160,6 +160,12 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
             d['sock_port'] = channel['socket_port']
             d['utotal'] = channel['bytes_up'] / 1024.0
             d['dtotal'] = channel['bytes_down'] / 1024.0
+            d['raw_utotal'] = channel['raw_bytes_up'] / 1024.0
+            d['raw_dtotal'] = channel['raw_bytes_down'] / 1024.0
             plist.append(d)
+        
+        total = {'timestamp' : self.midict['timestamp'], 'raw_total_up' : self.midict['raw_bytes_up'] / 1024.0, 
+                 'raw_total_down' : self.midict['raw_bytes_down'] / 1024.0, 'total_up' : self.midict['bytes_up'] / 1024.0,
+                 'total_down' : self.midict['bytes_down'] / 1024.0}        
 
-        return plist
+        return (plist, total)

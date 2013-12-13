@@ -24,9 +24,6 @@ from src.logger import get_logger, get_uav_logger
 from src.api import API
 
 logger = get_logger(__name__)
-print logger.handlers
-print logger.level
-print logger.manager
 
 OLDDATATIME = 10 # The time in seconds that may have elapsed after which data from the database becomes to old for use
 
@@ -140,19 +137,31 @@ class UAVAPI(API):
         self.status[base + "current_down_speed"] = download["current_down_speed"]
         self.status[base + "current_up_speed"] = download["current_up_speed"]
         self.status[base + "leechers"] = download["leechers"]
-        self.status[base + "seeders"] = download["seeders"]        
-        self.status[base + "total_up"] = download["total_up"]        
-        self.status[base + "total_down"] = download["total_down"]      
+        self.status[base + "seeders"] = download["seeders"]
         
-        basechannel = "swift.sockets."
-        channels = download["channels"]
+        basechannel = "swift.sockets." # Maybe set this to dispersy.endpoint
+        (channels, total) = download["moreinfo"]
         for c in channels:
             if_name = self._get_device_by_ip(c["sock_ip"])
             peer_name = c["ip"].replace(".","_") + ":" + str(c["port"])
             if if_name is None:
-                if_name = "unknown"
-            self.status[basechannel + if_name + "." + peer_name + ".total_up"] = c["utotal"] # KB
-            self.status[basechannel + if_name + "." + peer_name + ".total_down"] = c["dtotal"] # KB
+                addr = Address(ip=c["sock_ip"], port=c["sock_port"])
+                addr.resolve_interface()
+                if addr.interface is not None:
+                    if_name = addr.interface.device
+                    self.use_interfaces[if_name] = (time.time(), u"up", c["sock_ip"]) # Insert this interface into the known interfaces
+                else:
+                    if_name = "unknown"
+            self.status[basechannel + if_name + "." + peer_name + "." + download["roothash"] + ".total_up"] = c["utotal"] # KB
+            self.status[basechannel + if_name + "." + peer_name + "." + download["roothash"] + ".total_down"] = c["dtotal"] # KB
+            self.status[basechannel + if_name + "." + peer_name + "." + download["roothash"] + ".raw_total_up"] = c["raw_utotal"] # KB
+            self.status[basechannel + if_name + "." + peer_name + "." + download["roothash"] + ".raw_total_down"] = c["raw_dtotal"] # KB
+        
+        self.status[base + "timestamp"] = total["timestamp"]
+        self.status[base + "total_up"] = total["total_up"]        
+        self.status[base + "total_down"] = total["total_down"]    
+        self.status[base + "raw_total_up"] = total["raw_total_up"] # KB 
+        self.status[base + "raw_total_down"] = total["raw_total_down"] # KB 
             
     def dispersy_info_callback(self, info):
         base_endpoint = "dispersy.endpoint."
@@ -174,6 +183,7 @@ class UAVAPI(API):
         
         if name is None:
             name = "unknown"
+        # TODO: Perhaps update self.use_interfaces
             
         self.status[base + name + ".ip"] = address.ip
         self.status[base + name + ".port"] = address.port
@@ -185,7 +195,6 @@ class UAVAPI(API):
     """
     
     def _get_device_by_address(self, address):
-        logger.debug("Get device %s", address.interface)
         if address.interface is not None and address.interface.device is not None:
             name = address.interface.device
         else:
@@ -193,7 +202,6 @@ class UAVAPI(API):
         return name              
     
     def _get_device_by_ip(self, ip):
-        logger.debug("Get device %s", ip)
         for i, v in self.use_interfaces.iteritems():
             if v[2] == ip:
                 return i[i.rfind('.') + 1:]
