@@ -402,7 +402,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         """
         logger.debug("Download is ready %s", binascii.hexlify(roothash))
         download = self.downloads[roothash]
-        if download.set_finished() and not download.seeder():
+        if (download.set_finished() or moreinfo_arrived) and not download.seeder():
             if not download.moreinfo or moreinfo_arrived: # MOREINFO is always sent after INFO, wait for that to arrive
                 self.clean_up_files(roothash, False, False)
                 

@@ -9,6 +9,9 @@ from datetime import datetime
 from sets import Set
 
 from src.address import Address
+from src.logger import get_logger
+
+logger = get_logger(__name__)
     
 class Peer(object):
     
@@ -38,11 +41,11 @@ class Download(object):
         '''
         Constructor
         '''
-        self._roothash = roothash
-        self._filename = os.path.basename(filename)
+        self._roothash = roothash        
+        self._filename = None if filename is None else os.path.basename(filename)
         self._directories = directories
         if directories == "":
-            self._directories = os.path.split(filename)[0] # Everything before the final slash
+            self._directories = "" if filename is None else os.path.split(filename)[0] # Everything before the final slash
         self._seed = seed
         self._download = download
         self._downloadimpl = downloadimpl
@@ -68,7 +71,7 @@ class Download(object):
         return self._downloadimpl
     
     def roothash_as_hex(self):
-        return binascii.hexlify(self.roothash)
+        return None if self.roothash is None else binascii.hexlify(self.roothash)
     
     def is_finished(self):
         return self._finished_time < datetime.max

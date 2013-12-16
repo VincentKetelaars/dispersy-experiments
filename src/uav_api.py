@@ -10,13 +10,6 @@ from threading import Event
 from Common.Status.StatusDbReader import StatusDbReader
 from Common.API import get_config, get_status
 
-# import sys
-# # print sys.path
-# REPOSITORY_HOME = "/home/vincent/git/dispersy-experiments"
-# if not REPOSITORY_HOME in sys.path: 
-#     sys.path.insert(2, REPOSITORY_HOME)
-#     sys.path.insert(3, REPOSITORY_HOME + "/tribler")
-
 from src.address import Address
 from src.definitions import STATE_DONE, STATE_INITIALIZED, STATE_NOT, STATE_RUNNING, STATE_STOPPED,\
     STATE_RESETTING

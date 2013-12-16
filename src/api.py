@@ -23,6 +23,15 @@ from src.tools.runner import CallFunctionThread
 logger = get_logger(__name__)
 
 class PipeHandler(object):
+    """
+    This PipeHandler handles one end of a Pipe connection. 
+    Both receiving and and sending are done in separate threads.
+    This will not start until is_alive_event has been set.
+    The Message Key Map allows child classes to define callback functions for specific Message Keys,
+    which they can also define.
+    When the other end of the connection is gone, _connection_process_gone() will be called, 
+    which therefore needs to be implemented by all subclasses
+    """
     
     # This dictionary needs to be overwritten for the messages to be handled
     # It should hold a MESSAGE_KEY_* as key and a function as value
@@ -45,7 +54,9 @@ class PipeHandler(object):
     def stop_connection(self):
         self.stop_receiving_event.set()
         self.sender.stop(wait_for_tasks=True, timeout=1.0) # Wait at most timeout till queue is empty
+        del self.sender
         self.conn.close()
+        del self.conn
         logger.debug("Connection closed")
     
     def wait_on_recv(self):
@@ -56,8 +67,10 @@ class PipeHandler(object):
             self.is_alive_event.wait()
             message = None
             try:
-                if self.conn.poll(1.0):
-                    message = self.conn.recv()
+                message = self.conn.recv() # Blocking
+            except EOFError: # Other end is dead
+                logger.exception("Connection with process is gone")
+                self._connection_process_gone() # Should be implemented!!
             except:
                 logger.exception("Could not receive message over pipe")
             self.handle_message(message)
@@ -79,6 +92,13 @@ class PipeHandler(object):
         self.sender.put(send)
         
     def handle_message(self, message):
+        """
+        Handles an incoming message. Relies on MESSAGE_KEY_MAP to hold the specified key.
+        If the key is available, an attempt to call the function it points to is made,
+        with the arguments provided.
+        
+        @param message: (KEY, ARGS, KWARGS)
+        """
         if not message:
             return
         try:
@@ -86,7 +106,9 @@ class PipeHandler(object):
             func(*message[1], **message[2])
         except:
             logger.exception("Failed to dispatch incoming message %d %s %s", message[0], message[1], message[2])
-
+            
+    def _connection_process_gone(self):
+        raise NotImplementedError()
 
 class API(Thread, PipeHandler):
     '''
@@ -133,41 +155,55 @@ class API(Thread, PipeHandler):
     def stop(self):
         """
         API call that will tell Dispersy to stop, if necessary
-        """               
+        """
+        logger.info("In state %d. Stop self and children %s", self._state, self._children_recur)               
         if self._state == STATE_RUNNING: # Tell Dispersy to stop
             self.send_message(MESSAGE_KEY_STOP)
+        # TODO: If something goes wrong, we should still make sure that everything is stopped
         else:
             self._api_stop()
-        # TODO: If something goes wrong, finish should still be called
         
     def _api_stop(self):
         # TODO: Make sure that you told the child process to stop before you sever the connection
         # wait_on_receive will block unless this is set (Is already set in case process was started)
         if not self.is_alive_event.is_set(): # Haven't actually started anything
-            self.is_alive_event.set()        
-            self.stop_connection()
-        else:
-            self.stop_connection()
-            self.finish()
+            self.is_alive_event.set()  
+        self.stop_connection()
+        self.finish()
         
     def finish(self):
         """
         Finish call that will ensure that the child (and its child) process is killed.
         """
-        logger.debug("Joining")
-        self.receiver_api.join(1) # If the process hasn't started, you cannot join it
-        # join should timeout after 1 second if necessary
+        logger.debug("Joining %s", self._children_recur[0])
+        try:
+            self.receiver_api.join(1) # If the process hasn't started, you cannot join it
+        except:
+            pass
+        
+        # join should timeout after 1 second if necessary (should be plenty enough time for normal join)
+        had_to_kill = False;
         for pid in self._children_recur: # Go through the processes.. (i.e. probably start with the oldest, in case they respawn killed processes)
             try:
                 os.kill(pid, signal.SIGKILL) # Kill child process
+                had_to_kill = True
                 logger.debug("Had to kill process %d", pid)
             except:
                 pass
-        logger.debug("finished")
+        
+        if had_to_kill: # In case a hard kill was necessary we have to try and join again
+            try:
+                self.receiver_api.join(1) # Try joining again
+            except:
+                pass
+        logger.debug("finished %s", self._children_recur[0])
     
     @property
     def state(self):
         return self._state
+    
+    def _connection_process_gone(self):
+        self.finish()
     
     def on_dispersy_stopped(self):
         raise NotImplementedError()
@@ -270,6 +306,7 @@ class ReceiverAPI(PipeHandler):
         try:
             self.dispersy_instance = DispersyInstance(*args, **kwargs)
         except:
+            self.is_alive_event.set()
             self.send_message(MESSAGE_KEY_STOP)
             self.stop_connection()
             return
@@ -294,8 +331,12 @@ class ReceiverAPI(PipeHandler):
         logger.debug("DispersyInstance has stopped %s!", "correctly" if correctStop else "incorrectly")
                 
     def stop(self):
-        self.dispersy_instance.stop()
+        if self.dispersy_instance:
+            self.dispersy_instance.stop()
         # If you close the pipe here, the parent process will not get the final state changes
+        
+    def _connection_process_gone(self):
+        self.stop()
     
     """
     DISPERSY MESSAGE QUEUE
@@ -412,7 +453,7 @@ class ReceiverAPI(PipeHandler):
         logger.info("RECEIVED MESSAGE: %s %s", message[0:100], message_kind)
         self.send_message(MESSAGE_KEY_RECEIVE_MESSAGE, message, message_kind)
         
-    def _swift_state(self, state, error=None): # Defaults to 00000000000000000000 unknown
+    def _swift_state(self, state, error=None):
         logger.info("SWIFT STATE: %s %s", state, error)
         self.send_message(MESSAGE_KEY_SWIFT_STATE, state, error)
         
@@ -432,7 +473,7 @@ class ReceiverAPI(PipeHandler):
 if __name__ == "__main__":
     from src.main import main
     args, kwargs = main()
-    a = API("API", *args, **kwargs)
+    a = API(*args, **kwargs)
     a.start()
 
     

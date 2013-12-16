@@ -117,6 +117,7 @@ class TestMultiSwiftEndpoint(unittest.TestCase):
             check = True
             for d in self._endpoint2.downloads.values():
                 if not d.is_finished():
+                    logger.debug("Not ready %s", d.roothash_as_hex())
                     check = False
             if check:
                 break
@@ -279,6 +280,7 @@ def remove_files(filename, content=False):
     if content and os.path.exists(filename):
         logger.debug("Removing %s", filename)
         os.remove(filename)
+    logger.debug("Done removing %s", filename)
 
 if __name__ == "__main__":
     unittest.main()

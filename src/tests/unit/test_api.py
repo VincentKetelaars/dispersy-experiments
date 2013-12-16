@@ -55,6 +55,7 @@ class TestAPI(unittest.TestCase):
             pass
         for f in self.files_to_remove:
             remove_files(f, True)
+        logger.debug("Teared down!")
         
 
     def test_add_file_both(self):
@@ -151,7 +152,6 @@ class TestAPINetworkInterface(unittest.TestCase):
         self.assertGreater(len(self.api.sock_states), 0) # Test so that the next one cannot give an error
         self.assertEqual(self.api.sock_states[0], 0) # Should be okay first
         self.assertEqual(self.api.sock_states[-1], 0) # Last should be okay also       
-
 
 if __name__ == "__main__":
     unittest.main()
