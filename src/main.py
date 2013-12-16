@@ -8,7 +8,7 @@ import argparse
 from dispersy.dispersy import Dispersy
 from src.address import Address
 
-def main(call, callback=None):    
+def main():    
     parser = argparse.ArgumentParser(description='Start Dispersy instance')
     parser.add_argument("-b", "--bloomfilter", help="Send bloom filter every # seconds")
     parser.add_argument("-d", "--directory", help="List directory of files to send")
@@ -68,9 +68,8 @@ def main(call, callback=None):
                 addr.set_ipv4(localip)
             peers.append(addr)
         
-    c = call(DEST_DIR, SWIFT_BINPATH, dispersy_work_dir=DISPERSY_WORK_DIR, sqlite_database=SQLITE_DATABASE,
-            swift_work_dir=DEST_DIR, listen=listen, peers=peers, files_directory=args.directory,
-            files=args.files, run_time=TOTAL_RUN_TIME, bloomfilter_update=BLOOM_FILTER_UPDATE,
-            walker=ENABLE_CANDIDATE_WALKER, callback=callback)
-    c.start()
-    return c
+    return (DEST_DIR, SWIFT_BINPATH), {"dispersy_work_dir":DISPERSY_WORK_DIR, "sqlite_database":SQLITE_DATABASE,
+            "swift_work_dir":DEST_DIR, "listen":listen, "peers":peers, "files_directory":args.directory,
+            "files":args.files, "run_time":TOTAL_RUN_TIME, "bloomfilter_update":BLOOM_FILTER_UPDATE,
+            "walker":ENABLE_CANDIDATE_WALKER}
+    

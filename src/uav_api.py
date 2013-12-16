@@ -74,18 +74,7 @@ class UAVAPI(API):
         
     def run(self):
         self.log.info("Running")
-        while not self.run_event.is_set():
-            try:
-                channels = self.db_reader.get_channels()
-                for c in channels:
-                    if c.startswith("Network") or c.encode('UTF-8') == self.name:
-                        params = self.db_reader.get_parameters(c)
-                        logger.debug("I have got channel %s with params %s", c, 
-                                     [(p, self.db_reader.get_last_status_value(c, p)) for p in params])
-                
-            except:
-                logger.exception("To bad")
-                
+        while not self.run_event.is_set():                
             current_dialers = self._get_dialers()
             for cd in current_dialers:
                 t, state = self.db_reader.get_last_status_value(cd, u"state")
@@ -97,7 +86,7 @@ class UAVAPI(API):
                 self.use_interfaces[cd] = (time, state, ip) # Set the newest state
                 
             self.run_event.wait(self.sleep)
-        logger.debug("Stopped running")
+        self.log.debug("Stopped running")
     
     
     def stop(self):

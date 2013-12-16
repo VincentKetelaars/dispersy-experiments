@@ -3,13 +3,6 @@ Created on Dec 13, 2013
 
 @author: Vincent Ketelaars
 '''
-import os
-import logging.config
-
-if os.path.exists("logger.conf"):
-    logging.config.fileConfig("logger.conf")
-logging.basicConfig(format="%(asctime)-15s [%(levelname)s] %(message)s")
-
 import argparse
 import csv
 import sys
@@ -106,11 +99,11 @@ class MySQLToCSV(object):
         
         start_time = None
         if start is not None:
-            start_time = datetime.strptime(start, "%H:%M:%S %d/%m/%Y")
+            start_time = datetime.strptime(start, "%H:%M:%S_%d-%m-%Y")
             
         end_time = None
         if end is not None:
-            end_time = datetime.strptime(start, "%H:%M:%S %d/%m/%Y")
+            end_time = datetime.strptime(start, "%H:%M:%S_%d-%m-%Y")
         
         logger.debug("Channel %s has id %d", channel, self.channel[0])
         params_to_csv = {}
@@ -211,10 +204,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Convert MySQL to CSV')
     parser.add_argument("-c", "--channel", required=True, help="Channel")
     parser.add_argument("-d", "--database", required=True, help="Database")
-    parser.add_argument("-e", "--end", help="Get only values before this time, formatted: hh:mm:ss dd/MM/YYYY")
+    parser.add_argument("-e", "--end", help="Get only values before this time, formatted: hh:mm:ss_dd-MM-YYYY")
     parser.add_argument("-f", "--file", required=True, help="CSV file")
     parser.add_argument("-p", "--params", default=[], nargs="+", help="Parameters")
-    parser.add_argument("-s", "--start", help="Get only values after this time, formatted: hh:mm:ss dd/MM/YYYY")
+    parser.add_argument("-s", "--start", help="Get only values after this time, formatted: hh:mm:ss_dd-MM-YYYY")
     parser.add_argument("-z", "--zero", action="store_true", help="Normalize timestamps to start from zero")
     args = parser.parse_args()
 

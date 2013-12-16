@@ -3,14 +3,14 @@ Created on Nov 15, 2013
 
 @author: Vincent Ketelaars
 '''
-
+import os
 import Queue
 import socket
-import os
 import signal
 from threading import Thread, Event
 from multiprocessing import Process, Pipe
 
+from src.logger import get_logger
 from src.dispersy_instance import DispersyInstance
 from src.address import Address
 from src.definitions import STATE_NOT, STATE_RUNNING, MESSAGE_KEY_ADD_FILE, MESSAGE_KEY_ADD_MESSAGE, MESSAGE_KEY_ADD_PEER, \
@@ -19,7 +19,6 @@ MESSAGE_KEY_RECEIVE_MESSAGE, MESSAGE_KEY_STATE, MESSAGE_KEY_STOP, STATE_DONE,\
     MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, MESSAGE_KEY_SWIFT_PID,\
     MESSAGE_KEY_SWIFT_INFO, MESSAGE_KEY_DISPERSY_INFO
 
-from src.logger import get_logger
 from src.tools.runner import CallFunctionThread
 logger = get_logger(__name__)
 
@@ -101,7 +100,8 @@ class API(Thread, PipeHandler):
         self._state = STATE_NOT
         parent_conn, child_conn = Pipe()
         
-        self.MESSAGE_KEY_MAP = {MESSAGE_KEY_STATE : self._state_change,
+        self.MESSAGE_KEY_MAP = {MESSAGE_KEY_STOP : self._api_stop,
+                                MESSAGE_KEY_STATE : self._state_change,
                                 MESSAGE_KEY_RECEIVE_FILE : self.file_received_callback,
                                 MESSAGE_KEY_RECEIVE_MESSAGE : self.message_received_callback,
                                 MESSAGE_KEY_SWIFT_STATE : self._swift_state,
@@ -267,7 +267,12 @@ class ReceiverAPI(PipeHandler):
         self.state = STATE_NOT
         kwargs["callback"] = self._generic_callback
         logger.debug("Calling DispersyInstance with %s %s", args, kwargs)
-        self.dispersy_instance = DispersyInstance(*args, **kwargs)
+        try:
+            self.dispersy_instance = DispersyInstance(*args, **kwargs)
+        except:
+            self.send_message(MESSAGE_KEY_STOP)
+            self.stop_connection()
+            return
         self.waiting_queue = Queue.Queue() # Hold on to calls that are made prematurely
         
         self.dispersy_callbacks_map = {MESSAGE_KEY_STATE : self._state_change,
@@ -426,7 +431,8 @@ class ReceiverAPI(PipeHandler):
         
 if __name__ == "__main__":
     from src.main import main
-    main(API)
-    
+    args, kwargs = main()
+    a = API("API", *args, **kwargs)
+    a.start()
 
     
