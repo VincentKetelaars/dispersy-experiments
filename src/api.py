@@ -38,20 +38,21 @@ class PipeHandler(object):
     MESSAGE_KEY_MAP = {} 
     
         
-    def __init__(self, connection):
+    def __init__(self, connection, name=""):
         self.conn = connection        
         
         # Receive from pipe
         self.stop_receiving_event = Event()
         self.is_alive_event = Event() # Wait until subclass tells you it is ready
-        t = Thread(target=self.wait_on_recv)
+        
+        t = Thread(target=self.wait_on_recv, name=name + "_receiver")
         t.start()
         
         # Start send thread
-        self.sender = CallFunctionThread(timeout=1.0)
+        self.sender = CallFunctionThread(timeout=1.0, name=name + "_sender")
         self.sender.start()
         
-    def stop_connection(self):
+    def close_connection(self):
         self.stop_receiving_event.set()
         self.sender.stop(wait_for_tasks=True, timeout=1.0) # Wait at most timeout till queue is empty
         del self.sender
@@ -120,7 +121,7 @@ class API(Thread, PipeHandler):
         Thread.__init__(self, name=name)
         self.setDaemon(True)  # Automatically die when the main thread dies
         self._state = STATE_NOT
-        parent_conn, child_conn = Pipe()
+        parent_conn, self.child_conn = Pipe()
         
         self.MESSAGE_KEY_MAP = {MESSAGE_KEY_STOP : self._api_stop,
                                 MESSAGE_KEY_STATE : self._state_change,
@@ -131,9 +132,9 @@ class API(Thread, PipeHandler):
                                 MESSAGE_KEY_SWIFT_PID : self._swift_pid,
                                 MESSAGE_KEY_SWIFT_INFO : self.swift_info_callback,
                                 MESSAGE_KEY_DISPERSY_INFO : self.dispersy_info_callback}
-        PipeHandler.__init__(self, parent_conn)
+        PipeHandler.__init__(self, parent_conn, name=name)
 
-        self.receiver_api = Process(target=ReceiverAPI, args=(child_conn,) + di_args, kwargs=di_kwargs)
+        self.receiver_api = Process(target=ReceiverAPI, args=(self.child_conn,) + di_args, kwargs=di_kwargs)
         
         # Callbacks
         self._callback_state_change = None
@@ -161,14 +162,15 @@ class API(Thread, PipeHandler):
             self.send_message(MESSAGE_KEY_STOP)
         # TODO: If something goes wrong, we should still make sure that everything is stopped
         else:
+            self.child_conn.close() # The process is probably not able to do this himself
             self._api_stop()
         
     def _api_stop(self):
         # TODO: Make sure that you told the child process to stop before you sever the connection
         # wait_on_receive will block unless this is set (Is already set in case process was started)
         if not self.is_alive_event.is_set(): # Haven't actually started anything
-            self.is_alive_event.set()  
-        self.stop_connection()
+            self.is_alive_event.set()
+        self.close_connection()
         self.finish()
         
     def finish(self):
@@ -298,7 +300,7 @@ class ReceiverAPI(PipeHandler):
                                 MESSAGE_KEY_ADD_MESSAGE : self.add_message,
                                 MESSAGE_KEY_MONITOR_DIRECTORY : self.monitor_directory_for_files,
                                 MESSAGE_KEY_INTERFACE_UP : self.interface_came_up}
-        PipeHandler.__init__(self, child_conn)
+        PipeHandler.__init__(self, child_conn, name="ReceiverAPI")
     
         self.state = STATE_NOT
         kwargs["callback"] = self._generic_callback
@@ -308,7 +310,7 @@ class ReceiverAPI(PipeHandler):
         except:
             self.is_alive_event.set()
             self.send_message(MESSAGE_KEY_STOP)
-            self.stop_connection()
+            self.close_connection()
             return
         self.waiting_queue = Queue.Queue() # Hold on to calls that are made prematurely
         
@@ -443,7 +445,7 @@ class ReceiverAPI(PipeHandler):
         if state == STATE_RUNNING:
             self._dequeue()
         if state == STATE_DONE:            
-            self.stop_connection() # Cleaning up pipe
+            self.close_connection() # Cleaning up pipe
         
     def _received_file(self, file_):
         logger.info("RECEIVED FILE: %s", file_)

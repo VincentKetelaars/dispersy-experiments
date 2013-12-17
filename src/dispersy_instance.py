@@ -206,5 +206,5 @@ def verify_addresses_are_free(addrs):
 if __name__ == '__main__':
     from src.main import main
     args, kwargs = main()
-    d = DispersyInstance(*args, **kwargs)
+    d = DispersyInstance("API", *args, **kwargs)
     d.start()

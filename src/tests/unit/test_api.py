@@ -15,6 +15,7 @@ from src.tests.unit.definitions import DISPERSY_WORKDIR, FILES
 from src.definitions import SWIFT_BINPATH, TIMEOUT_TESTS, STATE_RESETTING
 from src.address import Address
 from src.tests.unit.test_endpoint import remove_files
+import threading
 
 logger = get_logger(__name__)
 
@@ -55,7 +56,6 @@ class TestAPI(unittest.TestCase):
             pass
         for f in self.files_to_remove:
             remove_files(f, True)
-        logger.debug("Teared down!")
         
 
     def test_add_file_both(self):
