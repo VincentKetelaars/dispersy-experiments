@@ -39,7 +39,8 @@ class PipeHandler(object):
     
         
     def __init__(self, connection, name=""):
-        self.conn = connection        
+        self.conn = connection
+        self.name = name  
         
         # Receive from pipe
         self.stop_receiving_event = Event()
@@ -58,7 +59,7 @@ class PipeHandler(object):
         del self.sender
         self.conn.close()
         del self.conn
-        logger.debug("Connection closed")
+        logger.debug("Connection closed for %s", self.name)
     
     def wait_on_recv(self):
         """
@@ -70,10 +71,10 @@ class PipeHandler(object):
             try:
                 message = self.conn.recv() # Blocking
             except EOFError: # Other end is dead
-                logger.exception("Connection with process is gone")
+                logger.exception("Connection with process is gone for %s", self.name)
                 self._connection_process_gone() # Should be implemented!!
             except:
-                logger.exception("Could not receive message over pipe")
+                logger.exception("Could not receive message over pipe for %s", self.name)
             self.handle_message(message)
             
     def send_message(self, key, *args, **kwargs):
@@ -88,7 +89,7 @@ class PipeHandler(object):
             try:
                 self.conn.send((key, args, kwargs))
             except:
-                logger.exception("Failed to send %s %s %s", key, args, kwargs)
+                logger.exception("%s failed to send %s %s %s", self.name, key, args, kwargs)
         
         self.sender.put(send)
         
@@ -106,7 +107,7 @@ class PipeHandler(object):
             func = self.MESSAGE_KEY_MAP[message[0]]
             func(*message[1], **message[2])
         except:
-            logger.exception("Failed to dispatch incoming message %d %s %s", message[0], message[1], message[2])
+            logger.exception("%s failed to dispatch incoming message %d %s %s", self.name, message[0], message[1], message[2])
             
     def _connection_process_gone(self):
         raise NotImplementedError()
@@ -135,6 +136,7 @@ class API(Thread, PipeHandler):
         PipeHandler.__init__(self, parent_conn, name=name)
 
         self.receiver_api = Process(target=ReceiverAPI, args=(self.child_conn,) + di_args, kwargs=di_kwargs)
+
         
         # Callbacks
         self._callback_state_change = None
@@ -146,6 +148,7 @@ class API(Thread, PipeHandler):
         
     def start(self):
         self.receiver_api.start()
+        self.child_conn.close() # This makes sure that it doesn't assume API might use this end, child can still use it
         self._children_recur.append(self.receiver_api.pid)
         self.is_alive_event.set()
         Thread.start(self)
@@ -162,7 +165,6 @@ class API(Thread, PipeHandler):
             self.send_message(MESSAGE_KEY_STOP)
         # TODO: If something goes wrong, we should still make sure that everything is stopped
         else:
-            self.child_conn.close() # The process is probably not able to do this himself
             self._api_stop()
         
     def _api_stop(self):
@@ -475,7 +477,7 @@ class ReceiverAPI(PipeHandler):
 if __name__ == "__main__":
     from src.main import main
     args, kwargs = main()
-    a = API(*args, **kwargs)
+    a = API("API", *args, **kwargs)
     a.start()
 
     

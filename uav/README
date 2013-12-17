@@ -1,0 +1,16 @@
+In case you want to change the user 'pilot' to someone else:
+
+Mysql related:
+./Tools/FlightDatabaseServer 19
+./Tools/ManageData 47
+./clean-payload-data.sh often
+./Common/Config.py 165
+./create_db.sql 2
+./Config/defaultConfiguration.xml often
+./root/install.sh 12
+./dump_data_from_plane.sh 28, 60
+
+Directory related:
+./root/etc/init.d/uav
+./dump_data_from_plane.sh
+AND MORE
