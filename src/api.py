@@ -310,6 +310,7 @@ class ReceiverAPI(PipeHandler):
         try:
             self.dispersy_instance = DispersyInstance(*args, **kwargs)
         except:
+            logger.exception("Could not initiate Dispersy!")
             self.is_alive_event.set()
             self.send_message(MESSAGE_KEY_STOP)
             self.close_connection()

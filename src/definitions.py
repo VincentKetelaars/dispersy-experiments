@@ -118,9 +118,9 @@ TIMEOUT_INTRODUCTION_REQUEST = 5.0 # Seconds
 """
 Git Repository
 """
-REPOSITORY_HOME = "/home/vincent/git/dispersy-experiments"
+REPOSITORY_HOME = os.getenv("HOME") + "/git/dispersy-experiments"
 
 """
 UAV Repository
 """
-UAV_REPOSITORY_HOME = "/home/vincent/svn/norut/uav/trunk"
+UAV_REPOSITORY_HOME = os.getenv("HOME") + "/svn/norut/uav/trunk"
