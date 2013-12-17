@@ -1,8 +1,6 @@
-UAV=${HOME}/svn/norut/uav/uav/trunk
+UAV=${HOME}/svn/norut/uav/trunk
 
 export PYTHONPATH=${PWD}:${PWD}/tribler:$UAV:.
-echo $PYTHONPATH # Needs fixing.. 
-
 
 cd $UAV
 # ./deps.sh
@@ -11,12 +9,6 @@ cd $UAV
 ./start_uav.sh &> ~/Desktop/logs5 &
 cd -
 
-# python -O -m src.uav_api -d /home/vincent/Desktop/test_large -D /home/vincent/Desktop/tests_dest -t 5 \
-# -l 127.0.0.1:12346 -p 127.0.0.1:12345 &> ~/Desktop/logs1 &
-# python -O -m src.uav_api -d /home/vincent/Desktop/tests -D /home/vincent/Desktop/tests_dest_2 -t 15 \
-# -l 127.0.0.1:12345 -p 127.0.0.1:12346 &> ~/Desktop/logs2 &
-
 wait
 
-grep --text "\->\|<\-\|CANDIDATES" ~/Desktop/logs1 > ~/Desktop/logs3
-grep --text "\->\|<\-\|CANDIDATES" ~/Desktop/logs2 > ~/Desktop/logs4
+grep --text "\->\|<\-" ~/Desktop/logs6 > ~/Desktop/logs4
