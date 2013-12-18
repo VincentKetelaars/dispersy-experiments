@@ -192,6 +192,7 @@ class UAVAPI(API):
     def _get_argument_children(self, arg):
         try:
             res = self.cfg.get("parameters." + arg)
+            logger.debug("Parameter %s with children %s", arg, res.get_children())
             return [a.get_value() for a in res.get_children()]
         except:
             logger.exception("Failed to recover %s parameter", arg)

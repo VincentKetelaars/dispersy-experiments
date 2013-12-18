@@ -67,7 +67,7 @@ class MySwiftProcess(SwiftProcess):
         args.append("-j")
 #         args.append("-B") # Set Channel debug_file
 #         args.append("-D" + self.workdir + "/channeldebug")
-        if self.listenaddrs: # In case there is nothing to listen too
+        if self.listenaddrs: # In case there is nothing to listen too, either None or []
             args.append("-l")  # listen port
             ports = ""
             for l in self.listenaddrs:

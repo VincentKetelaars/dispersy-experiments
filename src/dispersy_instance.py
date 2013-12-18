@@ -179,29 +179,22 @@ class DispersyInstance(object):
         if self._api_callback is not None:
             self._api_callback(key, *args, **kwargs)
         
-def verify_addresses_are_free(addrs):
-    def recur(addrs, n, iteration):
-        if iteration >= 5:
-            return None
-        if addrs is None or not addrs:
-            addrs = [Address.localport(random.randint(*RANDOM_PORTS)) for _ in range(n)]
-        for addr in addrs:
-            if not try_sockets([addr]):
-                addr.set_port(random.randint(*RANDOM_PORTS))
-                addr = recur([addr], 1, iteration + 1)[0]
-        return addrs
-    
-    if addrs is None or not addrs:
-        addrs = None
-    else:
-        addrs = recur(addrs, len(addrs), 0)
-    
-    if addrs is None:
+def verify_addresses_are_free(addrs):    
+    if not addrs: # None or []
         logger.warning("No address to return!")
-    else:
-        logger.debug("Swift will listen to %s", [str(a) for a in addrs])
-        
-    return addrs
+        return addrs
+    l = []
+    for addr in addrs:
+        if not addr.resolve_interface():
+            logger.debug("Interface for %s does not exist", addr)
+        elif not try_sockets([addr]):
+            logger.debug("Port %s is not available for %s on %s", addr.port, addr.ip, addr.interface.name)
+            addr.set_port(0) # Let the system decide
+            l.append(addr)
+        else:
+            l.append(addr)
+    logger.debug("Swift will listen to %s", [str(a) for a in l])        
+    return l
     
 if __name__ == '__main__':
     from src.main import main

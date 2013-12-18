@@ -7,4 +7,7 @@ from os.path import exists
 from logging.config import fileConfig
     
 if exists("logger.conf"):
-    fileConfig("logger.conf")
+    try:
+        fileConfig("logger.conf")
+    except:
+        pass

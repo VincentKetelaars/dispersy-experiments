@@ -16,6 +16,8 @@ class Address(object):
     '''
     This class represents an socket address. Either AF_INET or AF_INET6.
     '''
+    
+    IFNAME_WILDCARD= "All"
 
     def __init__(self, ip="0.0.0.0", port=0, family=AF_INET, flowinfo=0, scopeid=0, interface=None):
         self._ip = ip
@@ -182,16 +184,16 @@ class Address(object):
         if self.interface_exists():
             return True
         if self.is_wildcard_ip():
-            self._if = Interface("All", self._ip, self._ip, self._ip)
+            self._if = Interface(self.IFNAME_WILDCARD, self._ip, self._ip, self._ip)
             return True
-        for if_ in Dispersy._get_interface_addresses():
-            try:
+        try:
+            for if_ in Dispersy._get_interface_addresses():            
                 if (self.ipstr_to_int(if_.address) & self.ipstr_to_int(if_.netmask) == 
                     self.ipstr_to_int(self._ip) & self.ipstr_to_int(if_.netmask)): # Same subnet
                     self._if = Interface(if_.name, if_.address, if_.netmask, if_.broadcast)
                     return True
-            except:
-                logger.exception("Failed to find %s", self._ip)
+        except:
+            logger.exception("Failed to find %s", self._ip)
         return False
     
     def interface_exists(self):
