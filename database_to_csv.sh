@@ -1,16 +1,54 @@
-PYTHONPATH=${HOME}/svn/norut/uav/trunk/
+export PYTHONPATH=${HOME}/svn/norut/uav/trunk/
 FOLDER=${HOME}/Desktop/mysql/
 
-if [ $# -gt 0 ]
-then
-	TIME=$1
-else
-	TIME="00:00:00"
-fi
+usage() {
+	echo "Usage"
+	echo "-e | --endtime 		to set endtime"
+	echo "-h | --help 		to display usage"
+	echo "-s | --starttime 	to set starttime"
+	echo "-v | --verbose 		to show python command"
+	echo "-z | --zeroed 		to normalize time to start at zero"
+}
+
+ENDTIME="23:59:59"
+STARTTIME="00:00:00"
+VERBOSE=false
+ZEROED=""
+while [ "$1" != "" ]; do
+    case $1 in
+    	-e | --endtime )		ENDTIME=$2;
+								shift
+								;;
+		-h | --help )			usage
+								exit 0
+								;;
+        -s | --starttime )      STARTTIME=$2;
+								shift
+                                ;;
+        -v | --verbose )		VERBOSE=true
+								;;
+        -z | --zeroed )			ZEROED=" -z"
+								;;
+        * )                     echo "You are not doing it right..;)"
+								usage
+                                exit 1
+    esac
+    shift
+done
+
 FILEDATE=`date +%Y%m%d`
-FILE=${FILEDATE}_${TIME}.csv
+FILE=${FILEDATE}_${STARTTIME}.csv
 FILEPATH=${FOLDER}${FILE}
+
+if [ $ZEROED != "" ]; then
+	FILEPATH="${FILEPATH}_z"
+fi
+
 DATE=`date +%d-%m-%Y`
-DATETIME="${TIME}_${DATE}"
-echo $DATETIME
-python -m src.tools.mysql_to_csv -d uav -f ${FILEPATH} -z -c Network.Dispersy -s ${DATETIME}
+STARTDATETIME="${STARTTIME}_${DATE}"
+ENDDATETIME="${ENDTIME}_${DATE}"
+
+if $VERBOSE; then
+	set -v
+fi
+python -m src.tools.mysql_to_csv -d uav -f ${FILEPATH} -c Network.Dispersy -s ${STARTDATETIME} -e ${ENDDATETIME} $ZEROED
