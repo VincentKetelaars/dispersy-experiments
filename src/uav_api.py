@@ -46,6 +46,8 @@ class UAVAPI(API):
             di_args, di_kwargs = self._get_arguments_from_config()
         except:
             logger.exception("Could not get arguments from config, make do with what you've got")
+        finally:
+            self.cfg.close_connection() # Don't need it anymore!
         
         API.__init__(self, name, *di_args, **di_kwargs)
 
@@ -79,8 +81,7 @@ class UAVAPI(API):
                 self.use_interfaces[cd] = (time, state, ip) # Set the newest state
                 
             self.run_event.wait(self.sleep)
-        self.log.debug("Stopped running")
-    
+        self.log.debug("Stopped running") 
     
     def stop(self):
         API.stop(self)
@@ -88,13 +89,15 @@ class UAVAPI(API):
         
     def _stop(self):
         self.run_event.set()
-        self.db_reader.close_connection() # TODO: Do we even have a connection???
+        self.db_reader.close_connection() # TODO: Do we even have a connection???  
+        self.status.kill() # TODO: Perhaps try stop(), doesn't always work
         
     def on_dispersy_stopped(self):
         logger.debug("Dispersy has stopped")
         self._stop()
         
     def on_quit(self, signal, frame):
+        logger.debug("Asked to quit")
         self.stop()
         
     """
@@ -269,3 +272,4 @@ if __name__ == "__main__":
 #     main(UAVAPI)
     uav = UAVAPI()
     uav.start()
+        

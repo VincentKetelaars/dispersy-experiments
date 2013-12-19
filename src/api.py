@@ -46,8 +46,8 @@ class PipeHandler(object):
         self.stop_receiving_event = Event()
         self.is_alive_event = Event() # Wait until subclass tells you it is ready
         
-        t = Thread(target=self.wait_on_recv, name=name + "_receiver")
-        t.start()
+        self._receiver = Thread(target=self.wait_on_recv, name=name + "_receiver")
+        self._receiver.start()
         
         # Start send thread
         self.sender = CallFunctionThread(timeout=1.0, name=name + "_sender")
@@ -56,9 +56,7 @@ class PipeHandler(object):
     def close_connection(self):
         self.stop_receiving_event.set()
         self.sender.stop(wait_for_tasks=True, timeout=1.0) # Wait at most timeout till queue is empty
-        del self.sender
         self.conn.close()
-        del self.conn
         logger.debug("Connection closed for %s", self.name)
     
     def wait_on_recv(self):
@@ -179,7 +177,7 @@ class API(Thread, PipeHandler):
         """
         Finish call that will ensure that the child (and its child) process is killed.
         """
-        logger.debug("Joining %s", self._children_recur[0])
+        logger.debug("Joining %s", self._children_recur[0] if self._children_recur else "child")
         try:
             self.receiver_api.join(1) # If the process hasn't started, you cannot join it
         except:
