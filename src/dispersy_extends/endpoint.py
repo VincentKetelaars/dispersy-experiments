@@ -380,7 +380,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             d = self.create_download_impl(roothash)
             d.set_dest_dir(dir_ + basename(filename))
             # Add download first, because it might take while before swift process returns
-            self.update_known_downloads(roothash, d.get_dest_dir(), d, addresses=addresses, download=True)
+            self.update_known_downloads(roothash, d.get_dest_dir(), d, addresses=addresses, seed=True, download=True)
             self._swift.start_download(d)
             self._swift.set_moreinfo_stats(d, True)
         self.lock.release()

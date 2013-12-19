@@ -7,6 +7,7 @@ import os
 import random
 import sys
 from threading import Event
+from sets import Set
 
 from src.logger import get_logger
 from src.swift.swift_process import MySwiftProcess  # This should be imported first, or it will screw up the logs. # TODO: Fix this
@@ -183,18 +184,18 @@ def verify_addresses_are_free(addrs):
     if not addrs: # None or []
         logger.warning("No address to return!")
         return addrs
-    l = []
+    l = Set() # No doubles!
     for addr in addrs:
         if not addr.resolve_interface():
             logger.debug("Interface for %s does not exist", addr)
         elif not try_sockets([addr]):
             logger.debug("Port %s is not available for %s on %s", addr.port, addr.ip, addr.interface.name)
             addr.set_port(0) # Let the system decide
-            l.append(addr)
+            l.add(addr)
         else:
-            l.append(addr)
+            l.add(addr)
     logger.debug("Swift will listen to %s", [str(a) for a in l])        
-    return l
+    return list(l)
     
 if __name__ == '__main__':
     from src.main import main
