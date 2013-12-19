@@ -314,7 +314,9 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         
     def distribute_all_hashes_to_peers(self, sock_addr=None):
         """
-        All known addresses and downloads are added.
+        For each download, its peers are added to Swift.
+        The sock_addr option is there to allow for a single socket to disseminate this download.
+        @param sock_addr: Address of local socket
         """
         logger.debug("Distribute all hashes")
         self.lock.acquire()
@@ -361,8 +363,10 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         This method lets the swift instance know that it should download the file that comes with this roothash.
         
         @param filename: The name the file will get
+        @param directories: Optional path of directories within the destination directory
         @param roothash: hash to locate swarm
-        @param dest_dir: The folder the file will be put
+        @param dest_dir: The directory the file will be put
+        @param addresses: The sockets available to the peer that sent us this file
         """
         self.lock.acquire()
         if not self._swift.is_ready():
@@ -378,11 +382,15 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             if not exists(dir_):
                 makedirs(dir_)
             d = self.create_download_impl(roothash)
-            d.set_dest_dir(dir_ + basename(filename))
+            d.set_dest_dir(dir_ + basename(filename)) # File stored in dest_dir/directories/filename
             # Add download first, because it might take while before swift process returns
             self.update_known_downloads(roothash, d.get_dest_dir(), d, addresses=addresses, seed=True, download=True)
             self._swift.start_download(d)
             self._swift.set_moreinfo_stats(d, True)
+            for addr in addresses:
+                # We assume that the instance that sent this has already added us
+                self.added_peers.add((addr, roothash, None)) 
+            self.distribute_all_hashes_to_peers(None) # Ensure that any other peer we know, knows about this download
         self.lock.release()
             
     def do_checkpoint(self, d):
