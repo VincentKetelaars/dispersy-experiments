@@ -25,6 +25,7 @@ from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBE
     FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME,\
     MESSAGE_KEY_RECEIVE_MESSAGE
 from src.tools.periodic_task import Looper, PeriodicIntroductionRequest
+from src.swift.swift_community import SwiftCommunity
 
 logger = get_logger(__name__)    
     
@@ -46,6 +47,7 @@ class MyCommunity(Community):
         self._api_callback = api_callback
         self._looper = Looper(0.1)
         self._looper.start()
+        self.swift_community = SwiftCommunity(self, self.dispersy.endpoint, api_callback=api_callback)
         
     def initiate_conversions(self):
         """
@@ -93,8 +95,7 @@ class MyCommunity(Community):
     def file_hash_handle(self, messages):
         for x in messages:
             if len(x.payload.filename) >= 1 and x.payload.directories is not None and len(x.payload.roothash) == HASH_LENGTH:
-                self.dispersy.endpoint.start_download(x.payload.filename, x.payload.directories, x.payload.roothash, 
-                                                      self._dest_dir, x.payload.addresses)
+                self.swift_community.filehash_received(x.payload.filename, x.payload.directories, x.payload.roothash, x.payload.addresses)
     
     def addresses_message_check(self, messages):
         """
@@ -107,9 +108,7 @@ class MyCommunity(Community):
         """
         Handle Callback
         """
-        for x in messages:
-            # Make sure that someone know that these addresses are one device
-            self.dispersy.endpoint.peer_addresses_arrived(x.payload.addresses)
+        self.swift_community.peer_endpoints_received(messages)
     
     def _short_member_id(self):
         return str(self.my_member.mid.encode("HEX"))[0:5]     
@@ -133,7 +132,7 @@ class MyCommunity(Community):
         if isfile(file_hash_message.filename):
             # Let Swift know that it should seed this file
             # Get a hash of the file 
-            self.dispersy.endpoint.add_file(file_hash_message.filename, file_hash_message.roothash)
+            self.swift_community.add_file(file_hash_message.filename, file_hash_message.roothash)
             
             if file_hash_message.roothash is not None and len(file_hash_message.roothash) == HASH_LENGTH:
                 # Send this hash to candidates (probably do the prior stuff out of the candidates loop)

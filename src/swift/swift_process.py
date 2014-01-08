@@ -359,7 +359,7 @@ class MySwiftProcess(SwiftProcess):
         if addrstr is not None:
             cmd += addrstr
         else:
-            cmd += "-1"
+            logger.warning("You cannot add a peer without supplying one!")
         if saddrstr is not None:
             cmd += ' ' + saddrstr
         cmd += '\r\n'

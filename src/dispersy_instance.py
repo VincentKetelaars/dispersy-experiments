@@ -12,15 +12,14 @@ from sets import Set
 from src.logger import get_logger
 from src.swift.swift_process import MySwiftProcess  # This should be imported first, or it will screw up the logs. # TODO: Fix this
 from dispersy.callback import Callback
-from dispersy.dispersy import Dispersy
 
-from src.address import Address
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
 from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
+from src.dispersy_extends.mydispersy import MyDispersy
 from src.filepusher import FilePusher
 from src.definitions import MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, DEFAULT_MESSAGE_DELAY, \
-SLEEP_TIME, RANDOM_PORTS, STATE_INITIALIZED, STATE_RUNNING, STATE_STOPPED, STATE_DONE, MESSAGE_KEY_STATE,\
+SLEEP_TIME, STATE_INITIALIZED, STATE_RUNNING, STATE_STOPPED, STATE_DONE, MESSAGE_KEY_STATE,\
     MESSAGE_KEY_SWIFT_STATE
 
 logger = get_logger(__name__)
@@ -75,7 +74,7 @@ class DispersyInstance(object):
         self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_INITIALIZED)
         self._endpoint = MultiEndpoint(self._swift, self._api_callback)
 
-        self._dispersy = Dispersy(self._callback, self._endpoint, self._dispersy_work_dir, self._sqlite_database)
+        self._dispersy = MyDispersy(self._callback, self._endpoint, self._dispersy_work_dir, self._sqlite_database)
         
         # Timeout determines how long the bootstrappers should try before continuing (at the moment)
         self._dispersy.start(timeout=1.0) 

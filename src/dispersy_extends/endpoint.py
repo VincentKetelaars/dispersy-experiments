@@ -4,13 +4,12 @@ Created on Aug 27, 2013
 @author: Vincent Ketelaars
 '''
 
-from os import urandom, makedirs
-from os.path import isfile, dirname, exists, basename, getmtime
+from os import urandom
+from os.path import isfile, dirname, getmtime
 from datetime import datetime
 from threading import Thread, Event, RLock
 from sets import Set
 from errno import EADDRINUSE, EADDRNOTAVAIL
-import binascii
 import socket
 import time
 import logging
@@ -22,17 +21,15 @@ from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.statistics import Statistics
 from dispersy.candidate import BootstrapCandidate, WalkCandidate
 
-from Tribler.Core.Swift.SwiftDef import SwiftDef
 from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
+from Tribler.Core.Swift.SwiftDef import SwiftDef
 
 from src.address import Address
 from src.dispersy_extends.candidate import EligibleWalkCandidate
-from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
-from src.download import Download, Peer
 from src.definitions import HASH_LENGTH, MESSAGE_KEY_RECEIVE_FILE,\
     MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, MESSAGE_KEY_SWIFT_PID,\
-    MESSAGE_KEY_SWIFT_INFO, STATE_RESETTING, STATE_RUNNING, STATE_STOPPED,\
-    REPORT_DISPERSY_INFO_TIME, MESSAGE_KEY_DISPERSY_INFO
+     STATE_RESETTING, STATE_RUNNING, STATE_STOPPED,\
+    REPORT_DISPERSY_INFO_TIME, MESSAGE_KEY_DISPERSY_INFO, FILE_HASH_MESSAGE_NAME
 from src.dispersy_extends.payload import AddressesCarrier
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_contact import DispersyContact
@@ -41,12 +38,6 @@ logger = get_logger(__name__)
 
 class NoEndpointAvailableException(Exception):
     pass
-
-class EndpointDownloads(object):
-    
-    def __init__(self):
-        self.added_peers = Set()
-        self.downloads = {}
 
 class EndpointStatistics(Statistics):
     
@@ -67,6 +58,10 @@ class CommonEndpoint(TunnelEndpoint, EndpointStatistics):
         self._api_callback = api_callback
         self._socket_running = -1
         self.address = Address()
+        
+    @property
+    def swift(self):
+        return self._swift
     
     @property
     def socket_running(self):
@@ -91,7 +86,7 @@ class CommonEndpoint(TunnelEndpoint, EndpointStatistics):
         if self._api_callback is not None:
             self._api_callback(key, *args, **kwargs)
 
-class MultiEndpoint(CommonEndpoint, EndpointDownloads):
+class MultiEndpoint(CommonEndpoint):
     '''
     MultiEndpoint holds a list of Endpoints, which can be added dynamically. 
     The status of each of these Endpoints will be checked periodically (push / pull?). 
@@ -108,8 +103,8 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         self.swift_queue = Queue.Queue()
         self._dequeueing = False
         # TODO: Make regular checks to make sure that nothing is left in the queue
+        self.added_peers = Set()
         CommonEndpoint.__init__(self, swift_process, api_callback=api_callback)
-        EndpointDownloads.__init__(self)
         
         self.lock = RLock() # Reentrant Lock
         
@@ -132,12 +127,19 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         self.lock.acquire();
         if not self._swift.is_ready() or not self.socket_running:
             if not self._dequeueing:
-                self.swift_queue.put((self.send, (candidates, packets), {}))
+                self.enqueue_swift_queue(self.send, candidates, packets)
                 logger.debug("Send is queued")
             self.lock.release()
             return False
         logger.debug("Send %s %d", candidates, len(packets))
         self.update_dispersy_contacts_candidates_messages(candidates, packets, recv=False)
+        
+        # If filehash message, let SwiftCommunity know the peers!
+        name = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False).name
+        # TODO: Should we only check packet 0? I.e. can packets of different kinds go together?
+        if name == FILE_HASH_MESSAGE_NAME:
+            self._dispersy.notify_filehash_peers([Address.tuple(c.sock_addr) for c in candidates])
+        
         for c in candidates:
             self.determine_endpoint(Address.tuple(c.sock_addr))
             send_success = self._endpoint.send([c], packets)
@@ -167,6 +169,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
                 logger.debug("Closing softly")
                 self._swift.remove_download(self, True, True)
                 self._swift.early_shutdown()
+                # Upon closing, checkpoints are created for those downloads that need it
             else:
                 logger.debug("Closing harshly")
                 self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
@@ -284,148 +287,54 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         else:
             self._endpoint = self.swift_endpoints[0]
     
-    def add_file(self, filename, roothash):
-        """
-        This method lets the swiftprocess know that an additional file is available.
-        
-        @param filename: The absolute path of the file
-        @param roothash: The roothash of this file
-        """
+    def swift_add_peer(self, d, addr, sock_addr=None):
         self.lock.acquire()
         if not self._swift.is_ready():
-            self.swift_queue.put((self.add_file, (filename, roothash), {})) 
-            logger.debug("Add file is queued")
-            self.lock.release()
-            return
-        logger.debug("Add file, %s %s", filename, roothash)        
-        roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
-        if not roothash in self.downloads.keys() and len(roothash) == HASH_LENGTH / 2: # Check if not already added, and if the unhexlified roothash has the proper length
-            logger.info("Add file %s with roothash %s", filename, roothash)
-            d = self.create_download_impl(roothash)
-            d.set_dest_dir(filename)
-
-            self.update_known_downloads(roothash, filename, d, seed=True)
-            
-            self._swift.start_download(d)
-            self._swift.set_moreinfo_stats(d, True)
-            
-            self.distribute_all_hashes_to_peers() # After adding the file, directly add the peer as well
-        self.lock.release()
-        
-    def distribute_all_hashes_to_peers(self, sock_addr=None):
-        """
-        For each download, its peers are added to Swift.
-        The sock_addr option is there to allow for a single socket to disseminate this download.
-        @param sock_addr: Address of local socket
-        """
-        logger.debug("Distribute all hashes")
-        self.lock.acquire()
-        for roothash in self.downloads.keys():
-            if self.downloads[roothash].seeder(): # TODO: Is this a good idea?
-                for peer in self.downloads[roothash].peers():
-                    for addr in peer.addresses:
-                        self.add_peer(addr, roothash, sock_addr)
-        self.lock.release()
-    
-    def add_peer(self, addr, roothash, sock_addr=None):                
-        """
-        Send message to the swift process to add a peer.
-        If necessary you can specify the socket that should connect to the peer
-        Make sure it is not a bootstrap peer.
-        
-        @param addr: address of the peer: (ip, port)
-        @param roothash: Must be unhexlified roothash
-        @param sock_addr: Address of local socket
-        """
-        self.lock.acquire()
-        if not self._swift.is_ready():
-            self.swift_queue.put((self.add_peer, (addr, roothash), {}))
+            self.enqueue_swift_queue(self.swift_add_peer, d, addr, sock_addr=sock_addr)
             logger.debug("Add peer is queued")
             self.lock.release()
             return
-        logger.debug("Add peer %s %s", addr, roothash)
-        if self.is_bootstrap_candidate(addr=addr):
-            logger.debug("Add bootstrap candidate rejected")
-            self.lock.release()
-            return
-        if roothash is not None and not any([addr == a and roothash == h and sock_addr == s for a, h, s in self.added_peers]):
-            d = self.retrieve_download_impl(roothash)
-            if d is not None:
-                logger.info("Add peer %s with roothash %s to %s", addr, roothash, sock_addr)
-                self._swift.add_peer(d, addr, sock_addr)
-                self.downloads[roothash].add_address(addr)
-                self.added_peers.add((addr, roothash, sock_addr))
-                # TODO: Note somewhere which local sockets already have peers
+        if d is not None and not any([addr == a and d.roothash_as_hex() == h and sock_addr == s for a, h, s in self.added_peers]):
+            self._swift.add_peer(d, addr, sock_addr)
         self.lock.release()
             
-    def start_download(self, filename, directories, roothash, dest_dir, addresses):
-        """
-        This method lets the swift instance know that it should download the file that comes with this roothash.
-        
-        @param filename: The name the file will get
-        @param directories: Optional path of directories within the destination directory
-        @param roothash: hash to locate swarm
-        @param dest_dir: The directory the file will be put
-        @param addresses: The sockets available to the peer that sent us this file
-        """
-        self.lock.acquire()
+    def swift_checkpoint(self, d):
         if not self._swift.is_ready():
-            self.swift_queue.put((self.start_download, (filename, directories, roothash, dest_dir, addresses), {}))
-            logger.debug("Start download is queued")
-            self.lock.release()
+            self.enqueue_swift_queue(self.swift_checkpoint, d)
+            logger.debug("Checkpoint is queued")
             return
-        logger.debug("Start download %s %s %s %s %s", filename, directories, roothash, dest_dir, addresses)
-        roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
-        if not roothash in self.downloads.keys():
-            logger.info("Start download of %s with roothash %s", filename, roothash)
-            dir_ = dest_dir + "/" + directories
-            if not exists(dir_):
-                makedirs(dir_)
-            d = self.create_download_impl(roothash)
-            d.set_dest_dir(dir_ + basename(filename)) # File stored in dest_dir/directories/filename
-            # Add download first, because it might take while before swift process returns
-            self.update_known_downloads(roothash, d.get_dest_dir(), d, addresses=addresses, seed=True, download=True)
-            self._swift.start_download(d)
-            self._swift.set_moreinfo_stats(d, True)
-            for addr in addresses:
-                # We assume that the instance that sent this has already added us
-                self.added_peers.add((addr, roothash, None)) 
-            self.distribute_all_hashes_to_peers(None) # Ensure that any other peer we know, knows about this download
-        self.lock.release()
-            
-    def do_checkpoint(self, d):
-        if not self._swift.is_ready():
-            self.swift_queue.put((self.do_checkpoint, (d,), {}))
-            logger.debug("Do checkpoint is queued")
-            return
-        logger.debug("Do checkpoint")
         if d is not None:
             self._swift.checkpoint_download(d)
         
-    def download_is_ready_callback(self, roothash, moreinfo_arrived=False):
-        """
-        This method is called when a download is ready
+    def swift_start(self, d):
+        self.lock.acquire()
+        if not self._swift.is_ready():
+            self.enqueue_swift_queue(self.swift_start, d) 
+            logger.debug("Start is queued")
+            self.lock.release()
+            return
+        self._swift.start_download(d)
+        self.lock.release()
         
-        @param roothash: Identifier of the download
-        """
-        logger.debug("Download is ready %s", binascii.hexlify(roothash))
-        download = self.downloads[roothash]
-        if (download.set_finished() or moreinfo_arrived) and not download.seeder():
-            if not download.moreinfo or moreinfo_arrived: # MOREINFO is always sent after INFO, wait for that to arrive
-                self.clean_up_files(roothash, False, False)
-                
-    def moreinfo_callback(self, roothash):
-        """
-        This method is called whenever more info comes in.
-        In case the download is finished and not supposed to seed, clean up the files
+    def swift_moreinfo(self, d, yes):
+        self.lock.acquire()
+        if not self._swift.is_ready():
+            self.enqueue_swift_queue(self.swift_start, d, yes) 
+            logger.debug("More info is queued")
+            self.lock.release()
+            return
+        self._swift.set_moreinfo_stats(d, yes)
+        self.lock.release()
         
-        @param roothash: The roothash to which the more info is related
-        """
-        logger.debug("More info %s", binascii.hexlify(roothash))
-        download = self.downloads[roothash]
-        self.do_callback(MESSAGE_KEY_SWIFT_INFO, download.package()) # If more info is not set for the download this is never called
-        if download.is_finished():
-            self.download_is_ready_callback(roothash, moreinfo_arrived=True)
+    def swift_remove_download(self, d, rm_state, rm_content):
+        self.lock.acquire()
+        if not self._swift.is_ready():
+            self.enqueue_swift_queue(self.swift_remove_download, d, rm_state, rm_content)
+            logger.debug("Remove download is queued")
+            self.lock.release()
+            return        
+        self.endpoint.remove_download(d, rm_state, rm_content)
+        self.lock.release()
         
     def i2ithread_data_came_in(self, session, sock_addr, data, incoming_addr=Address()):
         logger.debug("Data came in with %s on %s from %s", session, incoming_addr, sock_addr)
@@ -441,25 +350,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         
     def dispersythread_data_came_in(self, sock_addr, data, timestamp):
         self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), data)], True, timestamp)
-        
-    def create_download_impl(self, roothash):
-        """
-        Create DownloadImpl
-        
-        @param roothash: Roothash of a file
-        """
-        logger.debug("Create download implementation, %s", roothash)
-        sdef = SwiftDef(roothash=roothash)
-        # This object must have: get_def, get_selected_files, get_max_speed, get_swift_meta_dir
-        d = FakeSessionSwiftDownloadImpl(FakeSession(), sdef, self._swift)
-        d.setup()
-        # get_selected_files is initialized to empty list
-        # get_max_speed for UPLOAD and DOWNLOAD are set to 0 initially (infinite)
-        d.set_swift_meta_dir(None)
-        d.set_download_ready_callback(self.download_is_ready_callback)
-        d.set_moreinfo_callback(self.moreinfo_callback)
-        return d
-        
+     
     def retrieve_download_impl(self, roothash):
         """
         Retrieve DownloadImpl with roothash
@@ -514,16 +405,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             while not self.swift_queue.empty():
                 temp_queue.put(self.swift_queue.get())
                 
-            for h, d in self.downloads.iteritems():
-                if (not d.is_finished()) or d.seeder(): # No sense in adding a download that is finished, and not seeding
-                    logger.debug("Enqueue start download %s", h)
-                    self.swift_queue.put((self._swift.start_download, (d.downloadimpl,), {}))
-                    for peer in self.downloads[h].peers():
-                        for addr in peer.addresses:
-                            if not (addr, h, None) in self.added_peers:
-                                logger.debug("Enqueue add peer %s %s", addr, h)
-                                self.swift_queue.put((self._swift.add_peer, (d.downloadimpl, addr, None), {}))                            
-                                self.added_peers.add((addr, h, None))
+            self._dispersy.on_swift_restart(temp_queue)               
                             
             while not temp_queue.empty():
                 self.swift_queue.put(temp_queue.get())
@@ -535,34 +417,15 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
     
     def _loop(self):
         while not self._thread_stop_event.is_set():
+            self.dequeue_swift_queue()
             self._thread_stop_event.wait(REPORT_DISPERSY_INFO_TIME)
             data = []
             for e in self.swift_endpoints:
                 data.append({"address" : e.address, "total_send" : e._total_send, "total_up" : e._total_up, 
                              "total_down" : e._total_down})
             info = {"multiendpoint" : data}
+            # TODO: List the data from DispersyContacts as well
             self.do_callback(MESSAGE_KEY_DISPERSY_INFO, info)
-                
-    def clean_up_files(self, roothash, rm_state, rm_download):
-        """
-        Remove download
-        
-        @param roothash: roothash to find the correct DownloadImpl
-        @param rm_state: Remove state boolean
-        @param rm_download: Remove download file boolean
-        """
-        if not self._swift.is_ready():
-            self.swift_queue.put((self.clean_up_files, (roothash, rm_state, rm_download), {}))
-            logger.debug("Clean up files is queued")
-            return
-        logger.debug("Clean up files, %s, %s, %s", roothash, rm_state, rm_download)
-        d = self.retrieve_download_impl(roothash)
-        if d is not None:
-            if not (rm_state or rm_download): # no point in doing checkpoint if you are going to remove the files later
-                self.do_checkpoint(d) # Checkpoint might have been done already by libswift
-            self._swift.remove_download(d, rm_state, rm_download)
-            self.do_callback(MESSAGE_KEY_RECEIVE_FILE, self.downloads[roothash].filename)
-        self.added_peers = Set([p for p in self.added_peers if p[1] != roothash]) # Remove peer roothash combination with this roothash
         
     def update_dispersy_contacts_candidates_messages(self, candidates, packets, recv=True):
         self.update_dispersy_contacts([(Address.tuple(c.sock_addr), packets) for c in candidates], recv)
@@ -585,33 +448,6 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             logger.debug("New dispersy contacts: %s", [str(dc.address) for dc in diff])
             self.dispersy_contacts.update(diff)
             self.send_addresses_to_communities([dc.address for dc in diff])
-            for download in self.downloads.itervalues():
-                # TODO: Protect against unreachable local addresses
-                download.merge_peers(Peer([dc.address for dc in diff]))
-            self.distribute_all_hashes_to_peers()
-        self.lock.release()
-
-    def update_known_downloads(self, roothash, filename, download_impl, addresses=None, seed=False, download=False, add_known=True):
-        """
-        @param roothash: Binary form of the roothash of filename
-        @param filename: Absolute path of filename
-        @param donwload_impl: Download implementation as created in create_download_impl
-        @param addresses: List of Address objects
-        @param seed: Boolean that determines if this download should seed after finishing download
-        @param download: Boolean that determines if this file needs to be downloaded
-        @param add_known: Boolean that determines if all known peers should be added to this download
-        """
-        logger.debug("Update known downloads, %s %s %s %s %s %s", binascii.hexlify(roothash), filename, addresses, seed, download, add_known)
-        self.lock.acquire()
-        d = Download(roothash, filename, download_impl, seed=seed, download=download)
-        d.moreinfo = True
-        d.add_peer(Peer(addresses))
-        if add_known: # Add all known peers to this download
-            for dc in self.dispersy_contacts:
-                d.add_address(dc.address)
-                # TODO: DC has both an address and a peer. What to do?
-        self.downloads[roothash] = d
-        logger.debug("Download %s has %s as peers", filename, [str(a) for a in [asets for asets in [p.addresses for p in d.peers()]]])
         self.lock.release()
         
     def swift_started_running_callback(self):
@@ -621,6 +457,9 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
         for e in self.swift_endpoints:
             e.swift_started_running_callback()
         self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RUNNING)
+        
+    def enqueue_swift_queue(self, func, *args, **kwargs):
+        self.swift_queue.put((func, args, kwargs))
         
     def dequeue_swift_queue(self):
         self._dequeueing = True
@@ -661,18 +500,7 @@ class MultiEndpoint(CommonEndpoint, EndpointDownloads):
             if isinstance(c, MyCommunity): # Ensure that the create_addresses_messages exists
                 self._dispersy.callback.register(c.create_addresses_messages, (1,message,candidates), 
                                                  kargs={"update":False}, delay=0.0)
-        
-    def peer_addresses_arrived(self, addresses):
-        logger.debug("Peer's addresses arrived %s", addresses)
-        for download in self.downloads.itervalues():
-            # TODO: Protect against unreachable local addresses
-            download.merge_peers(Peer(addresses))
-        for addr in addresses:
-            for dc in self.dispersy_contacts:
-                if addr == dc.address:
-                    dc.set_peer(Peer(addresses))
-        self.distribute_all_hashes_to_peers()
-        
+
     def set_callbacks(self):
         self._swift.set_on_swift_restart_callback(self.restart_swift)
         self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback)

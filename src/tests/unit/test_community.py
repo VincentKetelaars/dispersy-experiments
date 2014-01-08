@@ -5,20 +5,20 @@ Created on Sep 17, 2013
 '''
 import unittest
 
-from dispersy.dispersy import Dispersy
 from dispersy.endpoint import StandaloneEndpoint
 from dispersy.callback import Callback
 from dispersy.conversion import Conversion
 
 from src.definitions import MASTER_MEMBER_PUBLIC_KEY, SECURITY
 from src.dispersy_extends.community import MyCommunity
+from src.dispersy_extends.mydispersy import MyDispersy
 
 class TestMyCommunity(unittest.TestCase):
     
     def setUp(self):
         callback = Callback("TestCallback")
         endpoint = StandaloneEndpoint(12345)
-        self._dispersy = Dispersy(callback, endpoint, u".", u":memory:")
+        self._dispersy = MyDispersy(callback, endpoint, u".", u":memory:")
         self._dispersy.start()
         master = callback.call(self._dispersy.get_member, (MASTER_MEMBER_PUBLIC_KEY,))
         my_member = callback.call(self._dispersy.get_new_member,(SECURITY,))
