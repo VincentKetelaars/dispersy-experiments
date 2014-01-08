@@ -49,15 +49,19 @@ class EndpointStatistics(Statistics):
         
     def update(self):
         pass
-        
-class CommonEndpoint(TunnelEndpoint, EndpointStatistics):
+            
+class SwiftHandler(TunnelEndpoint):
     
     def __init__(self, swift_process, api_callback=None):
         TunnelEndpoint.__init__(self, swift_process)
-        EndpointStatistics.__init__(self)
         self._api_callback = api_callback
         self._socket_running = -1
-        self.address = Address()
+        self._resetting = False
+        self._waiting_on_cmd_connection = False
+        self.swift_queue = Queue.Queue()
+        self._dequeueing = False
+        self.added_peers = Set()
+        self.lock = RLock() # Reentrant Lock
         
     @property
     def swift(self):
@@ -71,6 +75,173 @@ class CommonEndpoint(TunnelEndpoint, EndpointStatistics):
     def socket_running(self, state):
         self._socket_running = state
         self.do_callback(MESSAGE_KEY_SOCKET_STATE, self.address, state)
+    
+    def do_callback(self, key, *args, **kwargs):
+        if self._api_callback is not None:
+            self._api_callback(key, *args, **kwargs)
+        
+    def swift_add_peer(self, d, addr, sock_addr=None):
+        self.lock.acquire()
+        if not self._swift.is_ready():
+            self.enqueue_swift_queue(self.swift_add_peer, d, addr, sock_addr=sock_addr)
+            logger.debug("Add peer is queued")
+            self.lock.release()
+            return
+        if d is not None and not any([addr == a and d.roothash_as_hex() == h and sock_addr == s for a, h, s in self.added_peers]):
+            self._swift.add_peer(d, addr, sock_addr)
+        self.lock.release()
+            
+    def swift_checkpoint(self, d):
+        if not self._swift.is_ready():
+            self.enqueue_swift_queue(self.swift_checkpoint, d)
+            logger.debug("Checkpoint is queued")
+            return
+        if d is not None:
+            self._swift.checkpoint_download(d)
+        
+    def swift_start(self, d):
+        self.lock.acquire()
+        if not self._swift.is_ready():
+            self.enqueue_swift_queue(self.swift_start, d) 
+            logger.debug("Start is queued")
+            self.lock.release()
+            return
+        self._swift.start_download(d)
+        self.lock.release()
+        
+    def swift_moreinfo(self, d, yes):
+        self.lock.acquire()
+        if not self._swift.is_ready():
+            self.enqueue_swift_queue(self.swift_start, d, yes) 
+            logger.debug("More info is queued")
+            self.lock.release()
+            return
+        self._swift.set_moreinfo_stats(d, yes)
+        self.lock.release()
+        
+    def swift_remove_download(self, d, rm_state, rm_content):
+        self.lock.acquire()
+        if not self._swift.is_ready():
+            self.enqueue_swift_queue(self.swift_remove_download, d, rm_state, rm_content)
+            logger.debug("Remove download is queued")
+            self.lock.release()
+            return        
+        self.endpoint.remove_download(d, rm_state, rm_content)
+        self.lock.release()
+        
+    def retrieve_download_impl(self, roothash):
+        """
+        Retrieve DownloadImpl with roothash
+        
+        @return: DownloadImpl, otherwise None
+        """
+        logger.debug("Retrieve download implementation, %s", roothash)
+        self.lock.acquire()
+        d = None
+        try:
+            d = self._swift.roothash2dl[roothash]
+        except:
+            logger.error("Could not retrieve downloadimpl from roothash2dl")
+        finally:
+            self.lock.release()
+        return d
+    
+    def restart_swift(self, error=None):
+        """
+        Restart swift if the endpoint is still alive, generally called when an Error occurred in the swift instance
+        After swift has been terminated, a new process starts and previous downloads and their peers are added.
+        """
+        logger.debug("Restart swift called")
+        self.lock.acquire()
+        # Don't restart on close, or if you are already resetting
+        # TODO: In case a restart is necessary while restarting (e.g. can't bind to socket)
+        if ((self.is_alive and not self._resetting and not self._waiting_on_cmd_connection and not self._swift.is_running()) 
+            or not self._dispersy): # If open has not been called yet
+            self._resetting = True
+            logger.info("Resetting swift")
+            self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RESETTING, error=error)
+            # Make sure that the current swift instance is gone
+            self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
+            self.added_peers = Set() # Reset the peers added before shutdown
+            
+            # Try the sockets to see if they are in use
+            if not try_sockets([e.address for e in self.swift_endpoints], timeout=1.0):
+                logger.warning("Socket(s) is/are still in use")
+                self._swift.network_shutdown() # Ensure that swift really goes down
+                
+            # TODO: Don't allow sockets that are in use to be tried by Libswift
+            
+            # Make sure not to make the same mistake as what let to this
+            # Any roothash added twice will create an error, leading to this. 
+            self._swift = MySwiftProcess(self._swift.binpath, self._swift.workdir, None, 
+                                         [e.address for e in self.swift_endpoints], None, None, None)
+            self.set_callbacks()
+            self._swift.add_download(self) # Normally in open
+            # First add all calls to the queue and then start the TCP connection
+            # Be sure to put all current queued items at the back of the startup queue
+            temp_queue = Queue.Queue();
+            while not self.swift_queue.empty():
+                temp_queue.put(self.swift_queue.get())
+                
+            self._dispersy.on_swift_restart(temp_queue)               
+                            
+            while not temp_queue.empty():
+                self.swift_queue.put(temp_queue.get())
+            
+            self._waiting_on_cmd_connection = True
+            self._swift.start_cmd_connection() # Normally in open
+            self._resetting = False
+        self.lock.release()
+        
+    def swift_started_running_callback(self):
+        self.dequeue_swift_queue()
+        
+    def enqueue_swift_queue(self, func, *args, **kwargs):
+        self.swift_queue.put((func, args, kwargs))
+        
+    def dequeue_swift_queue(self):
+        self._dequeueing = True
+        while not self.swift_queue.empty() and self._swift.is_ready():
+            func, args, kargs = self.swift_queue.get()
+            logger.debug("Dequeue %s %s %s", func, args, kargs)
+            func(*args, **kargs)            
+        self._dequeueing = False        
+
+    def set_callbacks(self):
+        self._swift.set_on_swift_restart_callback(self.restart_swift)
+        self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback)
+        self._swift.set_on_sockaddr_info_callback(self.sockaddr_info_callback)
+        
+    def sockaddr_info_callback(self, address, state):
+        logger.debug("Socket info callback %s %d", address, state)
+        if state < 0 or address.ip == "AF_UNSPEC":
+            logger.debug("Something is going on, but don't know what.")
+        elif state == 0:
+            logger.debug("Socket is bound and active")
+            if address.resolve_interface():
+                e = self.get_endpoint(address)
+                if e is not None:
+                    e.socket_running = state
+                else:
+                    logger.warning("This %s is not in %s", address, [e.address for e in self.swift_endpoints])
+                self.dequeue_swift_queue()
+            else:
+                logger.debug("Might have been able to bind to something, but unable to resolve interface")
+        elif state > 0:
+            e = self.get_endpoint(address)
+            if e is not None:
+                e.socket_running = state
+            if not address.resolve_interface():
+                logger.debug("Cannot resolve interface")
+            if try_socket(address):
+                logger.debug("Yelp, socket is gone!")                
+        
+class CommonEndpoint(SwiftHandler, EndpointStatistics):
+    
+    def __init__(self, swift_process, api_callback=None):
+        SwiftHandler.__init__(self, swift_process, api_callback)
+        EndpointStatistics.__init__(self)
+        self.address = Address()
             
     def is_bootstrap_candidate(self, addr=None, candidate=None):
         if addr is not None:
@@ -81,10 +252,6 @@ class CommonEndpoint(TunnelEndpoint, EndpointStatistics):
                 self._dispersy._bootstrap_candidates.get(candidate.sock_addr) is not None):
                 return True
         return False
-    
-    def do_callback(self, key, *args, **kwargs):
-        if self._api_callback is not None:
-            self._api_callback(key, *args, **kwargs)
 
 class MultiEndpoint(CommonEndpoint):
     '''
@@ -96,17 +263,9 @@ class MultiEndpoint(CommonEndpoint):
 
     def __init__(self, swift_process, api_callback=None):
         self._thread_stop_event = Event()
-        self._resetting = False
-        self._waiting_on_cmd_connection = False
         self._endpoint = None
         self.swift_endpoints = []
-        self.swift_queue = Queue.Queue()
-        self._dequeueing = False
-        # TODO: Make regular checks to make sure that nothing is left in the queue
-        self.added_peers = Set()
         CommonEndpoint.__init__(self, swift_process, api_callback=api_callback)
-        
-        self.lock = RLock() # Reentrant Lock
         
         if swift_process:
             self.do_callback(MESSAGE_KEY_SWIFT_PID, swift_process.get_pid())
@@ -286,55 +445,6 @@ class MultiEndpoint(CommonEndpoint):
             self._endpoint = determine()
         else:
             self._endpoint = self.swift_endpoints[0]
-    
-    def swift_add_peer(self, d, addr, sock_addr=None):
-        self.lock.acquire()
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_add_peer, d, addr, sock_addr=sock_addr)
-            logger.debug("Add peer is queued")
-            self.lock.release()
-            return
-        if d is not None and not any([addr == a and d.roothash_as_hex() == h and sock_addr == s for a, h, s in self.added_peers]):
-            self._swift.add_peer(d, addr, sock_addr)
-        self.lock.release()
-            
-    def swift_checkpoint(self, d):
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_checkpoint, d)
-            logger.debug("Checkpoint is queued")
-            return
-        if d is not None:
-            self._swift.checkpoint_download(d)
-        
-    def swift_start(self, d):
-        self.lock.acquire()
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_start, d) 
-            logger.debug("Start is queued")
-            self.lock.release()
-            return
-        self._swift.start_download(d)
-        self.lock.release()
-        
-    def swift_moreinfo(self, d, yes):
-        self.lock.acquire()
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_start, d, yes) 
-            logger.debug("More info is queued")
-            self.lock.release()
-            return
-        self._swift.set_moreinfo_stats(d, yes)
-        self.lock.release()
-        
-    def swift_remove_download(self, d, rm_state, rm_content):
-        self.lock.acquire()
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_remove_download, d, rm_state, rm_content)
-            logger.debug("Remove download is queued")
-            self.lock.release()
-            return        
-        self.endpoint.remove_download(d, rm_state, rm_content)
-        self.lock.release()
         
     def i2ithread_data_came_in(self, session, sock_addr, data, incoming_addr=Address()):
         logger.debug("Data came in with %s on %s from %s", session, incoming_addr, sock_addr)
@@ -350,70 +460,6 @@ class MultiEndpoint(CommonEndpoint):
         
     def dispersythread_data_came_in(self, sock_addr, data, timestamp):
         self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), data)], True, timestamp)
-     
-    def retrieve_download_impl(self, roothash):
-        """
-        Retrieve DownloadImpl with roothash
-        
-        @return: DownloadImpl, otherwise None
-        """
-        logger.debug("Retrieve download implementation, %s", roothash)
-        self.lock.acquire()
-        d = None
-        try:
-            d = self._swift.roothash2dl[roothash]
-        except:
-            logger.error("Could not retrieve downloadimpl from roothash2dl")
-        finally:
-            self.lock.release()
-        return d
-    
-    def restart_swift(self, error=None):
-        """
-        Restart swift if the endpoint is still alive, generally called when an Error occurred in the swift instance
-        After swift has been terminated, a new process starts and previous downloads and their peers are added.
-        """
-        logger.debug("Restart swift called")
-        self.lock.acquire()
-        # Don't restart on close, or if you are already resetting
-        # TODO: In case a restart is necessary while restarting (e.g. can't bind to socket)
-        if ((self.is_alive and not self._resetting and not self._waiting_on_cmd_connection and not self._swift.is_running()) 
-            or not self._dispersy): # If open has not been called yet
-            self._resetting = True
-            logger.info("Resetting swift")
-            self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RESETTING, error=error)
-            # Make sure that the current swift instance is gone
-            self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
-            self.added_peers = Set() # Reset the peers added before shutdown
-            
-            # Try the sockets to see if they are in use
-            if not try_sockets([e.address for e in self.swift_endpoints], timeout=1.0):
-                logger.warning("Socket(s) is/are still in use")
-                self._swift.network_shutdown() # Ensure that swift really goes down
-                
-            # TODO: Don't allow sockets that are in use to be tried by Libswift
-            
-            # Make sure not to make the same mistake as what let to this
-            # Any roothash added twice will create an error, leading to this. 
-            self._swift = MySwiftProcess(self._swift.binpath, self._swift.workdir, None, 
-                                         [e.address for e in self.swift_endpoints], None, None, None)
-            self.set_callbacks()
-            self._swift.add_download(self) # Normally in open
-            # First add all calls to the queue and then start the TCP connection
-            # Be sure to put all current queued items at the back of the startup queue
-            temp_queue = Queue.Queue();
-            while not self.swift_queue.empty():
-                temp_queue.put(self.swift_queue.get())
-                
-            self._dispersy.on_swift_restart(temp_queue)               
-                            
-            while not temp_queue.empty():
-                self.swift_queue.put(temp_queue.get())
-            
-            self._waiting_on_cmd_connection = True
-            self._swift.start_cmd_connection() # Normally in open
-            self._resetting = False
-        self.lock.release()
     
     def _loop(self):
         while not self._thread_stop_event.is_set():
@@ -449,25 +495,6 @@ class MultiEndpoint(CommonEndpoint):
             self.dispersy_contacts.update(diff)
             self.send_addresses_to_communities([dc.address for dc in diff])
         self.lock.release()
-        
-    def swift_started_running_callback(self):
-        logger.info("The TCP connection with Swift is up")
-        self._waiting_on_cmd_connection = False
-        self.dequeue_swift_queue()
-        for e in self.swift_endpoints:
-            e.swift_started_running_callback()
-        self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RUNNING)
-        
-    def enqueue_swift_queue(self, func, *args, **kwargs):
-        self.swift_queue.put((func, args, kwargs))
-        
-    def dequeue_swift_queue(self):
-        self._dequeueing = True
-        while not self.swift_queue.empty() and self._swift.is_ready():
-            func, args, kargs = self.swift_queue.get()
-            logger.debug("Dequeue %s %s %s", func, args, kargs)
-            func(*args, **kargs)            
-        self._dequeueing = False
     
     def interface_came_up(self, addr):
         logger.debug("%s came up", addr.interface)
@@ -500,36 +527,15 @@ class MultiEndpoint(CommonEndpoint):
             if isinstance(c, MyCommunity): # Ensure that the create_addresses_messages exists
                 self._dispersy.callback.register(c.create_addresses_messages, (1,message,candidates), 
                                                  kargs={"update":False}, delay=0.0)
-
-    def set_callbacks(self):
-        self._swift.set_on_swift_restart_callback(self.restart_swift)
-        self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback)
-        self._swift.set_on_sockaddr_info_callback(self.sockaddr_info_callback)
-        
-    def sockaddr_info_callback(self, address, state):
-        logger.debug("Socket info callback %s %d", address, state)
-        if state < 0 or address.ip == "AF_UNSPEC":
-            logger.debug("Something is going on, but don't know what.")
-        elif state == 0:
-            logger.debug("Socket is bound and active")
-            if address.resolve_interface():
-                e = self.get_endpoint(address)
-                if e is not None:
-                    e.socket_running = state
-                else:
-                    logger.warning("This %s is not in %s", address, [e.address for e in self.swift_endpoints])
-                self.dequeue_swift_queue()
-            else:
-                logger.debug("Might have been able to bind to something, but unable to resolve interface")
-        elif state > 0:
-            e = self.get_endpoint(address)
-            if e is not None:
-                e.socket_running = state
-            if not address.resolve_interface():
-                logger.debug("Cannot resolve interface")
-            if try_socket(address):
-                logger.debug("Yelp, socket is gone!")
                 
+    def swift_started_running_callback(self):
+        logger.info("The TCP connection with Swift is up")
+        self._waiting_on_cmd_connection = False
+        self.dequeue_swift_queue()
+        for e in self.swift_endpoints:
+            e.swift_started_running_callback()
+        self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RUNNING)
+        
     @property
     def socket_running(self):
         return any([e.socket_running for e in self.swift_endpoints])
@@ -622,22 +628,10 @@ class SwiftEndpoint(CommonEndpoint):
                 logger.exception("Why can't we remove this address? %s", self.address)
             self.address = addr
         if not self._swift.is_ready():
-            self._enqueue(self.swift_add_socket, (addr,), {})
+            self.enqueue_swift_queue(self.swift_add_socket, addr)
         else:
             if not self.socket_running:
                 self._swift.add_socket(self.address, True)
-        
-    def _enqueue(self, func, args, kwargs):
-        self.waiting_queue.put((func, args, kwargs))
-    
-    def _dequeue(self):
-        while self._swift.is_ready() and not self.waiting_queue.empty():
-            f, a, k = self.waiting_queue.get()
-            f(*a, **k)
-            
-    def swift_started_running_callback(self):
-        self._dequeue()
-
                     
 def get_hash(filename, swift_path):
     """
