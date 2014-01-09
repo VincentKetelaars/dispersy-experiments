@@ -4,7 +4,6 @@ Created on Jan 7, 2014
 @author: Vincent Ketelaars
 '''
 import unittest
-import binascii
 import os
 import time
 from threading import Event
@@ -57,6 +56,7 @@ class TestSwiftCommunity(unittest.TestCase):
         self._swiftcomm = self._community.swift_community
         self._directories = "testcase_swift_seed_and_down/"
         self._dest_dir = DIRECTORY
+        self._community.dest_dir = self._dest_dir
         self._filename = FILES[0]
         self._roothash = get_hash(self._filename, SWIFT_BINPATH)
         
@@ -70,6 +70,8 @@ class TestSwiftCommunity(unittest.TestCase):
         self._community2 = self._callback2.call(self.create_mycommunity, (self._dispersy2,))
         self._community2.dest_dir = self._dest_dir
         self._swiftcomm2 = self._community2.swift_community
+        self._filename2 = FILES[1]
+        self._roothash2 = get_hash(self._filename2, SWIFT_BINPATH)
 
     def tearDown(self):
         self._dispersy.stop()
@@ -87,10 +89,22 @@ class TestSwiftCommunity(unittest.TestCase):
                       FileHashCarrier(self._filename, self._directories, self._roothash, None))
         self._community.add_candidate(self.candidate(self._addrs2[0].addr()))
            
-        self._wait()
+        self._wait(self._swiftcomm2)
         
         self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))
-          
+    
+    def test_seed_and_download_both(self):           
+        self.add_file(self._callback, self._community, 
+                      FileHashCarrier(self._filename, self._directories, self._roothash, None))
+        self.add_file(self._callback2, self._community2, 
+                      FileHashCarrier(self._filename2, self._directories, self._roothash2, None))
+        self._community.add_candidate(self.candidate(self._addrs2[0].addr()))
+           
+        self._wait(self._swiftcomm, self._swiftcomm2, n=2)
+        
+        self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))))
+        self.assertTrue(os.path.exists(os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename2))))
+    
     def test_duplicate_roothash_and_cleanup(self):           
         self.add_file(self._callback, self._community, 
                       FileHashCarrier(self._filename, self._directories, self._roothash, None))
@@ -103,7 +117,7 @@ class TestSwiftCommunity(unittest.TestCase):
         self.add_file(self._callback, self._community, 
                       FileHashCarrier(file2, self._directories, roothash2, None))
         # TODO: Make sure that we're not doing too many things twice
-        self._wait()
+        self._wait(self._swiftcomm2)
          
         absfilename1 = os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))
         absfilename2 = os.path.join(self._dest_dir, self._directories, os.path.basename(file2))
@@ -126,19 +140,26 @@ class TestSwiftCommunity(unittest.TestCase):
                       FileHashCarrier(self._filename, self._directories, self._roothash, None))
         self._community.add_candidate(self.candidate(self._addrs2[0].addr()))
   
-        self._wait()
+        self._wait(self._swiftcomm2)
         
         res_path = os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))
         self.assertTrue(os.path.exists(res_path))
 
-    def _wait(self):
+    def _wait(self, *scomms, **kwargs):
+        n = 1
+        if "n" in kwargs.iterkeys():
+            n = kwargs["n"]
         for _ in range(int(TIMEOUT_TESTS / SLEEP_TIME)):
             check = True
-            for d in self._swiftcomm2.downloads.values():
-                if not d.is_finished():
-                    logger.debug("Not ready %s", d.roothash_as_hex())
+            for sc in scomms:
+                for d in sc.downloads.values():
+                    if not d.is_finished():
+                        logger.debug("Not ready %s", d.roothash_as_hex())
+                        check = False
+                if len(sc.downloads.values()) < n:
+                    logger.debug("%s has only %d downloads", sc, len(sc.downloads.values()))
                     check = False
-            if check and len(self._swiftcomm2.downloads.values()) > 0:
+            if check:
                 break
             time.sleep(SLEEP_TIME)
 
