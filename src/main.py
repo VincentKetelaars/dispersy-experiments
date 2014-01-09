@@ -14,8 +14,9 @@ def main():
     parser.add_argument("-d", "--directory", help="List directory of files to send")
     parser.add_argument("-D", "--destination", help="List directory to put downloads")
     parser.add_argument("-f", "--files", nargs="+", help="List files to send")
-    parser.add_argument("-l", "--listen", nargs="+", help="List of sockets to listen to (port, ip4, ip6), space separated")
-    parser.add_argument("-p", "--peers", nargs="+", help="List of Dispersy peers(port, ip4, ip6), space separated")
+    parser.add_argument("-g", "--gateways", nargs="+", help="Provide gateways for interfaces, space separated: wlan0=192.168.0.1")
+    parser.add_argument("-l", "--listen", nargs="+", help="List of sockets to listen to [port, ip4[:port], ip6[:port]], space separated")
+    parser.add_argument("-p", "--peers", nargs="+", help="List of Dispersy peers [port, ip4[:port], ip6[:port]], space separated")
     parser.add_argument("-q", "--sqlite_database", default=u":memory:", help="SQLite Database directory")
     parser.add_argument("-s", "--swift", help="Swift binary path")
     parser.add_argument("-t", "--time", type=float, help="Set runtime")
@@ -46,6 +47,12 @@ def main():
         
     if args.walker:
         ENABLE_CANDIDATE_WALKER = args.walker
+    
+    gateways = {}
+    if args.gateways:
+        for g in args.gateways:
+            parts = g.split("=")
+            gateways[parts[0]] = parts[1]
         
     localip = "127.0.0.1"
     local_interface = Dispersy._guess_lan_address(Dispersy._get_interface_addresses())
@@ -71,5 +78,5 @@ def main():
     return (DEST_DIR, SWIFT_BINPATH), {"dispersy_work_dir":DISPERSY_WORK_DIR, "sqlite_database":SQLITE_DATABASE,
             "swift_work_dir":DEST_DIR, "listen":listen, "peers":peers, "files_directory":args.directory,
             "files":args.files, "run_time":TOTAL_RUN_TIME, "bloomfilter_update":BLOOM_FILTER_UPDATE,
-            "walker":ENABLE_CANDIDATE_WALKER}
+            "walker":ENABLE_CANDIDATE_WALKER, "gateways":gateways}
     

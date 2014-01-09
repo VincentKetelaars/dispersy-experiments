@@ -31,7 +31,7 @@ class DispersyInstance(object):
 
     def __init__(self, dest_dir, swift_binpath, dispersy_work_dir=u".", sqlite_database=":memory:", swift_work_dir=None,
                  swift_zerostatedir=None, listen=[], peers=[], files_directory=None, files=[], run_time=-1, bloomfilter_update=-1,
-                 walker=False, callback=None):
+                 walker=False, gateways={}, callback=None):
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
         self._dispersy_work_dir = unicode(dispersy_work_dir)
@@ -46,6 +46,7 @@ class DispersyInstance(object):
         self._bloomfilter_update = bloomfilter_update # Update every # seconds the bloomfilter to peers, -1 for never
         self._walker = walker # Turn walker on
         self._api_callback = callback # Subscription to various callbacks
+        self._gateways = gateways
         
         self._filepusher = None
         
@@ -160,7 +161,7 @@ class DispersyInstance(object):
         cmdgwport = None
         spmgr = None
         return MySwiftProcess(self._swift_binpath, self._swift_work_dir, self._swift_zerostatedir, addrs,
-                                     httpgwport, cmdgwport, spmgr)
+                                     httpgwport, cmdgwport, spmgr, gateways=self._gateways)
         
     def remove_duplicate_ip(self, addrs):
         faddrs = []

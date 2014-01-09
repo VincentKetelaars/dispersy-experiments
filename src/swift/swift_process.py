@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 
 class MySwiftProcess(SwiftProcess):
     
-    def __init__(self, binpath, workdir, zerostatedir, listenaddrs, httpgwport, cmdgwport, spmgr):
+    def __init__(self, binpath, workdir, zerostatedir, listenaddrs, httpgwport, cmdgwport, spmgr, gateways={}):
         # Called by any thread, assume sessionlock is held
         self.splock = RLock()
         self.binpath = binpath
@@ -68,11 +68,18 @@ class MySwiftProcess(SwiftProcess):
 #         args.append("-B") # Set Channel debug_file
 #         args.append("-D" + self.workdir + "/channeldebug")
         if self.listenaddrs: # In case there is nothing to listen too, either None or []
-            args.append("-l")  # listen port
-            ports = ""
+            args.append("-l")  # listen
+            addrs = ""
             for l in self.listenaddrs:
-                ports += str(l) + ","
-            args.append(ports[:-1]) # Remove last comma
+                addrs += str(l) + ","
+            args.append(addrs[:-1]) # Remove last comma
+        
+        if len(gateways.items()) > 0:
+            args.append("-R")
+            gs = ""
+            for i, g in gateways.iteritems():
+                gs += i + "=" + g + ","
+            args.append(gs[:-1])
         
         args.append("-c")  # command port
         args.append("127.0.0.1:" + str(self.cmdport))
@@ -93,7 +100,7 @@ class MySwiftProcess(SwiftProcess):
             args.append("-T")  # zero state connection timeout
             args.append("180")  # seconds
         # args.append("-B")  # Enable debugging on swift
-
+        
         if sys.platform == "win32":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
