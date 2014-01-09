@@ -42,6 +42,7 @@ class SwiftCommunity(object):
             self.add_to_downloads(roothash, filename, d, seed=True, destination=destination) # Sharing so setting seed to True
             self.endpoint.swift_start(d)
             self.endpoint.swift_moreinfo(d, MOREINFO)
+            self.endpoint.swift_pex(d, False)
             
             self.add_new_peers()
             
@@ -115,7 +116,8 @@ class SwiftCommunity(object):
             self.add_to_downloads(roothash, d.get_dest_dir(), d, addresses=addresses, seed=seed, download=True, destination=destination)
             
             self.endpoint.swift_start(d)
-            self.endpoint.swift_moreinfo(d, MOREINFO)            
+            self.endpoint.swift_moreinfo(d, MOREINFO)
+            self.endpoint.swift_pex(d, False)          
             
             # TODO: Make sure that this peer is not added since the peer has already added us!                
             self.add_new_peers() # Notify our other peers that we have something new available!

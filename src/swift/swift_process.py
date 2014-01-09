@@ -406,4 +406,13 @@ class MySwiftProcess(SwiftProcess):
             cmd += ' ' + device
         cmd += '\r\n'
         self.write(cmd)
+        
+    def set_pex(self, roothash, enable):
+        self.send_pex(roothash, enable)
+        
+    def send_pex(self, roothash_hex, enable):
+        onoff = "0"
+        if enable:
+            onoff = "1"
+        self.write('PEX ' + roothash_hex + ' ' + onoff + '\r\n')
             

@@ -130,7 +130,17 @@ class SwiftHandler(TunnelEndpoint):
             logger.debug("Remove download is queued")
             self.lock.release()
             return        
-        self.endpoint.remove_download(d, rm_state, rm_content)
+        self._swift.remove_download(d, rm_state, rm_content)
+        self.lock.release()
+        
+    def swift_pex(self, d, enable):
+        self.lock.acquire()
+        if not self._swift.is_ready():
+            self.enqueue_swift_queue(self.swift_pex, d, enable)
+            logger.debug("Pex is queued")
+            self.lock.release()
+            return        
+        self._swift.set_pex(d.get_def().get_roothash_as_hex(), enable)
         self.lock.release()
         
     def retrieve_download_impl(self, roothash):
