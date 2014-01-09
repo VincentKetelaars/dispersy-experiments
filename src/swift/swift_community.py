@@ -12,7 +12,8 @@ from Tribler.Core.Swift.SwiftDef import SwiftDef
 
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download, Peer
-from src.definitions import MESSAGE_KEY_RECEIVE_FILE, MESSAGE_KEY_SWIFT_INFO, HASH_LENGTH
+from src.definitions import MESSAGE_KEY_RECEIVE_FILE, MESSAGE_KEY_SWIFT_INFO, HASH_LENGTH,\
+    MOREINFO, DELETE_CONTENT
 from src.logger import get_logger
 logger = get_logger(__name__)
 
@@ -30,7 +31,7 @@ class SwiftCommunity(object):
         self.peers = Set()
         self.downloads = {}
         
-    def add_file(self, filename, roothash):
+    def add_file(self, filename, roothash, destination):
         logger.debug("Add file, %s %s", filename, roothash)        
         roothash = binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys() and len(roothash) == HASH_LENGTH / 2: # Check if not already added, and if the unhexlified roothash has the proper length
@@ -38,9 +39,9 @@ class SwiftCommunity(object):
             d = self.create_download_impl(roothash)
             d.set_dest_dir(filename)
 
-            self.add_to_downloads(roothash, filename, d, seed=True)
+            self.add_to_downloads(roothash, filename, d, seed=True, destination=destination) # Sharing so setting seed to True
             self.endpoint.swift_start(d)
-            self.endpoint.swift_moreinfo(d, True)
+            self.endpoint.swift_moreinfo(d, MOREINFO)
             
             self.add_new_peers()
             
@@ -51,35 +52,48 @@ class SwiftCommunity(object):
             return
         d = self.endpoint.retrieve_download_impl(roothash)
         if d is not None:
-            self.endpoint.swift_add_peer(d, addr, sock_addr)
-            self.downloads[roothash].add_address(addr) # TODO: This should probably not be necessary since already added
+            try:
+                self.downloads[roothash].add_address(addr)
+            except:
+                logger.warning("The download for %s does not exist yet!!!", roothash)
+            # Only add this peer if it is one of the addresses allowed by the download
+            if self.downloads[roothash].known_address(addr):
+                self.endpoint.swift_add_peer(d, addr, sock_addr)
         else: # Swift is not available at this time
             self.endpoint.enqueue_swift_queue(self.add_peer, roothash, addr, sock_addr)
             
-    def clean_up_files(self, roothash, rm_state, rm_download):
+    def clean_up_files(self, download):
         """
-        Remove download
+        Remove download from swift if it is not seeding. This method is only used once per download.
+        Do checkpoint if not removing content or state. Notification via general callback.
         
         @param roothash: roothash to find the correct DownloadImpl
         @param rm_state: Remove state boolean
         @param rm_download: Remove download file boolean
         """
-        logger.debug("Clean up files, %s, %s, %s", roothash, rm_state, rm_download)
-        d = self.endpoint.retrieve_download_impl(roothash)
-        if d is not None:
-            if not (rm_state or rm_download): # no point in doing checkpoint if you are going to remove the files later
-                self.endpoint.swift_checkpoint(d) # Checkpoint might have been done already by libswift
-            self.endpoint.swift_remove_download(d, rm_state, rm_download)
-            self.do_callback(MESSAGE_KEY_RECEIVE_FILE, self.downloads[roothash].filename)
+        if download.cleaned:
+            return
+        roothash = download.roothash
+        rm_state = not download.seeder()
+        rm_download = DELETE_CONTENT
+        logger.debug("Clean up files, %s, %s, %s", roothash, rm_state, rm_download)        
+        if download.downloadimpl is not None:
+            if not rm_state or rm_download: # No point in doing checkpoint otherwise
+                self.endpoint.swift_checkpoint(download.downloadimpl)
+            # Do callback before removing, in case DELETE_CONTENT is True and someone wants to use it first
+            self.do_callback(MESSAGE_KEY_RECEIVE_FILE, download.filename)
+            if not download.seeder(): # If we close the download we cannot seed
+                self.endpoint.swift_remove_download(download.downloadimpl, rm_state, rm_download)
+            download.cleaned = True
         else: # Swift is not available at this time
-            self.endpoint.enqueue_swift_queue(self.clean_up_file, roothash, rm_state, rm_download)
+            self.endpoint.enqueue_swift_queue(self.clean_up_file, download)
         # Note that the endpoint will still have the hash and peers in its added_peers
                 
     def do_callback(self, key, *args, **kwargs):
         if self._api_callback is not None:
             self._api_callback(key, *args, **kwargs)
         
-    def filehash_received(self, filename, directories, roothash, addresses):
+    def filehash_received(self, filename, directories, roothash, addresses, destination):
         """
         @param filename: The name the file will get
         @param directories: Optional path of directories within the destination directory
@@ -95,11 +109,13 @@ class SwiftCommunity(object):
                 makedirs(dir_)
             d = self.create_download_impl(roothash)
             d.set_dest_dir(dir_ + basename(filename)) # File stored in dest_dir/directories/filename
+
+            seed = not DELETE_CONTENT # Seed if not delete when done
             # Add download first, because it might take while before swift process returns
-            self.add_to_downloads(roothash, d.get_dest_dir(), d, addresses=addresses, seed=True, download=True)
+            self.add_to_downloads(roothash, d.get_dest_dir(), d, addresses=addresses, seed=seed, download=True, destination=destination)
             
             self.endpoint.swift_start(d)
-            self.endpoint.swift_moreinfo(d, True)            
+            self.endpoint.swift_moreinfo(d, MOREINFO)            
             
             # TODO: Make sure that this peer is not added since the peer has already added us!                
             self.add_new_peers() # Notify our other peers that we have something new available!
@@ -140,8 +156,8 @@ class SwiftCommunity(object):
         """
         logger.debug("Download is ready %s", binascii.hexlify(roothash))
         download = self.downloads[roothash]
-        if download.set_finished():
-            self.endpoint.swift_checkpoint(download.downloadimpl)
+        if download.set_finished() and not MOREINFO: # More info is not used so call clean up yourself
+            self.clean_up_files(download)
                 
     def moreinfo_callback(self, roothash):
         """
@@ -153,10 +169,10 @@ class SwiftCommunity(object):
         logger.debug("More info %s", binascii.hexlify(roothash))
         download = self.downloads[roothash]
         self.do_callback(MESSAGE_KEY_SWIFT_INFO, download.package()) # If more info is not set for the download this is never called
-        if download.is_finished() and not download.seeder():
-            self.clean_up_files(roothash, False, False)          
+        if download.is_finished():
+            self.clean_up_files(download)
 
-    def add_to_downloads(self, roothash, filename, download_impl, addresses=None, seed=False, download=False):
+    def add_to_downloads(self, roothash, filename, download_impl, addresses=None, seed=False, download=False, destination=None):
         """
         @param roothash: Binary form of the roothash of filename
         @param filename: Absolute path of filename
@@ -167,9 +183,10 @@ class SwiftCommunity(object):
         @param add_known: Boolean that determines if all known peers should be added to this download
         """
         logger.debug("Add to known downloads, %s %s %s %s %s", binascii.hexlify(roothash), filename, addresses, seed, download)
-        d = Download(roothash, filename, download_impl, seed=seed, download=download)
-        d.moreinfo = True
-        self.peers.add(Peer(addresses))
+        d = Download(roothash, filename, download_impl, seed=seed, download=download, moreinfo=MOREINFO, destination=destination)
+        if addresses is not None: # We received this from someone else
+            d.determine_seeding()
+            self.peers.add(Peer(addresses))
         for p in self.peers:
             d.add_peer(p)
         self.downloads[roothash] = d
@@ -180,6 +197,7 @@ class SwiftCommunity(object):
             if (not d.is_finished()) or d.seeder(): # No sense in adding a download that is finished, and not seeding
                 logger.debug("Enqueue start download %s", h)
                 q.put((self.endpoint.swift_start, (d.downloadimpl,), {}))
+                q.put((self.endpoint.swift_moreinfo, (d.downloadimpl, MOREINFO), {}))
                 for peer in self.downloads[h].peers():
                     for addr in peer.addresses:
                         logger.debug("Enqueue add peer %s %s", addr, h)
@@ -191,7 +209,7 @@ class SwiftCommunity(object):
         logger.debug("File hash peers %s", addresses)
         for d in self.downloads.itervalues():
             for a in addresses:
-                d.merge_peers(Peer(a))
+                d.merge_peers(Peer([a]))
         
     def add_new_peers(self, sock_addr=None):
         """
@@ -201,7 +219,7 @@ class SwiftCommunity(object):
         """
         logger.debug("Add new peers!")
         for roothash in self.downloads.keys():
-            if self.downloads[roothash].seeder(): # TODO: Is this a good idea?
+            if self.downloads[roothash].seeder():
                 for peer in self.downloads[roothash].peers():
                     for addr in peer.addresses:
                         self.add_peer(roothash, addr, sock_addr)

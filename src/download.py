@@ -10,6 +10,7 @@ from sets import Set
 
 from src.address import Address
 from src.logger import get_logger
+from dispersy.destination import CommunityDestination, CandidateDestination
 
 logger = get_logger(__name__)
     
@@ -19,6 +20,10 @@ class Peer(object):
         self.addresses = Set()
         if addresses is not None:
             self.addresses = Set(addresses)
+            
+    def merge(self, peer):
+        for a in peer.addresses:
+            self.addresses.add(a)
 
     def __eq__(self, other):
         if not isinstance(other, Peer):
@@ -35,9 +40,11 @@ class Peer(object):
 class Download(object):
     '''
     This class represents a Download object
+    Only the peers should be allowed to download this object.
+    Peers are only added if allowed by the destination.
     '''
 
-    def __init__(self, roothash, filename, downloadimpl, directories="", seed=False, download=False):
+    def __init__(self, roothash, filename, downloadimpl, directories="", seed=False, download=False, moreinfo=True, destination=None):
         '''
         Constructor
         '''
@@ -56,7 +63,9 @@ class Download(object):
         if not download:
             self._finished_time = self._start_time
             
-        self.moreinfo = True
+        self.moreinfo = moreinfo
+        self._destination = destination
+        self.cleaned = False # True when this download has been cleaned up
         
     @property
     def roothash(self):
@@ -90,27 +99,69 @@ class Download(object):
         return self._directories + self._filename
     
     def add_address(self, address):
-        if address is not None and isinstance(address, Address):
-            for peer in self._peers:
-                if address in peer.addresses:
-                    return
-            self._peers.add(Peer([address]))
+        assert isinstance(address, Address)
+        if self.known_address(address):
+            return
+        self.add_peer(Peer([address]))
+            
+    def community_destination(self):
+        return isinstance(self._destination, CommunityDestination.Implementation)
+    
+    def candidate_destination(self):
+        return isinstance(self._destination, CandidateDestination.Implementation)
+    
+    def allowed_addresses(self):
+        if isinstance(self._destination, CandidateDestination.Implementation):
+            return [Address.tuple(c.sock_addr) for c in self._destination._candidates]
+        return None
+    
+    def determine_seeding(self):
+        """
+        Only call this method if we received this information from another peer,
+        because of |allowed_addresses| > 1
+        """      
+        # We should share if either community destination or if we are not the only on in the candidate destination
+        share = self._destination is None or self.community_destination() or (self.candidate_destination() and len(self.allowed_addresses()) > 1)
+        # TODO: We should use the relay distribution to figure out who's also entitled to this download
+        self._seed = self._seed and share
+        
+    def _allow_peer(self, peer):
+        assert isinstance(peer, Peer)
+        if len(peer.addresses) == 0 or not self._seed: # If we're not seeding, we're not allowing!
+            return False
+        if self.community_destination():
+        # TODO: Verify that the peer actually is part of this community
+            return True
+        elif self.candidate_destination():
+            allowed = self.allowed_addresses()
+            for a in peer.addresses:
+                if a in allowed:
+                    return True
+        return False # Destination is None, unknown or none of the addresses are in allowed_addresses
         
     def add_peer(self, peer):
-        if peer is not None and isinstance(peer, Peer) and len(peer.addresses) > 0:
+        if peer is not None and self._allow_peer(peer):
             self._peers.add(peer)
+        else:
+            logger.debug("Peer %s is not allowed", peer)
         
     def peers(self):
         return self._peers
     
     def merge_peers(self, new_peer):
-        if new_peer is not None and len(new_peer.addresses) > 0 and not new_peer in self._peers:
+        if new_peer is not None and self._allow_peer(new_peer) and not new_peer in self._peers:
             diff = Set()
             for peer in self._peers:
                 if any([a in peer.addresses for a in new_peer.addresses]):
                     diff.add(peer)
             self._peers.difference_update(diff)
+            for p in diff:
+                new_peer.merge(p) # Any other addresses belong to this new peer now as well
             self._peers.add(new_peer)
+            
+    def known_address(self, addr):
+        assert isinstance(addr, Address)
+        return addr in [a for p in self._peers for a in p.addresses]
     
     def package(self):
         """

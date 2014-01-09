@@ -26,8 +26,7 @@ from Tribler.Core.Swift.SwiftDef import SwiftDef
 
 from src.address import Address
 from src.dispersy_extends.candidate import EligibleWalkCandidate
-from src.definitions import HASH_LENGTH, MESSAGE_KEY_RECEIVE_FILE,\
-    MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, MESSAGE_KEY_SWIFT_PID,\
+from src.definitions import MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, MESSAGE_KEY_SWIFT_PID,\
      STATE_RESETTING, STATE_RUNNING, STATE_STOPPED,\
     REPORT_DISPERSY_INFO_TIME, MESSAGE_KEY_DISPERSY_INFO, FILE_HASH_MESSAGE_NAME
 from src.dispersy_extends.payload import AddressesCarrier
@@ -60,6 +59,7 @@ class SwiftHandler(TunnelEndpoint):
         self._waiting_on_cmd_connection = False
         self.swift_queue = Queue.Queue()
         self._dequeueing = False
+        self.started_downloads = Set()
         self.added_peers = Set()
         self.lock = RLock() # Reentrant Lock
         
@@ -87,7 +87,7 @@ class SwiftHandler(TunnelEndpoint):
             logger.debug("Add peer is queued")
             self.lock.release()
             return
-        if d is not None and not any([addr == a and d.roothash_as_hex() == h and sock_addr == s for a, h, s in self.added_peers]):
+        if d is not None and not any([addr == a and d.get_def().get_roothash_as_hex() == h and sock_addr == s for a, h, s in self.added_peers]):
             self._swift.add_peer(d, addr, sock_addr)
         self.lock.release()
             
@@ -106,7 +106,11 @@ class SwiftHandler(TunnelEndpoint):
             logger.debug("Start is queued")
             self.lock.release()
             return
-        self._swift.start_download(d)
+        if not d.get_def().get_roothash_as_hex() in self.started_downloads:
+            self._swift.start_download(d)
+            self.started_downloads.add(d.get_def().get_roothash_as_hex())
+        else:
+            logger.warning("This roothash %s was already started!", d.get_def().get_roothash_as_hex())
         self.lock.release()
         
     def swift_moreinfo(self, d, yes):
@@ -160,13 +164,13 @@ class SwiftHandler(TunnelEndpoint):
             self._resetting = True
             logger.info("Resetting swift")
             self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RESETTING, error=error)
-            # Make sure that the current swift instance is gone
-            self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
-            self.added_peers = Set() # Reset the peers added before shutdown
+            self.added_peers = Set() # Reset the peers added before restarting
+            self.started_downloads = Set() # Reset the started downloads before restarting
             
             # Try the sockets to see if they are in use
             if not try_sockets([e.address for e in self.swift_endpoints], timeout=1.0):
                 logger.warning("Socket(s) is/are still in use")
+                self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
                 self._swift.network_shutdown() # Ensure that swift really goes down
                 
             # TODO: Don't allow sockets that are in use to be tried by Libswift
@@ -540,6 +544,12 @@ class MultiEndpoint(CommonEndpoint):
     def socket_running(self):
         return any([e.socket_running for e in self.swift_endpoints])
     
+    def restart_swift(self, error):
+        SwiftHandler.restart_swift(self, error)
+        for e in self.swift_endpoints: # We need to add the reference to the new swift to each endpoint
+            e._swift = self._swift
+        # TODO: This wasn't always necessary, what changed??
+    
 class SwiftEndpoint(CommonEndpoint):
     
     def __init__(self, swift_process, address, api_callback=None):
@@ -577,13 +587,13 @@ class SwiftEndpoint(CommonEndpoint):
         return self.address.addr()
     
     def send(self, candidates, packets):
-        if self._swift is not None and self._swift.is_alive():
+        if self._swift is not None and self._swift.is_ready():
             if any(len(packet) > 2**16 - 60 for packet in packets):
                 raise RuntimeError("UDP does not support %d byte packets" % len(max(len(packet) for packet in packets)))
 
             self._total_up += sum(len(data) for data in packets) * len(candidates)
             self._total_send += (len(packets) * len(candidates))
-    
+
             self._swift.splock.acquire()
             try:
                 for candidate in candidates:

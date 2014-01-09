@@ -95,7 +95,8 @@ class MyCommunity(Community):
     def file_hash_handle(self, messages):
         for x in messages:
             if len(x.payload.filename) >= 1 and x.payload.directories is not None and len(x.payload.roothash) == HASH_LENGTH:
-                self.swift_community.filehash_received(x.payload.filename, x.payload.directories, x.payload.roothash, x.payload.addresses)
+                self.swift_community.filehash_received(x.payload.filename, x.payload.directories, 
+                                                       x.payload.roothash, x.payload.addresses, x.destination)
     
     def addresses_message_check(self, messages):
         """
@@ -129,20 +130,18 @@ class MyCommunity(Community):
         
     def create_file_hash_messages(self, count, file_hash_message, store=True, update=True, forward=True):
         # Make sure you have the filename, and a proper hash
-        if isfile(file_hash_message.filename):
+        if isfile(file_hash_message.filename) and file_hash_message.roothash is not None and len(file_hash_message.roothash) == HASH_LENGTH:
+            meta = self.get_meta_message(FILE_HASH_MESSAGE_NAME)
+            # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
+            messages = [meta.impl(authentication=(self.my_member,), 
+                                  distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
+                                  payload=(basename(file_hash_message.filename), file_hash_message.directories, 
+                                           file_hash_message.roothash, self._addresses()))
+                        for _ in xrange(count)]
+            self.dispersy.store_update_forward(messages, store, update, forward)
+                
             # Let Swift know that it should seed this file
-            # Get a hash of the file 
-            self.swift_community.add_file(file_hash_message.filename, file_hash_message.roothash)
-            
-            if file_hash_message.roothash is not None and len(file_hash_message.roothash) == HASH_LENGTH:
-                # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
-                meta = self.get_meta_message(FILE_HASH_MESSAGE_NAME)
-                messages = [meta.impl(authentication=(self.my_member,), 
-                                      distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
-                                      payload=(basename(file_hash_message.filename), file_hash_message.directories, 
-                                               file_hash_message.roothash, self._addresses()))
-                            for _ in xrange(count)]
-                self.dispersy.store_update_forward(messages, store, update, forward)
+            self.swift_community.add_file(file_hash_message.filename, file_hash_message.roothash, messages[0].destination)
                 
     def create_addresses_messages(self, count, addresses_message, candidates, store=True, update=True, forward=True):
         meta = self.get_meta_message(ADDRESSES_MESSAGE_NAME)
