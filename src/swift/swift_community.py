@@ -13,7 +13,7 @@ from Tribler.Core.Swift.SwiftDef import SwiftDef
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download, Peer
 from src.definitions import MESSAGE_KEY_RECEIVE_FILE, MESSAGE_KEY_SWIFT_INFO, HASH_LENGTH,\
-    MOREINFO, DELETE_CONTENT
+    MOREINFO, DELETE_CONTENT, PEXON
 from src.logger import get_logger
 logger = get_logger(__name__)
 
@@ -42,7 +42,7 @@ class SwiftCommunity(object):
             self.add_to_downloads(roothash, filename, d, seed=True, destination=destination) # Sharing so setting seed to True
             self.endpoint.swift_start(d)
             self.endpoint.swift_moreinfo(d, MOREINFO)
-            self.endpoint.swift_pex(d, False)
+            self.endpoint.swift_pex(d, PEXON)
             
             self.add_new_peers()
             
@@ -117,7 +117,7 @@ class SwiftCommunity(object):
             
             self.endpoint.swift_start(d)
             self.endpoint.swift_moreinfo(d, MOREINFO)
-            self.endpoint.swift_pex(d, False)          
+            self.endpoint.swift_pex(d, PEXON)          
             
             # TODO: Make sure that this peer is not added since the peer has already added us!                
             self.add_new_peers() # Notify our other peers that we have something new available!
@@ -150,7 +150,7 @@ class SwiftCommunity(object):
         d.set_moreinfo_callback(self.moreinfo_callback)
         return d    
         
-    def download_is_ready_callback(self, roothash, moreinfo_arrived=False):
+    def download_is_ready_callback(self, roothash):
         """
         This method is called when a download is ready
         

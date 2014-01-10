@@ -111,6 +111,7 @@ Swift
 LIBEVENT_LIBRARY = "/usr/local/lib"
 MOREINFO = True # Don't change this to False because it might affect things
 DELETE_CONTENT = False # If True it will be deleted immediately when finished, after callback
+PEXON = False # If True Swift might disseminate data to unauthorized peers
 
 """
 Timeout

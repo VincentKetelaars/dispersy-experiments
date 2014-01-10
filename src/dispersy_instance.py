@@ -144,7 +144,9 @@ class DispersyInstance(object):
     def create_mycommunity(self):    
         master_member = self._dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
         my_member = self._dispersy.get_new_member(SECURITY)
-        return MyCommunity.join_community(self._dispersy, master_member, my_member, *(), **{"enable":self._walker})
+        args = ()
+        kwargs = {"enable" : self._walker, "api_callback" : self._api_callback}
+        return MyCommunity.join_community(self._dispersy, master_member, my_member, *args, **kwargs)
         
     def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
         logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)

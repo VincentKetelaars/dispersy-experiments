@@ -25,12 +25,14 @@ class FilePusher(object):
     In the former case the filename is send back, whereas in the latter case the contents of the file (string) is send back.
     '''
 
-    def __init__(self, callback, swift_path, directory=None, files=[], file_size=MAX_FILE_SIZE):
+    def __init__(self, callback, swift_path, directory=None, files=[], file_size=MAX_FILE_SIZE, hidden=False):
         '''
         @param callback: The function that will be called with a FileHashCarrier or SimpleFileCarrier object
+        @param swift_path: Path to swift executable
         @param directory: The directory to search for files
         @param files: The list of files to monitor
         @param file_size: The decision variable for choosing callback object
+        @param hidden: List hidden downloads as well
         '''
         self._dir = None
         self.set_directory(directory)
@@ -43,6 +45,7 @@ class FilePusher(object):
         self._callback = callback
         self._file_size = file_size
         self.swift_path = swift_path
+        self._hidden = hidden
         self._stop_event = Event()
         
     def set_directory(self, directory):
@@ -117,8 +120,14 @@ class FilePusher(object):
             # all_files should only contain absolute filename paths in dir_
             all_files = [ join(dir_,f) for f in listdir(dir_) if isfile(join(dir_,f)) and 
                          # which do not end in any of the FILETYPES_NOT_TO_SEND or contain FILENAMES_NOT_TO_SEND
-                         not (any(f.endswith(t) for t in FILETYPES_NOT_TO_SEND) or any(f.find(n) >= 0 for n in FILENAMES_NOT_TO_SEND)) ]
-            all_dir = [join(dir_, d) for d in listdir(dir_) if isdir(join(dir_, d))]
+                         not (any(f.endswith(t) for t in FILETYPES_NOT_TO_SEND) 
+                              or any(f.find(n) >= 0 for n in FILENAMES_NOT_TO_SEND)) and
+                        # which if not hidden, do no start with a dot
+                         not (not self._hidden and f[0] == ".") ]
+                        
+            all_dir = [join(dir_, d) for d in listdir(dir_) if isdir(join(dir_, d)) and 
+                       # If not hidden, don't go into directories starting with a dot
+                       not (not self._hidden and d[0] == ".") ]
             for d in all_dir:
                 all_files.extend(recur(d))
             return all_files

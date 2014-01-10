@@ -97,13 +97,15 @@ class MySQLToCSV(object):
         self.channel = (self.get_channel(channel), channel)
         self.parameters = parameters
         
+        logger.debug("Working on database %s", database)
+        
         start_time = None
         if start is not None:
             start_time = datetime.strptime(start, "%H:%M:%S_%d-%m-%Y")
             
         end_time = None
         if end is not None:
-            end_time = datetime.strptime(start, "%H:%M:%S_%d-%m-%Y")
+            end_time = datetime.strptime(end, "%H:%M:%S_%d-%m-%Y")
         
         logger.debug("Channel %s has id %d", channel, self.channel[0])
         params_to_csv = {}
@@ -111,7 +113,7 @@ class MySQLToCSV(object):
         status_params = self.get_status_parameters(chanid=self.channel[0])
         logger.debug("Channel has %d parameters", len(status_params))
         status = self.get_status_by_channel(self.channel[0], start=self.unix_time(start_time), end=self.unix_time(end_time))
-        logger.debug("Channel has %d values", len(status))
+        logger.debug("Channel has %d values from %s to %s", len(status), start, end)
         for s in status:
             s.set_chan(channel)
             s.set_param(status_params[s.paramid][1])
@@ -123,7 +125,9 @@ class MySQLToCSV(object):
                 else:
                     params_to_csv[s.paramid] = [s]
                     
+        norm_str = ""
         if normalize:
+            norm_str = "normalized "
             minimum = sys.float_info.max
             for v in params_to_csv.itervalues():
                 minimum = min([minimum] + [s.timestamp for s in v])
@@ -131,7 +135,7 @@ class MySQLToCSV(object):
                 for s in v:
                     s.timestamp = s.timestamp - minimum
         
-        logger.debug("%d parameters will be written to CSV", len(params_to_csv))
+        logger.debug("%d %sparameters will be written to %s", len(params_to_csv), norm_str, self.file)
         for i, v in params_to_csv.iteritems():
             params_to_csv[i] = sorted(v, key=lambda obj: obj.paramid)
             
@@ -186,6 +190,10 @@ class MySQLToCSV(object):
             params.append(end)
             t += " AND timestamp < ?"
         SQL = "SELECT * FROM status WHERE chanid = ?"+ t
+        dSQL = SQL
+        for p in params:
+            dSQL = dSQL.replace("?", str(p), 1)
+        logger.debug(dSQL)
         cursor = self.mysql._execute(SQL, params)
         elements = []
         if cursor:
