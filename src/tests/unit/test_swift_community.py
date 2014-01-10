@@ -29,6 +29,9 @@ logger = get_logger(__name__)
 
 class TestSwiftCommunity(unittest.TestCase):
     
+    def api_callback(self, key, *args, **kwargs):
+        logger.debug("%d %s %s", key, args, kwargs)
+    
     def add_file(self, callback, community, message):
         self.event = Event()
         def done(arg):
@@ -42,7 +45,7 @@ class TestSwiftCommunity(unittest.TestCase):
     def create_mycommunity(self, dispersy):    
         master_member = dispersy.get_member(MASTER_MEMBER_PUBLIC_KEY)
         my_member = dispersy.get_new_member(SECURITY)
-        return MyCommunity.join_community(dispersy, master_member, my_member, *(), **{"enable":False})
+        return MyCommunity.join_community(dispersy, master_member, my_member, *(), **{"enable":False, "api_callback" : self.api_callback})
 
     def setUp(self):
         self._callback = Callback("TestCallback")
@@ -78,11 +81,11 @@ class TestSwiftCommunity(unittest.TestCase):
         self._dispersy2.stop()
         for f in FILES:
             remove_files(f) # Remove hashmap and bin files
-        dir_ = os.path.join(self._dest_dir, self._directories)
-        if os.path.isdir(dir_):
-            for f in os.listdir(dir_):
-                os.remove(os.path.join(dir_, f))
-            os.removedirs(dir_)
+#         dir_ = os.path.join(self._dest_dir, self._directories)
+#         if os.path.isdir(dir_):
+#             for f in os.listdir(dir_):
+#                 os.remove(os.path.join(dir_, f))
+#             os.removedirs(dir_)
           
     def test_seed_and_download(self):           
         self.add_file(self._callback, self._community, 

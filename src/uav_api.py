@@ -91,6 +91,7 @@ class UAVAPI(API):
         self.run_event.set()
         self.db_reader.close_connection() # TODO: Do we even have a connection???  
         self.status.kill() # TODO: Perhaps try stop(), doesn't always work
+        # Note that stopping status will make the UAV system restart this UAV_API again after some time (within a minute or so)
         
     def on_dispersy_stopped(self):
         logger.debug("Dispersy has stopped")
@@ -110,7 +111,26 @@ class UAVAPI(API):
     def _swift_state_changed(self, state, error=None):
         self.status["swift.state"] = self.STATES[state]
         
-    def swift_info_callback(self, download):
+    def swift_info_callback(self, info):
+        regular = info.get("regular")
+        base = "swift."
+        if regular is not None:
+            for k, v in regular.iteritems():
+                self.status[base + k] = v
+#             self.status[base + "down_speed"] = regular["down_speed"]
+#             self.status[base + "up_speed"] = regular["up_speed"]
+#             self.status[base + "total_up"] = regular["total_up"]        
+#             self.status[base + "total_down"] = regular["total_down"]    
+#             self.status[base + "raw_total_up"] = regular["raw_total_up"] # KB 
+#             self.status[base + "raw_total_down"] = regular["raw_total_down"] # KB
+#             self.status[base + "num_downloads"] = regular["num_downloads"]
+#             self.status[base + "done_downloads"] = regular["done_downloads"]
+#             self.status[base + "num_seeding"] = regular["num_seeding"]
+#             self.status[base + "num_peers"] = regular["num_peers"]
+            
+        download = info.get("direct")
+        if download is None:
+            return
         base = "swift.downloads." + download["roothash"] + "."
         if not self.status.has_key(base + "filename"):
             self.status[base + "filename"] = download["filename"]

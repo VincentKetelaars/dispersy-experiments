@@ -23,4 +23,5 @@ cp $VERBOSE uav/change_user.sh ${UAV_HOME}
 cp $VERBOSE uav/prepare_mysql.sh ${UAV_HOME}
 cp $VERBOSE uav/create_db.sql ${UAV_HOME}
 cp $VERBOSE uav/allow_logging.sh ${UAV_HOME}
+cp $VERBOSE uav/widget.js ${UAV_HOME}/GUI/Web/html/js
 cp $VERBOSE logger.conf ${UAV_HOME}

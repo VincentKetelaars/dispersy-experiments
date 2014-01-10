@@ -241,6 +241,8 @@ class SwiftHandler(TunnelEndpoint):
                 self.dequeue_swift_queue()
             else:
                 logger.debug("Might have been able to bind to something, but unable to resolve interface")
+        elif state == 11: # We're overloading the buffer        
+            logger.debug("Buffer overload!")
         elif state > 0:
             e = self.get_endpoint(address)
             if e is not None:

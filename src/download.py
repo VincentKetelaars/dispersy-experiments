@@ -91,6 +91,9 @@ class Download(object):
             return True
         else:
             return False
+        
+    def is_download(self):
+        return self._download
     
     def seeder(self):
         return self._seed
@@ -138,6 +141,10 @@ class Download(object):
                 if a in allowed:
                     return True
         return False # Destination is None, unknown or none of the addresses are in allowed_addresses
+    
+    def add_peers(self, peers):
+        for p in peers:
+            self.add_peer(p)
         
     def add_peer(self, peer):
         if peer is not None and self._allow_peer(peer):
@@ -162,6 +169,20 @@ class Download(object):
     def known_address(self, addr):
         assert isinstance(addr, Address)
         return addr in [a for p in self._peers for a in p.addresses]
+    
+    def speed(self, direction):
+        try:
+            return self.downloadimpl.get_current_speed(direction)
+        except:
+            logger.exception("Could not fetch speed %s", direction)
+            return 0
+    
+    def total(self, direction, raw=False):
+        try:
+            return self.downloadimpl.midict[("raw_" if raw else "") + "bytes_" + direction] / 1024.0
+        except:
+            logger.exception("Could not fetch total %s %s", direction, raw)
+            return 0
     
     def package(self):
         """

@@ -379,6 +379,30 @@ class ReceiverAPI(PipeHandler):
             return self.dispersy_instance._filepusher.add_files([file_])
         else:
             self._enqueue(self.add_file, file_)
+            
+    def pause_file(self, file_):
+        """
+        Delete channel, but keep content and state
+        """
+        download = self.dispersy_instance._community.swift_community.get_download_by_file(file_)
+        self.dispersy_instance._community.swift_community.pause_download(download)
+        
+    def continue_file(self, file_):
+        """
+        Try finding file in downloads and start it again, otherwise add it
+        """
+        download = self.dispersy_instance._community.swift_community.get_download_by_file(file_)
+        if download is None:
+            self.add_file(file_)
+        else:
+            self.dispersy_instance._community.swift_community.continue_download(download)
+        
+    def stop_file(self, file_):
+        """
+        Delete channel and state, but keep content
+        """
+        download = self._dispersy_instance._community.swift_community.get_download_by_file(file_)
+        self.dispersy_instance._community.swift_community.stop_download(download)
     
     def add_peer(self, address):
         assert isinstance(address, Address)

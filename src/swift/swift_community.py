@@ -7,13 +7,14 @@ import binascii
 from os import makedirs
 from os.path import exists, basename
 from sets import Set
+from threading import Thread, Event
 
 from Tribler.Core.Swift.SwiftDef import SwiftDef
 
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download, Peer
 from src.definitions import MESSAGE_KEY_RECEIVE_FILE, MESSAGE_KEY_SWIFT_INFO, HASH_LENGTH,\
-    MOREINFO, DELETE_CONTENT, PEXON
+    MOREINFO, DELETE_CONTENT, PEXON, REPORT_DISPERSY_INFO_TIME, PATH_SEPARATOR
 from src.logger import get_logger
 logger = get_logger(__name__)
 
@@ -21,7 +22,7 @@ class SwiftCommunity(object):
     '''
     This class represents the bridge between the Dispersy Community and Libswift
     
-    Needs mapping from Destination / Distribution to know who are allowed to receive.
+    Needs mapping from Destination / Distribution to know who are allowed to receive a download.
     '''
 
     def __init__(self, dispersy_community, endpoint, api_callback=None):
@@ -30,6 +31,11 @@ class SwiftCommunity(object):
         self._api_callback = api_callback
         self.peers = Set()
         self.downloads = {}
+        
+        self._thread_stop_event = Event()
+        self._thread_loop = Thread(target=self._loop)
+        self._thread_loop.daemon = True
+        self._thread_loop.start()
         
     def add_file(self, filename, roothash, destination):
         logger.debug("Add file, %s %s", filename, roothash)        
@@ -170,7 +176,7 @@ class SwiftCommunity(object):
         """
         logger.debug("More info %s", binascii.hexlify(roothash))
         download = self.downloads[roothash]
-        self.do_callback(MESSAGE_KEY_SWIFT_INFO, download.package()) # If more info is not set for the download this is never called
+        self.do_callback(MESSAGE_KEY_SWIFT_INFO, {"direct" : download.package()}) # If more info is not set for the download this is never called
         if download.is_finished():
             self.clean_up_files(download)
 
@@ -189,8 +195,7 @@ class SwiftCommunity(object):
         if addresses is not None: # We received this from someone else
             d.determine_seeding()
             self.peers.add(Peer(addresses))
-        for p in self.peers:
-            d.add_peer(p)
+        d.add_peers(self.peers)
         self.downloads[roothash] = d
         logger.debug("Download %s has %s as peers", filename, [str(a) for a in [asets for asets in [p.addresses for p in d.peers()]]])
         
@@ -225,3 +230,54 @@ class SwiftCommunity(object):
                 for peer in self.downloads[roothash].peers():
                     for addr in peer.addresses:
                         self.add_peer(roothash, addr, sock_addr)
+                        
+    def get_download_by_file(self, file_):
+        for d in self.downloads.itervalues():
+            if d.filename == file_ or d.directories + PATH_SEPARATOR + d.filename == file_:
+                return d
+        return None
+    
+    def pause_download(self, download):
+        if download is not None:
+            self.endpoint.swift_checkpoint(download.downloadimpl)
+            self.endpoint.swift_remove_download(download.downloadimpl, False, False)
+            
+    def continue_download(self, download):
+        if download is not None:
+            self.endpoint.swift_start(download.downloadimpl)
+            self.endpoint.swift_moreinfo(download.downloadimpl, MOREINFO)
+            self.endpoint.swift_pex(download.downloadimpl, PEXON)            
+            self.add_new_peers()
+            
+    def stop_download(self, download):
+        if download is not None:
+            self.endpoint.swift_remove_download(download.downloadimpl, True, False)
+            self.cleaned = True
+                        
+    def _loop(self):
+        while not self._thread_stop_event.is_set():
+            self.do_callback(MESSAGE_KEY_SWIFT_INFO, {"regular" : self._overal_data()})
+            self._thread_stop_event.wait(REPORT_DISPERSY_INFO_TIME)
+        
+    def _overal_data(self):
+        upspeed = 0
+        downspeed = 0
+        total_up = 0
+        total_down = 0
+        raw_total_up = 0
+        raw_total_down = 0
+        for d in self.downloads.itervalues():
+            upspeed += d.speed("up")
+            downspeed += d.speed("down")
+            total_up += d.total("up")
+            total_down += d.total("down")
+            raw_total_up += d.total("up", raw=True)
+            raw_total_down += d.total("down", raw=False)
+        done_downloads = sum([d.is_finished() and d.is_download() for d in self.downloads.itervalues()])
+        num_seeding = sum([d.seeder() for d in self.downloads.itervalues()])
+        num_peers = len(Set(p for d in self.downloads.itervalues() for p in d.peers()))
+        num_downloading = sum([d.seeder() and not d.is_finished() for d in self.downloads.itervalues()])
+        return {"up_speed" : upspeed, "down_speed" : downspeed, "total_up" : total_up, 
+                "total_down" : total_down, "raw_total_up" : raw_total_up, "raw_total_down" : raw_total_down,
+                "num_downloads" : len(self.downloads), "done_downloads" : done_downloads, 
+                "num_seeding" : num_seeding, "num_downloading" : num_downloading, "num_peers" : num_peers}
