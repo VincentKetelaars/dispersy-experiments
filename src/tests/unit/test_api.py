@@ -35,7 +35,7 @@ class TestAPI(unittest.TestCase):
         
         def file_received_callback(self, file_):
             self.files_done += 1
-            self.api1._run_event.set()
+            self._run_event.set()
 
 
     def setUp(self):

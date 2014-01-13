@@ -215,7 +215,7 @@ class UAVAPI(API):
     def _get_argument_children(self, arg):
         try:
             res = self.cfg.get("parameters." + arg)
-            logger.debug("Parameter %s with children %s", arg, res.get_children())
+            logger.debug("Parameter %s gets %s with children %s", arg, res, res.get_children())
             return [a.get_value() for a in res.get_children()]
         except:
             logger.exception("Failed to recover %s parameter", arg)
@@ -233,7 +233,8 @@ class UAVAPI(API):
         files = self._get_argument_children("files")
         run_time = int(self.cfg["parameters.run_time"])
         bloomfilter_update = int(self.cfg["parameters.bloomfilter_update"])
-        walker = self.cfg["parameters.walker"]        
+        walker = self.cfg["parameters.walker"]
+        gateways = self._get_argument_children("gateways")
         
         di_kwargs = {}
         if dispersy_work_dir is not None:
@@ -258,6 +259,13 @@ class UAVAPI(API):
             di_kwargs["bloomfilter_update"] = bloomfilter_update
         if walker is not None:
             di_kwargs["walker"] = walker
+        if gateways is not None:
+            d = {}
+            for g in gateways:
+                a = g.split("=")
+                if len(a) == 2:
+                    d[a[0]] = a[1]
+            di_kwargs["gateways"] = d
         return di_args, di_kwargs
     
     def _get_channel_value(self, channel, value):
