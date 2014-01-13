@@ -41,7 +41,7 @@ class SwiftCommunity(object):
         logger.debug("Add file, %s %s", filename, roothash)        
         roothash = binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys() and len(roothash) == HASH_LENGTH / 2: # Check if not already added, and if the unhexlified roothash has the proper length
-            logger.info("Add file %s with roothash %s", filename, roothash)
+            logger.info("Add file %s with roothash %s", filename, binascii.hexlify(roothash))
             d = self.create_download_impl(roothash)
             d.set_dest_dir(filename)
 
