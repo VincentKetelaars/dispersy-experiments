@@ -60,13 +60,17 @@ class TestFilePusher(unittest.TestCase):
             if os.path.exists(hashpath):
                 os.remove(hashpath)
             
-    def get_files_from_directory_recur(self, dirp):
+    def get_files_from_directory_recur(self, dirp, hidden=False):
         files = [os.path.join(dirp, f) for f in os.listdir(dirp) if os.path.isfile(os.path.join(dirp, f)) and 
                          # which do not end in any of the FILETYPES_NOT_TO_SEND or contain FILENAMES_NOT_TO_SEND
-                         not (any(f.endswith(t) for t in FILETYPES_NOT_TO_SEND) or any(f.find(n) >= 0 for n in FILENAMES_NOT_TO_SEND)) ]
+                         not (any(f.endswith(t) for t in FILETYPES_NOT_TO_SEND) or 
+                              any(f.find(n) >= 0 for n in FILENAMES_NOT_TO_SEND)) and
+                        # which if not hidden, do no start with a dot
+                         not (not hidden and f[0] == ".") ]
         dirs = [os.path.join(dirp, f) for f in os.listdir(dirp) if os.path.isdir(os.path.join(dirp, f))]
         for d in dirs:
-            files.extend(self.get_files_from_directory_recur(d))
+            if not (not hidden and d.startswith(".")):
+                files.extend(self.get_files_from_directory_recur(d))
         return files
     
     def check_filename(self, filename):

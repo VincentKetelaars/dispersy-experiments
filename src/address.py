@@ -3,13 +3,13 @@ Created on Oct 14, 2013
 
 @author: Vincent Ketelaars
 '''
-
-from src.logger import get_logger
-
 from struct import unpack
 from socket import AF_INET, AF_INET6, inet_aton
-from dispersy.dispersy import Dispersy
 
+from src.tools.networks import get_interface_addresses
+
+from src.logger import get_logger
+from src.tools.network_interface import Interface
 logger = get_logger(__name__)
 
 class Address(object):
@@ -187,7 +187,7 @@ class Address(object):
             self._if = Interface(self.IFNAME_WILDCARD, self._ip, self._ip, self._ip)
             return True
         try:
-            for if_ in Dispersy._get_interface_addresses():            
+            for if_ in get_interface_addresses():            
                 if (self.ipstr_to_int(if_.address) & self.ipstr_to_int(if_.netmask) == 
                     self.ipstr_to_int(self._ip) & self.ipstr_to_int(if_.netmask)): # Same subnet
                     self._if = Interface(if_.name, if_.address, if_.netmask, if_.broadcast)
@@ -199,7 +199,7 @@ class Address(object):
     def interface_exists(self):
         if self._if is None:
             return False
-        for if_ in Dispersy._get_interface_addresses():
+        for if_ in get_interface_addresses():
             if (self._if.name == if_.name and self._if.address == if_.address):
                 return True
         return False
@@ -220,27 +220,3 @@ class Address(object):
     
     def __hash__(self):
         return hash((self._ip, self._port, self._family, self._flowinfo, self._scopeid))
-
-class Interface(object):
-    def __init__(self, name, address, netmask, broadcast):
-        self.name = name
-        self.address = address # ip string
-        self.netmask = netmask # ip string
-        self.broadcast = broadcast # ip string
-        self.gateway = None # ip string
-        self.device = name[:-1] # Initialize to the interface name
-        
-    def __str__(self):
-        return "Interface (%s, %s, %s, %s, %s, %s) " %(self.name, self.address, self.netmask, self.broadcast, 
-                                                       self.gateway, self.device)
-        
-    def __eq__(self, other):
-        if not isinstance(other, Interface):
-            return False
-        if (self.name == other.name and self.address == other.address and self.netmask == other.netmask and
-            self.broadcast == other.broadcast):
-            return True
-        return False
-    
-    def __ne__(self, other):
-        return not self.__eq__(other)

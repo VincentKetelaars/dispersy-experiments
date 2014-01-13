@@ -14,8 +14,12 @@ ENDTIME="23:59:59"
 STARTTIME="00:00:00"
 VERBOSE=false
 ZEROED=""
+DATE=`date +%d-%m-%Y`
 while [ "$1" != "" ]; do
     case $1 in
+    	-d | --date )			DATE=$2;
+								shift
+								;;
     	-e | --endtime )		ENDTIME=$2;
 								shift
 								;;
@@ -37,14 +41,14 @@ while [ "$1" != "" ]; do
 done
 
 FILEDATE=`date +%Y%m%d`
-FILE=${FILEDATE}_${STARTTIME}.csv
-FILEPATH=${FOLDER}${FILE}
+FILE=${FILEDATE}_${STARTTIME}
 
 if [ $ZEROED != "" ]; then
-	FILEPATH="${FILEPATH}_z"
+	FILE="${FILE}_z"
 fi
 
-DATE=`date +%d-%m-%Y`
+FILEPATH=${FOLDER}${FILE}.csv
+
 STARTDATETIME="${STARTTIME}_${DATE}"
 ENDDATETIME="${ENDTIME}_${DATE}"
 

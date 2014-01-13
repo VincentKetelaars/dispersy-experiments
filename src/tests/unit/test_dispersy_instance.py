@@ -11,8 +11,8 @@ from src.logger import get_logger
 
 from src.address import Address
 from src.dispersy_instance import verify_addresses_are_free
-from src.dispersy_extends.mydispersy import MyDispersy
 from src.definitions import RANDOM_PORTS
+from src.tools.networks import get_interface_addresses
 
 
 logger = get_logger(__name__)
@@ -26,7 +26,7 @@ class TestVerifyAddresses(unittest.TestCase):
             self.assertTrue(addr in self.addresses)
             
     def test_occupied_address(self):
-        interfaces = MyDispersy._get_interface_addresses()
+        interfaces = get_interface_addresses()
         self.addresses = []
         for i in interfaces: # AF_INET only
             addr = Address(ip=i.address, port=random.randint(*RANDOM_PORTS))

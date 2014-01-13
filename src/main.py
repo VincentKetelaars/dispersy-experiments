@@ -7,6 +7,7 @@ Created on Nov 27, 2013
 import argparse
 from dispersy.dispersy import Dispersy
 from src.address import Address
+from src.tools.networks import get_interface_addresses
 
 def main():    
     parser = argparse.ArgumentParser(description='Start Dispersy instance')
@@ -55,7 +56,7 @@ def main():
             gateways[parts[0]] = parts[1]
         
     localip = "127.0.0.1"
-    local_interface = Dispersy._guess_lan_address(Dispersy._get_interface_addresses())
+    local_interface = Dispersy._guess_lan_address(get_interface_addresses())
     if local_interface is not None:
         localip = local_interface.address
         
