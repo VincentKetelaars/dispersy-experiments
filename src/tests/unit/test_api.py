@@ -27,6 +27,7 @@ class TestAPI(unittest.TestCase):
             self.fails = 0
             self._run_event = Event()
             self.files_done = 0
+            self.message = None
         
         def socket_state_callback(self, addr, state):
             if state > 0:
@@ -36,12 +37,19 @@ class TestAPI(unittest.TestCase):
         def file_received_callback(self, file_):
             self.files_done += 1
             self._run_event.set()
+            
+        def message_received_callback(self, message):
+            self.message = message
+            self._run_event.set()
 
 
     def setUp(self):
         self.workdir = DISPERSY_WORKDIR + "/temp"
         if not os.path.exists(self.workdir):
             os.makedirs(self.workdir)
+        self.workdir2 = DISPERSY_WORKDIR + "/temp2"
+        if not os.path.exists(self.workdir2):
+            os.makedirs(self.workdir2)
         self.api1 = self.MyAPI("API1", self.workdir, SWIFT_BINPATH, walker=False)
         self.files = FILES
         self.files_to_remove = []
@@ -58,7 +66,7 @@ class TestAPI(unittest.TestCase):
         
 
     def test_add_file_both(self):
-        self.api2 = self.MyAPI("API2", self.workdir, SWIFT_BINPATH, walker=False, listen=[Address(ip="127.0.0.1")])        
+        self.api2 = self.MyAPI("API2", self.workdir2, SWIFT_BINPATH, walker=False, listen=[Address(ip="127.0.0.1")])        
         
         addr = Address(ip="127.0.0.1", port=12421)
         self.api1.start()
@@ -88,6 +96,21 @@ class TestAPI(unittest.TestCase):
         
         self.api1._run_event.wait(2) # Should be plenty of time
         self.assertEqual(self.api1.fails, 0)
+        
+    def test_api_message(self):
+        addr = Address(ip="127.0.0.1", port=12421)
+        self.api2 = self.MyAPI("API2", self.workdir2, SWIFT_BINPATH, walker=False, 
+                               listen=[Address(ip="127.0.0.1")], peers=[addr], bloomfilter_update=2)        
+        
+        self.api1.start()
+        self.api1.add_socket(addr.ip, addr.port, addr.family)
+        self.api2.start()
+        message = "Something cool"
+        self.api2.add_message(message)
+        
+        self.api1._run_event.wait(TIMEOUT_TESTS)
+        
+        self.assertEqual(message, self.api1.message)
         
 class TestAPINetworkInterface(unittest.TestCase):
     

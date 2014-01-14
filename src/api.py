@@ -15,11 +15,12 @@ from src.dispersy_instance import DispersyInstance
 from src.address import Address
 from src.definitions import STATE_NOT, STATE_RUNNING, MESSAGE_KEY_ADD_FILE, MESSAGE_KEY_ADD_MESSAGE, MESSAGE_KEY_ADD_PEER, \
 MESSAGE_KEY_ADD_SOCKET, MESSAGE_KEY_INTERFACE_UP, MESSAGE_KEY_MONITOR_DIRECTORY, MESSAGE_KEY_RECEIVE_FILE, \
-MESSAGE_KEY_RECEIVE_MESSAGE, MESSAGE_KEY_STATE, MESSAGE_KEY_STOP, STATE_DONE,\
+MESSAGE_KEY_API_MESSAGE, MESSAGE_KEY_STATE, MESSAGE_KEY_STOP, STATE_DONE,\
     MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, MESSAGE_KEY_SWIFT_PID,\
     MESSAGE_KEY_SWIFT_INFO, MESSAGE_KEY_DISPERSY_INFO
 
 from src.tools.runner import CallFunctionThread
+from src.dispersy_extends.payload import APIMessageCarrier
 logger = get_logger(__name__)
 
 class PipeHandler(object):
@@ -125,7 +126,7 @@ class API(Thread, PipeHandler):
         self.MESSAGE_KEY_MAP = {MESSAGE_KEY_STOP : self._api_stop,
                                 MESSAGE_KEY_STATE : self._state_change,
                                 MESSAGE_KEY_RECEIVE_FILE : self.file_received_callback,
-                                MESSAGE_KEY_RECEIVE_MESSAGE : self.message_received_callback,
+                                MESSAGE_KEY_API_MESSAGE : self.message_received_callback,
                                 MESSAGE_KEY_SWIFT_STATE : self._swift_state,
                                 MESSAGE_KEY_SOCKET_STATE : self.socket_state_callback,
                                 MESSAGE_KEY_SWIFT_PID : self._swift_pid,
@@ -236,8 +237,8 @@ class API(Thread, PipeHandler):
     def file_received_callback(self, file_):
         pass
         
-    def message_received_callback(self, message, message_kind):
-        pass   
+    def message_received_callback(self, message):
+        pass
         
     """
     API calls
@@ -249,8 +250,8 @@ class API(Thread, PipeHandler):
     def add_peer(self, ip, port, family=socket.AF_INET):
         self.send_message(MESSAGE_KEY_ADD_PEER, Address(ip=ip, port=port, family=family))
         
-    def add_message(self, message, message_kind):
-        self.send_message(MESSAGE_KEY_ADD_MESSAGE, message, message_kind)
+    def add_message(self, message, addresses=[]):
+        self.send_message(MESSAGE_KEY_ADD_MESSAGE, message, addresses)
         
     def add_socket(self, ip, port, family=socket.AF_INET):
         self.send_message(MESSAGE_KEY_ADD_SOCKET, Address(ip=ip, port=port, family=family))
@@ -317,7 +318,7 @@ class ReceiverAPI(PipeHandler):
         
         self.dispersy_callbacks_map = {MESSAGE_KEY_STATE : self._state_change,
                                        MESSAGE_KEY_RECEIVE_FILE : self._received_file,
-                                       MESSAGE_KEY_RECEIVE_MESSAGE : self._received_message,
+                                       MESSAGE_KEY_API_MESSAGE : self._received_api_message,
                                        MESSAGE_KEY_SWIFT_STATE : self._swift_state,
                                        MESSAGE_KEY_SOCKET_STATE : self._socket_state,
                                        MESSAGE_KEY_SWIFT_PID : self._swift_pid,
@@ -362,11 +363,14 @@ class ReceiverAPI(PipeHandler):
     def send_state(self):
         self.send_message(MESSAGE_KEY_STATE, self.state)
     
-    def add_message(self, message, message_kind):
+    def add_message(self, message, addresses):
         assert len(message) < 2**16
+        assert isinstance(message, str)
         if self.state == STATE_RUNNING:
-            pass
-        # TODO: These will be special message kinds which need to be developed..
+            addrs = [Address.unknown(a) for a in addresses]
+            self.dispersy_instance._register_some_message(APIMessageCarrier(message, addresses=addrs))
+        else:
+            self._enqueue(self.add_message, message, addresses)
     
     def monitor_directory_for_files(self, directory):
         if self.state == STATE_RUNNING:
@@ -476,9 +480,9 @@ class ReceiverAPI(PipeHandler):
         logger.info("RECEIVED FILE: %s", file_)
         self.send_message(MESSAGE_KEY_RECEIVE_FILE, file_)
         
-    def _received_message(self, message, message_kind):
-        logger.info("RECEIVED MESSAGE: %s %s", message[0:100], message_kind)
-        self.send_message(MESSAGE_KEY_RECEIVE_MESSAGE, message, message_kind)
+    def _received_api_message(self, message):
+        logger.info("RECEIVED MESSAGE: %s %s", message[0:100])
+        self.send_message(MESSAGE_KEY_API_MESSAGE, message)
         
     def _swift_state(self, state, error=None):
         logger.info("SWIFT STATE: %s %s", state, error)

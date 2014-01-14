@@ -15,7 +15,8 @@ from dispersy.callback import Callback
 
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
-from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
+from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier,\
+    APIMessageCarrier
 from src.dispersy_extends.mydispersy import MyDispersy
 from src.filepusher import FilePusher
 from src.definitions import MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, DEFAULT_MESSAGE_DELAY, \
@@ -149,13 +150,15 @@ class DispersyInstance(object):
         return MyCommunity.join_community(self._dispersy, master_member, my_member, *args, **kwargs)
         
     def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
-        logger.info("Registered %d messages: %s with delay %f", count, message.filename, delay)
+        logger.info("Registered %d messages: %s with delay %f", count, message, delay)
         if isinstance(message, SimpleFileCarrier):
             self._callback.register(self._community.create_simple_messages, (count, message), kargs={"update":False}, delay=delay)
         elif isinstance(message, FileHashCarrier):
             self._callback.register(self._community.create_file_hash_messages, (count, message), kargs={"update":False}, delay=delay)
+        elif isinstance(message, APIMessageCarrier):
+            self._callback.register(self._community.create_api_messages, (count, message), kargs={"update":False}, delay=delay)
         else:
-            self._callback.register(self._community.create_simple_messages, (count, None), kargs={"update":False}, delay=delay)
+            logger.debug("Don't know what this is: %s", message)
     
     def create_swift_instance(self, addrs):
         addrs = verify_addresses_are_free(addrs)

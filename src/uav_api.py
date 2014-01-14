@@ -193,7 +193,9 @@ class UAVAPI(API):
         self.status[base + name + ".ip"] = address.ip
         self.status[base + name + ".port"] = address.port
         self.status[base + name + ".state"] = state
-            
+        
+    def uav_message(self, message):
+        self.log.info(message)
     
     """
     PRIVATE FUNCTIONS

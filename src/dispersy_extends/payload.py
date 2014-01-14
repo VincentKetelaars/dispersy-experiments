@@ -114,3 +114,32 @@ class AddressesPayload(Payload):
         @property
         def addresses(self):
             return self._addresses
+        
+class APIMessageCarrier():
+    
+    def __init__(self, message, addresses=[]):
+        self._message = message
+        self._addresses = addresses
+        
+    @property
+    def message(self):
+        return self._message
+    
+    @property
+    def addresses(self):
+        return self._addresses
+
+class APIMessagePayload(Payload):
+    '''
+    classdocs
+    '''
+
+    class Implementation(Payload.Implementation):
+        
+        def __init__(self, meta, message):
+            super(Payload.Implementation, self).__init__(meta)
+            self._message = message
+        
+        @property
+        def message(self):
+            return self._message

@@ -11,8 +11,9 @@ from dispersy.candidate import Candidate
 from src.tests.unit.definitions import SMALL_TASK_TIMEOUT
 from src.dispersy_instance import DispersyInstance
 from src.definitions import SWIFT_BINPATH, DEST_DIR, FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME,\
-    ADDRESSES_MESSAGE_NAME
-from src.dispersy_extends.conversion import FileHashConversion, SimpleFileConversion, AddressesConversion
+    ADDRESSES_MESSAGE_NAME, API_MESSAGE_NAME
+from src.dispersy_extends.conversion import FileHashConversion, SimpleFileConversion, AddressesConversion,\
+    APIMessageConversion
 from src.address import Address
 
 logger = get_logger(__name__)
@@ -73,6 +74,21 @@ class TestConversion(unittest.TestCase):
                 placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
                 _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
                 self.assertEqual(x.addresses, addresses)
+                
+    def test_uav_message_conversion(self):
+        for c in self._conversions:
+            if isinstance(c, APIMessageConversion):
+                meta = self._di._community.get_meta_message(API_MESSAGE_NAME)
+                data = "asjfdioewf"
+                addresses = [Address.ipv4("0.0.0.1:1232"), Address.ipv6("[::0]:12145"), Address(port=32532)]
+                message = meta.impl(authentication=(self._di._community.my_member,),
+                                      distribution=(self._di._community.claim_global_time(),),
+                                      destination=(Candidate(addresses[0].addr(), True),), 
+                                      payload=(data,))
+                encoded = c.encode_payload(message)
+                placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
+                _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
+                self.assertEqual(x.message, data)
 
 if __name__ == "__main__":
     unittest.main()
