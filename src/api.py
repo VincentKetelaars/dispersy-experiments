@@ -241,7 +241,7 @@ class API(Thread, PipeHandler):
     def message_received_callback(self, message):
         pass
     
-    def bad_swarm_callback(self, download):
+    def bad_swarm_callback(self, filename):
         pass
         
     """
@@ -361,11 +361,14 @@ class ReceiverAPI(PipeHandler):
         self.send_message(MESSAGE_KEY_STATE, self.state)
     
     def add_message(self, message, addresses):
-        assert len(message) < 2**16
-        assert isinstance(message, str)
         if self.state == STATE_RUNNING:
-            addrs = [Address.unknown(a) for a in addresses]
-            self.dispersy_instance._register_some_message(APIMessageCarrier(message, addresses=addrs))
+            if len(message) < self.dispersy_instance._mtu:
+                addrs = [Address.unknown(a) for a in addresses]
+                self.dispersy_instance._register_some_message(APIMessageCarrier(message, addresses=addrs))
+            else:
+                logger.info("This message of length %d is to big to send with Dispersy", len(message))
+                # TODO: Alternative might be to write file to disk and send that..
+                # Will need candidate destination for this, so can't use filehash then.. 
         else:
             self._enqueue(self.add_message, message, addresses)
     
@@ -462,7 +465,6 @@ class ReceiverAPI(PipeHandler):
             func = self.dispersy_callbacks_map[key]
             func(*args, **kwargs)
         except:
-            logger.debug("No special function available for %d", key)
             self.send_message(key, *args, **kwargs)            
 
     def _state_change(self, state):

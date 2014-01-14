@@ -5,79 +5,27 @@ Created on Nov 27, 2013
 '''
 
 import argparse
-from dispersy.dispersy import Dispersy
-from src.address import Address
-from src.tools.networks import get_interface_addresses
+from src.definitions import MAX_MTU, SQLITE_DATABASE, TOTAL_RUN_TIME,\
+    BLOOM_FILTER_UPDATE, ENABLE_CANDIDATE_WALKER, SWIFT_BINPATH, DEST_DIR
 
 def main():    
     parser = argparse.ArgumentParser(description='Start Dispersy instance')
-    parser.add_argument("-b", "--bloomfilter", help="Send bloom filter every # seconds")
-    parser.add_argument("-d", "--directory", help="List directory of files to send")
-    parser.add_argument("-D", "--destination", help="List directory to put downloads")
-    parser.add_argument("-f", "--files", nargs="+", help="List files to send")
-    parser.add_argument("-g", "--gateways", nargs="+", help="Provide gateways for interfaces, space separated: wlan0=192.168.0.1")
-    parser.add_argument("-l", "--listen", nargs="+", help="List of sockets to listen to [port, ip4[:port], ip6[:port]], space separated")
-    parser.add_argument("-p", "--peers", nargs="+", help="List of Dispersy peers [port, ip4[:port], ip6[:port]], space separated")
-    parser.add_argument("-q", "--sqlite_database", default=u":memory:", help="SQLite Database directory")
-    parser.add_argument("-s", "--swift", help="Swift binary path")
-    parser.add_argument("-t", "--time", type=float, help="Set runtime")
-    parser.add_argument("-w", "--work_dir", help="Working directory")
-    parser.add_argument("-W", "--walker", action='store_true', help="Enable candidate walker")
+    parser.add_argument("-b", "--bloomfilter", type=float, default=BLOOM_FILTER_UPDATE, help="Send bloom filter every # seconds")
+    parser.add_argument("-d", "--directory", default="", help="List directory of files to send")
+    parser.add_argument("-D", "--destination", default=DEST_DIR, help="List directory to put downloads")
+    parser.add_argument("-f", "--files", nargs="+", default=[], help="List files to send")
+    parser.add_argument("-g", "--gateways", nargs="+", default=[], help="Provide gateways for interfaces, space separated: wlan0=192.168.0.1")
+    parser.add_argument("-l", "--listen", nargs="+", default=[], help="List of sockets to listen to [port, ip4[:port], ip6[:port]], space separated")
+    parser.add_argument("-m", "--mtu", type=int, default=MAX_MTU, help="Maximum number of bytes per datagram")
+    parser.add_argument("-p", "--peers", nargs="+", default=[], help="List of Dispersy peers [port, ip4[:port], ip6[:port]], space separated")
+    parser.add_argument("-q", "--sqlite_database", default=SQLITE_DATABASE, help="SQLite Database directory")
+    parser.add_argument("-s", "--swift", default=SWIFT_BINPATH, help="Swift binary path")
+    parser.add_argument("-t", "--time", type=float, default=TOTAL_RUN_TIME, help="Set runtime")
+    parser.add_argument("-w", "--work_dir", default=".", help="Working directory")
+    parser.add_argument("-W", "--walker", action='store_true', default=ENABLE_CANDIDATE_WALKER, help="Enable candidate walker")
     args = parser.parse_args()
-    
-    from src.definitions import DEST_DIR, SWIFT_BINPATH, TOTAL_RUN_TIME, DISPERSY_WORK_DIR, SQLITE_DATABASE, \
-    BLOOM_FILTER_UPDATE, ENABLE_CANDIDATE_WALKER
-    
-    if args.time:
-        TOTAL_RUN_TIME = args.time
         
-    if args.destination:
-        DEST_DIR = args.destination
-    
-    if args.swift:
-        SWIFT_BINPATH = args.swift
-        
-    if args.work_dir:
-        DISPERSY_WORK_DIR = args.work_dir
-        
-    if args.sqlite_database:
-        SQLITE_DATABASE = args.sqlite_database
-        
-    if args.bloomfilter:
-        BLOOM_FILTER_UPDATE = float(args.bloomfilter)
-        
-    if args.walker:
-        ENABLE_CANDIDATE_WALKER = args.walker
-    
-    gateways = {}
-    if args.gateways:
-        for g in args.gateways:
-            parts = g.split("=")
-            gateways[parts[0]] = parts[1]
-        
-    localip = "127.0.0.1"
-    local_interface = Dispersy._guess_lan_address(get_interface_addresses())
-    if local_interface is not None:
-        localip = local_interface.address
-        
-    listen = []
-    if args.listen:
-        for a in args.listen:
-            addr = Address.unknown(a)
-            if addr.is_wildcard_ip():
-                addr.set_ipv4(localip)
-            listen.append(addr)
-    
-    peers = []
-    if args.peers:
-        for p in args.peers:
-            addr = Address.unknown(p)
-            if addr.is_wildcard_ip():
-                addr.set_ipv4(localip)
-            peers.append(addr)
-        
-    return (DEST_DIR, SWIFT_BINPATH), {"dispersy_work_dir":DISPERSY_WORK_DIR, "sqlite_database":SQLITE_DATABASE,
-            "swift_work_dir":DEST_DIR, "listen":listen, "peers":peers, "files_directory":args.directory,
-            "files":args.files, "run_time":TOTAL_RUN_TIME, "bloomfilter_update":BLOOM_FILTER_UPDATE,
-            "walker":ENABLE_CANDIDATE_WALKER, "gateways":gateways}
-    
+    return (args.destination, args.swift), {"dispersy_work_dir":args.work_dir, "sqlite_database":args.sqlite_database,
+            "swift_work_dir":args.work_dir, "listen":args.listen, "peers":args.peers, "files_directory":args.directory,
+            "files":args.files, "run_time":args.time, "bloomfilter_update":args.bloomfilter,
+            "walker":args.walker, "gateways":args.gateways, "mtu":args.mtu}

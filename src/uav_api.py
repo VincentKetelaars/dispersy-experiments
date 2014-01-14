@@ -43,13 +43,13 @@ class UAVAPI(API):
         self.log = get_uav_logger(name)
         
         try:
-            di_args, di_kwargs = self._get_arguments_from_config()
+            di_kwargs = self._get_arguments_from_config()
         except:
             logger.exception("Could not get arguments from config, make do with what you've got")
         finally:
             self.cfg.close_connection() # Don't need it anymore!
         
-        API.__init__(self, name, *di_args, **di_kwargs)
+        API.__init__(self, name, **di_kwargs)
 
         self.status["state"] = self.STATES[self.state]
 
@@ -176,8 +176,8 @@ class UAVAPI(API):
     def message_received_callback(self, message):
         self.log.info("Received message: %s", message)
         
-    def bad_swarm_callback(self, download):
-        self.log.info("Swift can not handle %s", download.filename)
+    def bad_swarm_callback(self, filename):
+        self.log.info("Swift can not handle %s", filename)
     
     """
     PRIVATE FUNCTIONS
@@ -196,61 +196,29 @@ class UAVAPI(API):
                 return i[i.rfind('.') + 1:]
         return None
     
-    def _get_argument_children(self, arg):
-        try:
-            res = self.cfg.get("parameters." + arg)
-            logger.debug("Parameter %s gets %s with children %s", arg, res, res.get_children())
-            return [a.get_value() for a in res.get_children()]
-        except:
-            logger.exception("Failed to recover %s parameter", arg)
-        return []
-    
     def _get_arguments_from_config(self):
-        di_args = (self.cfg["parameters.dest_dir"], self.cfg["parameters.swift_binpath"])
-        dispersy_work_dir = self.cfg["parameters.dispersy_work_dir"]
-        sqlite_database = self.cfg["parameters.sqlite_database"]
-        swift_work_dir = self.cfg["parameters.swift_work_dir"]
-        swift_zerostatedir = self.cfg["parameters.swift_zerostatedir"]
-        listen = self._get_argument_children("listen")
-        peers = self._get_argument_children("peers")
-        files_directory = self.cfg["parameters.files_directory"]
-        files = self._get_argument_children("files")
-        run_time = int(self.cfg["parameters.run_time"])
-        bloomfilter_update = int(self.cfg["parameters.bloomfilter_update"])
-        walker = self.cfg["parameters.walker"]
-        gateways = self._get_argument_children("gateways")
+        
+        def children(param):
+            parameters = []
+            try:
+                parameters = self.cfg.get(param).get_children()
+            except:
+                logger.exception("Failed to recover %s", param)
+            return parameters
+        
+        def value(value):
+            if isinstance(value, unicode):
+                return value.encode("ascii", "ignore")
+            return value
         
         di_kwargs = {}
-        if dispersy_work_dir is not None:
-            di_kwargs["dispersy_work_dir"] = dispersy_work_dir
-        if sqlite_database is not None:
-            di_kwargs["sqlite_database"] = sqlite_database
-        if swift_work_dir is not None:            
-            di_kwargs["swift_work_dir"] = swift_work_dir
-        if swift_zerostatedir is not None:
-            di_kwargs["swift_zerostatedir"] = swift_zerostatedir
-        if listen is not None:
-            di_kwargs["listen"] = [Address.unknown(l.encode('UTF-8')) for l in listen]
-        if peers is not None:
-            di_kwargs["peers"] = [Address.unknown(p.encode('UTF-8')) for p in peers]
-        if files_directory is not None:
-            di_kwargs["files_directory"] = files_directory
-        if files is not None:
-            di_kwargs["files"] = files
-        if run_time is not None:
-            di_kwargs["run_time"] = run_time
-        if bloomfilter_update is not None:
-            di_kwargs["bloomfilter_update"] = bloomfilter_update
-        if walker is not None:
-            di_kwargs["walker"] = walker
-        if gateways is not None:
-            d = {}
-            for g in gateways:
-                a = g.split("=")
-                if len(a) == 2:
-                    d[a[0]] = a[1]
-            di_kwargs["gateways"] = d
-        return di_args, di_kwargs
+        for p in children("parameters"):
+            if p.datatype != "folder": # []
+                di_kwargs[value(p.name)] = value(p.get_value())
+            else:
+                di_kwargs[value(p.name)] = [value(c.get_value()) for c in children("parameters." + value(p.name))]
+
+        return di_kwargs
     
     def _get_channel_value(self, channel, value):
         """

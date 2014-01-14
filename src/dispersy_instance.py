@@ -21,33 +21,57 @@ from src.dispersy_extends.mydispersy import MyDispersy
 from src.filepusher import FilePusher
 from src.definitions import MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, DEFAULT_MESSAGE_DELAY, \
 SLEEP_TIME, STATE_INITIALIZED, STATE_RUNNING, STATE_STOPPED, STATE_DONE, MESSAGE_KEY_STATE,\
-    MESSAGE_KEY_SWIFT_STATE
+    MESSAGE_KEY_SWIFT_STATE, MAX_MTU, DISPERSY_MESSAGE_MINIMUM
+from src.address import Address
 
 logger = get_logger(__name__)
 
 class DispersyInstance(object):
     '''
-    Instance of Dispersy that runs on its own process
+    Instance of Dispersy
     '''
 
     def __init__(self, dest_dir, swift_binpath, dispersy_work_dir=u".", sqlite_database=":memory:", swift_work_dir=None,
                  swift_zerostatedir=None, listen=[], peers=[], files_directory=None, files=[], run_time=-1, bloomfilter_update=-1,
-                 walker=False, gateways={}, callback=None):
+                 walker=False, gateways={}, mtu=MAX_MTU, callback=None):
+        """
+        @param dest_dir: Directory in which downloads will be placed as well as logs
+        @param swift_binpath: Path to the swift executable
+        @param dispersy_work_dir: Working directory for Dispersy
+        @param sqlite_database: Location of the sqlite_database, :memory: is in memory
+        @param swift_work_dir: Working directory for Swift
+        @param swift_zerostatedir: Zero state directory for Swift
+        @param listen: Addresses of local sockets to bind to
+        @param peers: Addresses of peers to communicate with
+        @param files_directory: Directory to monitor for files that should be disseminated
+        @param files: Files that should be disseminated
+        @param run_time: Total run time in seconds
+        @param bloomfilter_update: Period after which another introduction request is sent in seconds
+        @param walker: If enable the Dispersy walker will enabled
+        @param gateways: Ip addresses of the gateways for specific interfaces (eth0=192.168.0.1)
+        @param mtu: Maximum transmission unit directs the maximum size of messages
+        @param callback: Callback function that will called on certain events
+        """
         self._dest_dir = dest_dir
         self._swift_binpath = swift_binpath
         self._dispersy_work_dir = unicode(dispersy_work_dir)
         self._sqlite_database = unicode(sqlite_database) # :memory: is in memory
         self._swift_work_dir = swift_work_dir
         self._swift_zerostatedir = swift_zerostatedir 
-        self._listen = listen # Local socket addresses, instances of Address
-        self._peers = peers # Peer addresses, instances of Address
+        self._listen = [Address.unknown(l) for l in listen] # Local socket addresses
+        self._peers = [Address.unknown(p) for p in peers] # Peer addresses
         self._files_directory = files_directory # Directory to monitor for new files (or changes in files)
         self._files = files # Files to monitor
         self._run_time = run_time # Time after which this process stops, -1 is infinite
         self._bloomfilter_update = bloomfilter_update # Update every # seconds the bloomfilter to peers, -1 for never
         self._walker = walker # Turn walker on
         self._api_callback = callback # Subscription to various callbacks
-        self._gateways = gateways
+        self._gateways = {}
+        for g in gateways:
+            a = g.split("=")
+            if len(a) == 2:
+                self._gateways[a[0]] = a[1]
+        self._mtu = mtu
         
         self._filepusher = None
         
@@ -94,7 +118,9 @@ class DispersyInstance(object):
             self.send_introduction_request(a.addr())
             
         # Start Filepusher regardless of availability of directory or files
-        self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, directory=self._files_directory, files=self._files)
+        self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, 
+                                      directory=self._files_directory, files=self._files, 
+                                      file_size=self._mtu - DISPERSY_MESSAGE_MINIMUM)
         self._filepusher.start()
         
         self.state = STATE_RUNNING

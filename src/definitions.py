@@ -96,7 +96,10 @@ FILE_HASH_MESSAGE_NAME = u"file_hash_message"
 ADDRESSES_MESSAGE_NAME = u"addresses_message"
 API_MESSAGE_NAME = u"api_message"
 
-MAX_FILE_SIZE = 2**16-60
+MIN_MTU = 1500 # Bloomfilters will be this big unless we change that as well
+MAX_MTU = 2**16
+DISPERSY_MESSAGE_MINIMUM = 60
+MAX_FILE_SIZE = MAX_MTU - DISPERSY_MESSAGE_MINIMUM
 
 # Filepusher
 FILETYPES_NOT_TO_SEND = [".mhash",".mbinmap"]

@@ -210,7 +210,7 @@ class SwiftCommunity(object):
         download = self.downloads.get(roothash, None)
         if download is not None:
             download.set_bad_swarm(True)
-            self.do_callback(MESSAGE_KEY_BAD_SWARM, download)
+            self.do_callback(MESSAGE_KEY_BAD_SWARM, download.filename)
         else:
             logger.warning("We don't know this swarm %s", roothash)
 

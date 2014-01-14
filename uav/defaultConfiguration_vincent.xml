@@ -318,6 +318,8 @@
 				<run_time>60</run_time>
 				<bloomfilter_update>5</bloomfilter_update>
 				<walker>False</walker>
+				<gateways></gateways>
+				<mtu></mtu>
 			</parameters>
 		</Dispersy>
 

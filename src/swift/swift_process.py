@@ -121,13 +121,16 @@ class MySwiftProcess(SwiftProcess):
         # Only warn once when TUNNELRECV messages are received without us having a Dispersy endpoint.  This occurs after
         # Dispersy shutdown
         self._warn_missing_endpoint = True
+        
+        if not os.path.exists(self.workdir):
+            os.mkdir(self.workdir)
 
         # See also SwiftDef::finalize popen
         # We would really like to get the stdout and stderr without creating a new thread for them.
         # However, windows does not support non-files in the select command, hence we cannot integrate
         # these streams into the FastI2I thread
         # A proper solution would be to switch to twisted for the communication with the swift binary
-        self.popen = subprocess.Popen(args, cwd=workdir, creationflags=creationflags, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.popen = subprocess.Popen(args, cwd=self.workdir, creationflags=creationflags, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
         # This event must be set when is verified that swift is running and the cmdgw is up
         self._swift_running = Event()
