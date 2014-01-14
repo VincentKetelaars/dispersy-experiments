@@ -117,32 +117,14 @@ class UAVAPI(API):
         if regular is not None:
             for k, v in regular.iteritems():
                 self.status[base + k] = v
-#             self.status[base + "down_speed"] = regular["down_speed"]
-#             self.status[base + "up_speed"] = regular["up_speed"]
-#             self.status[base + "total_up"] = regular["total_up"]        
-#             self.status[base + "total_down"] = regular["total_down"]    
-#             self.status[base + "raw_total_up"] = regular["raw_total_up"] # KB 
-#             self.status[base + "raw_total_down"] = regular["raw_total_down"] # KB
-#             self.status[base + "num_downloads"] = regular["num_downloads"]
-#             self.status[base + "done_downloads"] = regular["done_downloads"]
-#             self.status[base + "num_seeding"] = regular["num_seeding"]
-#             self.status[base + "num_peers"] = regular["num_peers"]
             
         download = info.get("direct")
         if download is None:
             return
         base = "swift.downloads." + download["roothash"] + "."
-        if not self.status.has_key(base + "filename"):
-            self.status[base + "filename"] = download["filename"]
-            self.status[base + "seeding"] = download["seeding"]
-            self.status[base + "path"] = download["path"]
-        self.status[base + "leeching"] = download["leeching"]   
-        self.status[base + "dynasize"] = download["dynasize"]        
-        self.status[base + "progress"] = download["progress"]        
-        self.status[base + "current_down_speed"] = download["current_down_speed"]
-        self.status[base + "current_up_speed"] = download["current_up_speed"]
-        self.status[base + "leechers"] = download["leechers"]
-        self.status[base + "seeders"] = download["seeders"]
+        for k, v in download.iteritems():
+            if k != "moreinfo":
+                self.status[base + k] = v
         
         basechannel = "swift.sockets." # Maybe set this to dispersy.endpoint
         (channels, total) = download["moreinfo"]
@@ -162,11 +144,8 @@ class UAVAPI(API):
             self.status[basechannel + if_name + "." + peer_name + "." + download["roothash"] + ".raw_total_up"] = c["raw_utotal"] # KB
             self.status[basechannel + if_name + "." + peer_name + "." + download["roothash"] + ".raw_total_down"] = c["raw_dtotal"] # KB
         
-        self.status[base + "timestamp"] = total["timestamp"]
-        self.status[base + "total_up"] = total["total_up"]        
-        self.status[base + "total_down"] = total["total_down"]    
-        self.status[base + "raw_total_up"] = total["raw_total_up"] # KB 
-        self.status[base + "raw_total_down"] = total["raw_total_down"] # KB 
+        for k, v in total.iteritems():
+            self.status[base + k] = v
             
     def dispersy_info_callback(self, info):
         base_endpoint = "dispersy.endpoint."
@@ -194,8 +173,11 @@ class UAVAPI(API):
         self.status[base + name + ".port"] = address.port
         self.status[base + name + ".state"] = state
         
-    def uav_message(self, message):
-        self.log.info(message)
+    def message_received_callback(self, message):
+        self.log.info("Received message: %s", message)
+        
+    def bad_swarm_callback(self, download):
+        self.log.info("Swift can not handle %s", download.filename)
     
     """
     PRIVATE FUNCTIONS

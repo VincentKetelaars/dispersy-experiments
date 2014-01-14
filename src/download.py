@@ -66,6 +66,8 @@ class Download(object):
         self.moreinfo = moreinfo
         self._destination = destination
         self.cleaned = False # True when this download has been cleaned up
+        self._bad_swarm = False
+        self._has_moreinfo = False
         
     @property
     def roothash(self):
@@ -99,7 +101,19 @@ class Download(object):
         return self._seed
     
     def path(self):
-        return self._directories + self._filename
+        return os.path.join(self._directories, self._filename)
+    
+    def set_bad_swarm(self, bad):
+        self._bad_swarm = bad
+    
+    def is_bad_swarm(self):
+        return self._bad_swarm
+    
+    def got_moreinfo(self, got):
+        self._has_moreinfo = got
+    
+    def has_moreinfo(self):
+        return self._has_moreinfo
     
     def add_address(self, address):
         assert isinstance(address, Address)
@@ -174,14 +188,14 @@ class Download(object):
         try:
             return self.downloadimpl.get_current_speed(direction)
         except:
-            logger.exception("Could not fetch speed %s", direction)
+            logger.debug("Could not fetch speed %s", direction)
             return 0
     
     def total(self, direction, raw=False):
         try:
             return self.downloadimpl.midict[("raw_" if raw else "") + "bytes_" + direction] / 1024.0
         except:
-            logger.exception("Could not fetch total %s %s", direction, raw)
+            logger.debug("Could not fetch total %s %s", direction, raw)
             return 0
     
     def package(self):

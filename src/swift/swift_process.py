@@ -241,7 +241,12 @@ class MySwiftProcess(SwiftProcess):
                 print >> sys.stderr, "sp: i2ithread_readlinecallback:", cmd
                 if words[2] == "bad" and words[3] == "swarm": # bad swarm does not lead to shutdown!!!!
                     logger.debug("This is a bad swarm %s", words[1])
-                    # TODO: Handle bad swarms!
+                    d = self.roothash2dl.get(roothash, None)
+                    if d is not None:
+                        try:
+                            d._bad_swarm_callback(roothash) # TODO: Callback should be directly, not via downloadimpl
+                        except:
+                            pass
                 else:
                     self.connection_lost(self.get_cmdport(), error=words[2:])
 

@@ -14,7 +14,8 @@ from Tribler.Core.Swift.SwiftDef import SwiftDef
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download, Peer
 from src.definitions import MESSAGE_KEY_RECEIVE_FILE, MESSAGE_KEY_SWIFT_INFO, HASH_LENGTH,\
-    MOREINFO, DELETE_CONTENT, PEXON, REPORT_DISPERSY_INFO_TIME, PATH_SEPARATOR
+    MOREINFO, DELETE_CONTENT, PEXON, REPORT_DISPERSY_INFO_TIME, PATH_SEPARATOR,\
+    MESSAGE_KEY_BAD_SWARM
 from src.logger import get_logger
 logger = get_logger(__name__)
 
@@ -61,7 +62,7 @@ class SwiftCommunity(object):
         if d is not None:
             self.downloads[roothash].add_address(addr)
             # Only add this peer if it is one of the addresses allowed by the download
-            if self.downloads[roothash].known_address(addr):
+            if self.downloads[roothash].known_address(addr) and not self.downloads[roothash].is_bad_swarm():
                 self.endpoint.swift_add_peer(d, addr, sock_addr)
         else: # Swift is not available at this time
             self.endpoint.enqueue_swift_queue(self.add_peer, roothash, addr, sock_addr)
@@ -138,6 +139,7 @@ class SwiftCommunity(object):
                 path = join(self.dcomm.dest_dir, filename)
                 f = open(path, "w")
                 f.write(contents)
+                self.do_callback(MESSAGE_KEY_RECEIVE_FILE, filename)
             except:
                 logger.exception("Can't write file")
             finally:
@@ -175,6 +177,7 @@ class SwiftCommunity(object):
         d.set_swift_meta_dir(None)
         d.set_download_ready_callback(self.download_is_ready_callback)
         d.set_moreinfo_callback(self.moreinfo_callback)
+        d.set_bad_swarm_callback(self.bad_swarm_callback)
         return d    
         
     def download_is_ready_callback(self, roothash):
@@ -197,9 +200,19 @@ class SwiftCommunity(object):
         """
         logger.debug("More info %s", binascii.hexlify(roothash))
         download = self.downloads[roothash]
+        download.got_moreinfo(True)
         self.do_callback(MESSAGE_KEY_SWIFT_INFO, {"direct" : download.package()}) # If more info is not set for the download this is never called
         if download.is_finished():
             self.clean_up_files(download)
+            
+    def bad_swarm_callback(self, roothash):
+        logger.debug("We have a bad swarm %s", roothash)
+        download = self.downloads.get(roothash, None)
+        if download is not None:
+            download.set_bad_swarm(True)
+            self.do_callback(MESSAGE_KEY_BAD_SWARM, download)
+        else:
+            logger.warning("We don't know this swarm %s", roothash)
 
     def add_to_downloads(self, roothash, filename, download_impl, addresses=None, seed=False, download=False, destination=None):
         """
@@ -222,7 +235,7 @@ class SwiftCommunity(object):
         
     def put_endpoint_calls(self, q):
         for h, d in self.downloads.iteritems():
-            if (not d.is_finished()) or d.seeder(): # No sense in adding a download that is finished, and not seeding
+            if not d.is_bad_swarm() and (not d.is_finished() or d.seeder()): # No sense in adding a download that is finished, and not seeding
                 logger.debug("Enqueue start download %s", h)
                 q.put((self.endpoint.swift_start, (d.downloadimpl,), {}))
                 q.put((self.endpoint.swift_moreinfo, (d.downloadimpl, MOREINFO), {}))
@@ -259,19 +272,19 @@ class SwiftCommunity(object):
         return None
     
     def pause_download(self, download):
-        if download is not None:
+        if download is not None and not download.is_bad_swarm():
             self.endpoint.swift_checkpoint(download.downloadimpl)
             self.endpoint.swift_remove_download(download.downloadimpl, False, False)
             
     def continue_download(self, download):
-        if download is not None:
+        if download is not None and not download.is_bad_swarm():
             self.endpoint.swift_start(download.downloadimpl)
             self.endpoint.swift_moreinfo(download.downloadimpl, MOREINFO)
             self.endpoint.swift_pex(download.downloadimpl, PEXON)            
             self.add_new_peers()
             
     def stop_download(self, download):
-        if download is not None:
+        if download is not None and not download.is_bad_swarm():
             self.endpoint.swift_remove_download(download.downloadimpl, True, False)
             self.cleaned = True
                         
@@ -288,16 +301,17 @@ class SwiftCommunity(object):
         raw_total_up = 0
         raw_total_down = 0
         for d in self.downloads.itervalues():
-            upspeed += d.speed("up")
-            downspeed += d.speed("down")
-            total_up += d.total("up")
-            total_down += d.total("down")
-            raw_total_up += d.total("up", raw=True)
-            raw_total_down += d.total("down", raw=False)
-        done_downloads = sum([d.is_finished() and d.is_download() for d in self.downloads.itervalues()])
-        num_seeding = sum([d.seeder() for d in self.downloads.itervalues()])
+            if not d.is_bad_swarm() and d.has_moreinfo():
+                upspeed += d.speed("up")
+                downspeed += d.speed("down")
+                total_up += d.total("up")
+                total_down += d.total("down")
+                raw_total_up += d.total("up", raw=True)
+                raw_total_down += d.total("down", raw=False)
+        done_downloads = sum([d.is_finished() and d.is_download() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
+        num_seeding = sum([d.seeder() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
         num_peers = len(Set(p for d in self.downloads.itervalues() for p in d.peers()))
-        num_downloading = sum([d.seeder() and not d.is_finished() for d in self.downloads.itervalues()])
+        num_downloading = sum([d.seeder() and not d.is_finished() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
         return {"up_speed" : upspeed, "down_speed" : downspeed, "total_up" : total_up, 
                 "total_down" : total_down, "raw_total_up" : raw_total_up, "raw_total_down" : raw_total_down,
                 "num_downloads" : len(self.downloads), "done_downloads" : done_downloads, 

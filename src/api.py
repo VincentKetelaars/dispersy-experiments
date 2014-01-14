@@ -17,7 +17,7 @@ from src.definitions import STATE_NOT, STATE_RUNNING, MESSAGE_KEY_ADD_FILE, MESS
 MESSAGE_KEY_ADD_SOCKET, MESSAGE_KEY_INTERFACE_UP, MESSAGE_KEY_MONITOR_DIRECTORY, MESSAGE_KEY_RECEIVE_FILE, \
 MESSAGE_KEY_API_MESSAGE, MESSAGE_KEY_STATE, MESSAGE_KEY_STOP, STATE_DONE,\
     MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, MESSAGE_KEY_SWIFT_PID,\
-    MESSAGE_KEY_SWIFT_INFO, MESSAGE_KEY_DISPERSY_INFO
+    MESSAGE_KEY_SWIFT_INFO, MESSAGE_KEY_DISPERSY_INFO, MESSAGE_KEY_BAD_SWARM
 
 from src.tools.runner import CallFunctionThread
 from src.dispersy_extends.payload import APIMessageCarrier
@@ -131,7 +131,8 @@ class API(Thread, PipeHandler):
                                 MESSAGE_KEY_SOCKET_STATE : self.socket_state_callback,
                                 MESSAGE_KEY_SWIFT_PID : self._swift_pid,
                                 MESSAGE_KEY_SWIFT_INFO : self.swift_info_callback,
-                                MESSAGE_KEY_DISPERSY_INFO : self.dispersy_info_callback}
+                                MESSAGE_KEY_DISPERSY_INFO : self.dispersy_info_callback,
+                                MESSAGE_KEY_BAD_SWARM : self.bad_swarm_callback}
         PipeHandler.__init__(self, parent_conn, name=name)
 
         self.receiver_api = Process(target=ReceiverAPI, args=(self.child_conn,) + di_args, kwargs=di_kwargs)
@@ -239,6 +240,9 @@ class API(Thread, PipeHandler):
         
     def message_received_callback(self, message):
         pass
+    
+    def bad_swarm_callback(self, download):
+        pass
         
     """
     API calls
@@ -275,7 +279,7 @@ class API(Thread, PipeHandler):
             if self.stop_on_dispersy_stop:
                 self.on_dispersy_stopped()
             
-    def _swift_state(self, state, error):
+    def _swift_state(self, state, error=None):
         if self._callback_swift_state is not None:
             self._callback_swift_state(state, error)
 
@@ -316,14 +320,7 @@ class ReceiverAPI(PipeHandler):
             return
         self.waiting_queue = Queue.Queue() # Hold on to calls that are made prematurely
         
-        self.dispersy_callbacks_map = {MESSAGE_KEY_STATE : self._state_change,
-                                       MESSAGE_KEY_RECEIVE_FILE : self._received_file,
-                                       MESSAGE_KEY_API_MESSAGE : self._received_api_message,
-                                       MESSAGE_KEY_SWIFT_STATE : self._swift_state,
-                                       MESSAGE_KEY_SOCKET_STATE : self._socket_state,
-                                       MESSAGE_KEY_SWIFT_PID : self._swift_pid,
-                                       MESSAGE_KEY_SWIFT_INFO : self._swift_info,
-                                       MESSAGE_KEY_DISPERSY_INFO : self._dispersy_info}
+        self.dispersy_callbacks_map = {MESSAGE_KEY_STATE : self._state_change}
         
         self.run()
         
@@ -456,7 +453,7 @@ class ReceiverAPI(PipeHandler):
     
     
     """
-    DISPERSY UPDATES 
+    INCOMING CALLBACKS
     """    
         
     def _generic_callback(self, key, *args, **kwargs):
@@ -465,7 +462,8 @@ class ReceiverAPI(PipeHandler):
             func = self.dispersy_callbacks_map[key]
             func(*args, **kwargs)
         except:
-            logger.exception("Failed to handle dispersy callback")
+            logger.debug("No special function available for %d", key)
+            self.send_message(key, *args, **kwargs)            
 
     def _state_change(self, state):
         logger.info("STATECHANGE: %d -> %d", self.state, state)
@@ -475,31 +473,6 @@ class ReceiverAPI(PipeHandler):
             self._dequeue()
         if state == STATE_DONE:            
             self.close_connection() # Cleaning up pipe
-        
-    def _received_file(self, file_):
-        logger.info("RECEIVED FILE: %s", file_)
-        self.send_message(MESSAGE_KEY_RECEIVE_FILE, file_)
-        
-    def _received_api_message(self, message):
-        logger.info("RECEIVED MESSAGE: %s %s", message[0:100])
-        self.send_message(MESSAGE_KEY_API_MESSAGE, message)
-        
-    def _swift_state(self, state, error=None):
-        logger.info("SWIFT STATE: %s %s", state, error)
-        self.send_message(MESSAGE_KEY_SWIFT_STATE, state, error)
-        
-    def _socket_state(self, address, state):
-        logger.info("SOCKET STATE: %s %d", address, state)
-        self.send_message(MESSAGE_KEY_SOCKET_STATE, address, state)
-    
-    def _swift_pid(self, pid):
-        self.send_message(MESSAGE_KEY_SWIFT_PID, pid)
-        
-    def _swift_info(self, download):
-        self.send_message(MESSAGE_KEY_SWIFT_INFO, download)
-    
-    def _dispersy_info(self, info):
-        self.send_message(MESSAGE_KEY_DISPERSY_INFO, info)
         
 if __name__ == "__main__":
     from src.main import main
