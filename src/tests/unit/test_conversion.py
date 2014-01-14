@@ -10,9 +10,9 @@ from dispersy.candidate import Candidate
 
 from src.tests.unit.definitions import SMALL_TASK_TIMEOUT
 from src.dispersy_instance import DispersyInstance
-from src.definitions import SWIFT_BINPATH, DEST_DIR, FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME,\
+from src.definitions import SWIFT_BINPATH, DEST_DIR, FILE_HASH_MESSAGE_NAME, SMALL_FILE_MESSAGE_NAME,\
     ADDRESSES_MESSAGE_NAME, API_MESSAGE_NAME
-from src.dispersy_extends.conversion import FileHashConversion, SimpleFileConversion, AddressesConversion,\
+from src.dispersy_extends.conversion import FileHashConversion, SmallFileConversion, AddressesConversion,\
     APIMessageConversion
 from src.address import Address
 
@@ -44,13 +44,12 @@ class TestConversion(unittest.TestCase):
                 self.assertEqual(x.filename, filename)
                 self.assertEqual(x.directories, dir_)
                 self.assertEqual(x.roothash, roothash)
-                logger.debug("Testconversion %s %s", x.addresses[0], address)
                 self.assertEqual(x.addresses[0], address)
                 
-    def test_simple_message_conversion(self):
+    def test_small_file_message_conversion(self):
         for c in self._conversions:
-            if isinstance(c, SimpleFileConversion):
-                meta = self._di._community.get_meta_message(SIMPLE_MESSAGE_NAME)
+            if isinstance(c, SmallFileConversion):
+                meta = self._di._community.get_meta_message(SMALL_FILE_MESSAGE_NAME)
                 filename = "asdf.asdf"
                 data = "asjfdioewf"
                 message = meta.impl(authentication=(self._di._community.my_member,), distribution=(self._di._community.claim_global_time(), self._di._community._file_hash_distribution.claim_sequence_number()), 

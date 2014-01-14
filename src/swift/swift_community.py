@@ -5,7 +5,7 @@ Created on Jan 7, 2014
 '''
 import binascii
 from os import makedirs
-from os.path import exists, basename
+from os.path import exists, basename, join
 from sets import Set
 from threading import Thread, Event
 
@@ -59,10 +59,7 @@ class SwiftCommunity(object):
             return
         d = self.endpoint.retrieve_download_impl(roothash)
         if d is not None:
-            try:
-                self.downloads[roothash].add_address(addr)
-            except:
-                logger.warning("The download for %s does not exist yet!!!", roothash)
+            self.downloads[roothash].add_address(addr)
             # Only add this peer if it is one of the addresses allowed by the download
             if self.downloads[roothash].known_address(addr):
                 self.endpoint.swift_add_peer(d, addr, sock_addr)
@@ -127,6 +124,30 @@ class SwiftCommunity(object):
             
             # TODO: Make sure that this peer is not added since the peer has already added us!                
             self.add_new_peers() # Notify our other peers that we have something new available!
+            
+    def file_received(self, filename, contents):
+        """
+        Received small file. Create this file in the current directory.
+        
+        @param filename: filename
+        @param contents: Contents of the file
+        """
+        logger.debug("Received file %s", filename)
+        def create_file():
+            try:
+                path = join(self.dcomm.dest_dir, filename)
+                f = open(path, "w")
+                f.write(contents)
+            except:
+                logger.exception("Can't write file")
+            finally:
+                try:
+                    f.close()
+                except:
+                    pass
+                
+        t = Thread(target=create_file, name="create_" + filename)
+        t.start()
         
     def peer_endpoints_received(self, messages):
         for x in messages:

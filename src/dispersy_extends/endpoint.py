@@ -89,6 +89,7 @@ class SwiftHandler(TunnelEndpoint):
             return
         if d is not None and not any([addr == a and d.get_def().get_roothash_as_hex() == h and sock_addr == s for a, h, s in self.added_peers]):
             self._swift.add_peer(d, addr, sock_addr)
+            self.added_peers.add((addr, d.get_def().get_roothash_as_hex(), sock_addr))
         self.lock.release()
             
     def swift_checkpoint(self, d):

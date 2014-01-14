@@ -3,10 +3,11 @@ Created on Aug 8, 2013
 
 @author: Vincent Ketelaars
 '''
+from os.path import basename
 
 from dispersy.payload import Payload
 
-class SimpleFileCarrier():
+class SmallFileCarrier():
     
     def __init__(self, filename, data):
         self._filename = filename
@@ -20,7 +21,7 @@ class SimpleFileCarrier():
     def data(self):
         return self._data
 
-class SimpleFilePayload(Payload):
+class SmallFilePayload(Payload):
     '''
     classdocs
     '''
@@ -29,7 +30,7 @@ class SimpleFilePayload(Payload):
         
         def __init__(self, meta, filename, data):
             super(Payload.Implementation, self).__init__(meta)
-            self._filename = filename
+            self._filename = basename(filename)
             self._data = data
         
         @property
@@ -73,7 +74,7 @@ class FileHashPayload(Payload):
         
         def __init__(self, meta, filename, directories, roothash, addresses):
             super(Payload.Implementation, self).__init__(meta)
-            self._filename = filename
+            self._filename = basename(filename)
             self._directories = directories
             self._roothash = roothash
             self._addresses = addresses

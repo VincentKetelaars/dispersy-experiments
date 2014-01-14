@@ -10,20 +10,20 @@ from src.logger import get_logger
 from dispersy.conversion import BinaryConversion
 from dispersy.conversion import DropPacket
 
-from src.definitions import SEPARATOR, SIMPLE_MESSAGE_NAME, FILE_HASH_MESSAGE_NAME,\
+from src.definitions import SEPARATOR, SMALL_FILE_MESSAGE_NAME, FILE_HASH_MESSAGE_NAME,\
     ADDRESSES_MESSAGE_NAME, API_MESSAGE_NAME
 from src.address import Address
 
 logger = get_logger(__name__)
 
-class SimpleFileConversion(BinaryConversion):
+class SmallFileConversion(BinaryConversion):
     '''
     classdocs
     '''    
 
     def __init__(self, community):
-        super(SimpleFileConversion, self).__init__(community, "\x12")
-        self.define_meta_message(chr(12), community.get_meta_message(SIMPLE_MESSAGE_NAME), self.encode_payload, 
+        super(SmallFileConversion, self).__init__(community, "\x12")
+        self.define_meta_message(chr(12), community.get_meta_message(SMALL_FILE_MESSAGE_NAME), self.encode_payload, 
                                  self.decode_payload)
         
     def encode_payload(self, message):

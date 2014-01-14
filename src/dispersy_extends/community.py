@@ -17,13 +17,13 @@ from dispersy.destination import CommunityDestination, CandidateDestination
 
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.timeout import IntroductionRequestTimeout
-from src.dispersy_extends.conversion import SimpleFileConversion, FileHashConversion,\
+from src.dispersy_extends.conversion import SmallFileConversion, FileHashConversion,\
     AddressesConversion, APIMessageConversion
-from src.dispersy_extends.payload import SimpleFilePayload, FileHashPayload, AddressesPayload,\
+from src.dispersy_extends.payload import SmallFilePayload, FileHashPayload, AddressesPayload,\
     APIMessagePayload
 
 from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, \
-    FILE_HASH_MESSAGE_NAME, SIMPLE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME,\
+    FILE_HASH_MESSAGE_NAME, SMALL_FILE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME,\
     MESSAGE_KEY_API_MESSAGE, API_MESSAGE_NAME
 from src.tools.periodic_task import Looper, PeriodicIntroductionRequest
 from src.swift.swift_community import SwiftCommunity
@@ -55,20 +55,20 @@ class MyCommunity(Community):
         """
         Overwrite
         """
-        return [DefaultConversion(self), SimpleFileConversion(self), FileHashConversion(self), 
+        return [DefaultConversion(self), SmallFileConversion(self), FileHashConversion(self), 
                 AddressesConversion(self), APIMessageConversion(self)]
     
     def initiate_meta_messages(self):
         """
         Overwrite
         """
-        self._simple_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
+        self._small_file_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
         self._file_hash_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
         self._addresses_distribution = DirectDistribution()
         self._api_message_distribution = DirectDistribution()
-        return [Message(self, SIMPLE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
-                        self._simple_distribution, CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), SimpleFilePayload(), 
-                        self.simple_message_check, self.simple_message_handle),
+        return [Message(self, SMALL_FILE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
+                        self._small_file_distribution, CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), SmallFilePayload(), 
+                        self.small_file_message_check, self.small_file_message_handle),
                 Message(self, FILE_HASH_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._file_hash_distribution, CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), FileHashPayload(), 
                          self.file_hash_check, self.file_hash_handle),
@@ -79,20 +79,19 @@ class MyCommunity(Community):
                         self._api_message_distribution, CandidateDestination(), APIMessagePayload(), 
                         self.api_message_check, self.api_message_handle)]
         
-    def simple_message_check(self, messages):
+    def small_file_message_check(self, messages):
         """
         Check Callback
         """
         for x in messages:
             yield x
     
-    def simple_message_handle(self, messages):
+    def small_file_message_handle(self, messages):
         """
         Handle Callback
         """
         for x in messages:
-            # TODO: Create file
-            pass
+            self.swift_community.file_received(x.payload.filename, x.payload.data)
             
     def file_hash_check(self, messages):
         for x in messages:
@@ -141,14 +140,14 @@ class MyCommunity(Community):
     def _port(self):
         return str(self.dispersy.endpoint.get_address()[1])       
      
-    def create_simple_messages(self, count, simple_message=None, store=True, update=True, forward=True):
+    def create_small_file_messages(self, count, simple_message=None, store=True, update=True, forward=True):
         """
         @param count: Number of messages
         @type simple_message: SimpleFileCarrier
         """
-        meta = self.get_meta_message(SIMPLE_MESSAGE_NAME)
+        meta = self.get_meta_message(SMALL_FILE_MESSAGE_NAME)
         messages = [meta.impl(authentication=(self.my_member,), 
-                              distribution=(self.claim_global_time(), self._simple_distribution.claim_sequence_number()), 
+                              distribution=(self.claim_global_time(), self._small_file_distribution.claim_sequence_number()), 
                               payload=(simple_message.filename, simple_message.data)) for _ in xrange(count)]
         self.dispersy.store_update_forward(messages, store, update, forward)
         

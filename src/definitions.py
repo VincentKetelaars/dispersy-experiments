@@ -90,7 +90,7 @@ DISTRIBUTION_PRIORITY = 127
 NUMBER_OF_PEERS_TO_SYNC = 1
 HASH_LENGTH = 40
 
-SIMPLE_MESSAGE_NAME = u"simple_message"
+SMALL_FILE_MESSAGE_NAME = u"small_file_message"
 FILE_HASH_MESSAGE_NAME = u"file_hash_message"
 ADDRESSES_MESSAGE_NAME = u"addresses_message"
 API_MESSAGE_NAME = u"api_message"

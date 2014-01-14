@@ -12,7 +12,7 @@ from os.path import exists, isfile, isdir, getmtime, join, getsize, basename
 
 from src.logger import get_logger
 from src.tools.runner import CallFunctionThread
-from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier
+from src.dispersy_extends.payload import SmallFileCarrier, FileHashCarrier
 from src.dispersy_extends.endpoint import get_hash
 from src.definitions import SLEEP_TIME, MAX_FILE_SIZE, FILENAMES_NOT_TO_SEND, FILETYPES_NOT_TO_SEND
 
@@ -91,7 +91,7 @@ class FilePusher(object):
                 else:
                     with file(absfilename) as f:
                         s = f.read()
-                        self._callback(message=SimpleFileCarrier(absfilename, s))
+                        self._callback(message=SmallFileCarrier(absfilename, s))
                 
             self._stop_event.wait(SLEEP_TIME)
             

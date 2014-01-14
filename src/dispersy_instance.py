@@ -15,7 +15,7 @@ from dispersy.callback import Callback
 
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_extends.endpoint import MultiEndpoint, try_sockets
-from src.dispersy_extends.payload import SimpleFileCarrier, FileHashCarrier,\
+from src.dispersy_extends.payload import SmallFileCarrier, FileHashCarrier,\
     APIMessageCarrier
 from src.dispersy_extends.mydispersy import MyDispersy
 from src.filepusher import FilePusher
@@ -151,8 +151,8 @@ class DispersyInstance(object):
         
     def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
         logger.info("Registered %d messages: %s with delay %f", count, message, delay)
-        if isinstance(message, SimpleFileCarrier):
-            self._callback.register(self._community.create_simple_messages, (count, message), kargs={"update":False}, delay=delay)
+        if isinstance(message, SmallFileCarrier):
+            self._callback.register(self._community.create_small_file_messages, (count, message), kargs={"update":False}, delay=delay)
         elif isinstance(message, FileHashCarrier):
             self._callback.register(self._community.create_file_hash_messages, (count, message), kargs={"update":False}, delay=delay)
         elif isinstance(message, APIMessageCarrier):
