@@ -450,7 +450,7 @@ class MultiEndpoint(CommonEndpoint):
             endpoints = self.swift_endpoints
         same_subnet = []
         for e in endpoints:
-            if e.address.same_subnet(peer.id):
+            if e.address.same_subnet(peer.ip):
                 same_subnet.append(e)
         return same_subnet               
     
@@ -477,6 +477,7 @@ class MultiEndpoint(CommonEndpoint):
             for e in self._subnet_endpoints(peer):
                 if e is not None and e.is_alive and e.socket_running:
                     return e
+            
             return recur(self._endpoint)
         
         if (len(self.swift_endpoints) == 0):
