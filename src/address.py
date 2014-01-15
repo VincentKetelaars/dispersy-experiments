@@ -188,13 +188,24 @@ class Address(object):
             return True
         try:
             for if_ in get_interface_addresses():            
-                if (self.ipstr_to_int(if_.address) & self.ipstr_to_int(if_.netmask) == 
-                    self.ipstr_to_int(self._ip) & self.ipstr_to_int(if_.netmask)): # Same subnet
+                if self.same_subnet(if_.address, interface=if_): # Same subnet
                     self._if = Interface(if_.name, if_.address, if_.netmask, if_.broadcast)
                     return True
         except:
             logger.exception("Failed to find %s", self._ip)
         return False
+    
+    def same_subnet(self, ip, interface=None):
+        """
+        @param ip: ip address string
+        @param interface: Network interface
+        """
+        if interface is None:
+            interface = self._if
+        if interface is None:
+            return False # TODO: Not false, but unknown
+        return (self.ipstr_to_int(ip) & self.ipstr_to_int(interface.netmask) == 
+                    self.ipstr_to_int(self.ip) & self.ipstr_to_int(interface.netmask))
     
     def interface_exists(self):
         if self._if is None:

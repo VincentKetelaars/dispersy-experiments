@@ -419,29 +419,48 @@ class MultiEndpoint(CommonEndpoint):
             return self.swift_endpoints[0]
         return None
     
-    def _last_endpoints(self, peer):
+    def _last_endpoints(self, peer, endpoints=[]):
         """
         This function returns the endpoints that last had contact with this peer,
         sorted by time since the last contact, latest first
         
         @param peer: The address of the peer that a message will be sent to
         @type peer: Address
-        @rtype SwiftEndpoint
-        @return List(Endpoint) that last had contact with peer
+        @rtype: SwiftEndpoint
+        @return: List(Endpoint) that last had contact with peer
         """
+        if not endpoints:
+            endpoints = self.swift_endpoints
         last_contacts = []
-        for e in self.swift_endpoints:
+        for e in endpoints:
             for c in e.dispersy_contacts:
                 if peer == c.address and c.last_contact() > datetime.min:
                     last_contacts.append((e, c.last_contact()))
         sorted(last_contacts, key=lambda x: x[1], reverse=True)
         return [lc[0] for lc in last_contacts]
     
+    def _subnet_endpoints(self, peer, endpoints=[]):
+        """
+        This function returns the endpoints that reside in the same subnet.
+        These are either point to point or local connections, which will likely be fastest(?).
+        
+        @type peer: Address 
+        """
+        if not endpoints:
+            endpoints = self.swift_endpoints
+        same_subnet = []
+        for e in endpoints:
+            if e.address.same_subnet(peer.id):
+                same_subnet.append(e)
+        return same_subnet               
+    
     def determine_endpoint(self, peer):
         """
         The endpoint that will take care of the task at hand, will be chosen here. 
         The chosen endpoint will be assigned to self._endpoint
         If no appropriate endpoint is found, the current endpoint will remain.
+        
+        @type peer: Address
         """
         
         def recur(endpoint):
@@ -450,8 +469,12 @@ class MultiEndpoint(CommonEndpoint):
             return endpoint
         
         def determine():
-            endpoints = self._last_endpoints(peer)
-            for e in endpoints:
+            # Choose the endpoint that contact last with the peer
+            for e in self._last_endpoints(peer):
+                if e is not None and e.is_alive and e.socket_running:
+                    return e
+            # In case no contact has been made with this peer (or those endpoint are not available)
+            for e in self._subnet_endpoints(peer):
                 if e is not None and e.is_alive and e.socket_running:
                     return e
             return recur(self._endpoint)
