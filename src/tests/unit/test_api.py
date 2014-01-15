@@ -27,6 +27,7 @@ class TestAPI(unittest.TestCase):
             self.fails = 0
             self._run_event = Event()
             self.files_done = 0
+            self._done_event = Event()
             self.message = None
         
         def socket_state_callback(self, addr, state):
@@ -41,7 +42,10 @@ class TestAPI(unittest.TestCase):
         def message_received_callback(self, message):
             self.message = message
             self._run_event.set()
-
+            
+        def finish(self):
+            API.finish(self)
+            self._done_event.set()
 
     def setUp(self):
         self.workdir = DISPERSY_WORKDIR + "/temp"
@@ -61,9 +65,13 @@ class TestAPI(unittest.TestCase):
             self.api2.stop() # Only necessary when test creates this second api
         except:
             pass
+        self.api1._done_event.wait(2)
+        try:
+            self.api2._done_event.wait(2)
+        except:
+            pass
         for f in self.files_to_remove:
             remove_files(f, True)
-        
 
     def test_add_file_both(self):
         self.api2 = self.MyAPI("API2", self.workdir2, SWIFT_BINPATH, walker=False, listen=[Address(ip="127.0.0.1")])        
@@ -76,7 +84,7 @@ class TestAPI(unittest.TestCase):
         
         self.api1.add_file(self.files[0])
         self.api2.add_file(self.files[1])
-        file0 = os.path.join(self.workdir, os.path.basename(self.files[0]))
+        file0 = os.path.join(self.workdir2, os.path.basename(self.files[0]))
         file1 = os.path.join(self.workdir, os.path.basename(self.files[1]))
         self.files_to_remove.append(file0)
         self.files_to_remove.append(file1)
@@ -108,7 +116,7 @@ class TestAPI(unittest.TestCase):
         message = "Something cool"
         self.api2.add_message(message)
         
-        self.api1._run_event.wait(TIMEOUT_TESTS)
+        self.api1._run_event.wait(4)
         
         self.assertEqual(message, self.api1.message)
         

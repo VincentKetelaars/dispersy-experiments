@@ -56,7 +56,7 @@ class DispersyInstance(object):
         self._swift_binpath = swift_binpath
         self._dispersy_work_dir = unicode(dispersy_work_dir)
         self._sqlite_database = unicode(sqlite_database) # :memory: is in memory
-        self._swift_work_dir = swift_work_dir
+        self._swift_work_dir = swift_work_dir if swift_work_dir is not None else dest_dir
         self._swift_zerostatedir = swift_zerostatedir 
         self._listen = [Address.unknown(l) for l in listen] # Local socket addresses
         self._peers = [Address.unknown(p) for p in peers] # Peer addresses
@@ -73,7 +73,7 @@ class DispersyInstance(object):
                 self._gateways[a[0]] = a[1]
         self._mtu = mtu
         
-        self._filepusher = None
+        self._filepusher = None # In case of premature stops it should be initialized
         
         self._loop_event = Event() # Loop
         

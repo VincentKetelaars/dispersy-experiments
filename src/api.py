@@ -7,6 +7,7 @@ import os
 import Queue
 import socket
 import signal
+import logging.config
 from threading import Thread, Event
 from multiprocessing import Process, Pipe
 
@@ -137,7 +138,6 @@ class API(Thread, PipeHandler):
 
         self.receiver_api = Process(target=ReceiverAPI, args=(self.child_conn,) + di_args, kwargs=di_kwargs)
 
-        
         # Callbacks
         self._callback_state_change = None
         self._callback_swift_state = None
@@ -297,6 +297,8 @@ class ReceiverAPI(PipeHandler):
     
     def __init__(self, child_conn, *args, **kwargs):
         
+#         logging.config.fileConfig("logger_test.conf")
+        
         self.MESSAGE_KEY_MAP = {MESSAGE_KEY_STOP : self.stop,
                                 MESSAGE_KEY_STATE : self.send_state,
                                 MESSAGE_KEY_ADD_FILE : self.add_file,
@@ -305,7 +307,7 @@ class ReceiverAPI(PipeHandler):
                                 MESSAGE_KEY_ADD_MESSAGE : self.add_message,
                                 MESSAGE_KEY_MONITOR_DIRECTORY : self.monitor_directory_for_files,
                                 MESSAGE_KEY_INTERFACE_UP : self.interface_came_up}
-        PipeHandler.__init__(self, child_conn, name="ReceiverAPI")
+        PipeHandler.__init__(self, child_conn, name="ReceiverAPI_" + str(os.getpid()))
     
         self.state = STATE_NOT
         kwargs["callback"] = self._generic_callback
@@ -321,7 +323,7 @@ class ReceiverAPI(PipeHandler):
         self.waiting_queue = Queue.Queue() # Hold on to calls that are made prematurely
         
         self.dispersy_callbacks_map = {MESSAGE_KEY_STATE : self._state_change}
-        
+
         self.run()
         
         

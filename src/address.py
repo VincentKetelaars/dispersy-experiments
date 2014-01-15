@@ -95,9 +95,9 @@ class Address(object):
     
     @classmethod
     def unknown(cls, addr):
-        addr = addr.strip()
         if isinstance(addr, Address):
-            cls.copy(addr)
+            return cls.copy(addr)
+        addr = addr.strip()
         try:
             p = int(addr)
             # If it is an integer, it is a port
@@ -118,7 +118,7 @@ class Address(object):
                 return cls.ipv4(addr)
         except:
             logger.debug("Unknown address format! Fall back to default")
-            cls()
+            return cls()
             
     @classmethod
     def tuple(cls, tuple_addr):
