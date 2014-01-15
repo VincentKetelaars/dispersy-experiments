@@ -35,15 +35,17 @@ class TestConversion(unittest.TestCase):
                 filename = "asdf.asdf"
                 dir_ = ""
                 roothash = "asdfj23j09f09sjfewef"
+                size = 103425
                 address = Address.ipv4("0.0.0.0:1")
                 message = meta.impl(authentication=(self._di._community.my_member,), distribution=(self._di._community.claim_global_time(), self._di._community._file_hash_distribution.claim_sequence_number()), 
-                              payload=(filename, dir_, roothash, [address]))
+                              payload=(filename, dir_, roothash, size, [address]))
                 encoded = c.encode_payload(message)
                 placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
                 _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
                 self.assertEqual(x.filename, filename)
                 self.assertEqual(x.directories, dir_)
                 self.assertEqual(x.roothash, roothash)
+                self.assertEqual(x.size, size)
                 self.assertEqual(x.addresses[0], address)
                 
     def test_small_file_message_conversion(self):

@@ -55,7 +55,8 @@ class FileHashConversion(BinaryConversion):
                                  self.decode_payload)
         
     def encode_payload(self, message):
-        m = str(message.payload.filename) + SEPARATOR + str(message.payload.directories) + SEPARATOR + str(message.payload.roothash)
+        m = str(message.payload.filename) + SEPARATOR + str(message.payload.directories) + SEPARATOR + \
+            str(message.payload.roothash) + SEPARATOR + str(message.payload.size)
         for addr in message.payload.addresses:
             m += SEPARATOR + str(addr)
         return struct.pack("!L", len(m)), m
@@ -73,11 +74,12 @@ class FileHashConversion(BinaryConversion):
         filename = data_pieces[0]
         directories = data_pieces[1]
         roothash = data_pieces[2]
-        addresses = [Address.unknown(a) for a in data_pieces[3:]]
+        size = long(data_pieces[3])
+        addresses = [Address.unknown(a) for a in data_pieces[4:]]
             
         offset += data_length
         
-        return offset, placeholder.meta.payload.implement(filename, directories, roothash, addresses)
+        return offset, placeholder.meta.payload.implement(filename, directories, roothash, size, addresses)
 
 class AddressesConversion(BinaryConversion):
     '''

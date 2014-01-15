@@ -98,14 +98,16 @@ class SwiftCommunity(object):
         if self._api_callback is not None:
             self._api_callback(key, *args, **kwargs)
         
-    def filehash_received(self, filename, directories, roothash, addresses, destination):
+    def filehash_received(self, filename, directories, roothash, size, addresses, destination):
         """
         @param filename: The name the file will get
         @param directories: Optional path of directories within the destination directory
         @param roothash: hash to locate swarm
+        @param size: Size of the file
         @param addresses: The sockets available to the peer that sent us this file
+        @type destination: Destination.Implementation
         """
-        logger.debug("Start download %s %s %s %s %s", filename, directories, roothash, self.dcomm.dest_dir, addresses)
+        logger.debug("Start download %s %s %s %d %s %s", filename, directories, roothash, size, self.dcomm.dest_dir, addresses)
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys():
             logger.info("Start download of %s with roothash %s", filename, roothash)

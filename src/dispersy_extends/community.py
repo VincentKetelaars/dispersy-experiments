@@ -101,7 +101,7 @@ class MyCommunity(Community):
         for x in messages:
             if len(x.payload.filename) >= 1 and x.payload.directories is not None and len(x.payload.roothash) == HASH_LENGTH:
                 self.swift_community.filehash_received(x.payload.filename, x.payload.directories, 
-                                                       x.payload.roothash, x.payload.addresses, x.destination)
+                                                       x.payload.roothash, x.payload.size, x.payload.addresses, x.destination)
     
     def addresses_message_check(self, messages):
         """
@@ -162,8 +162,8 @@ class MyCommunity(Community):
             # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
             messages = [meta.impl(authentication=(self.my_member,), 
                                   distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
-                                  payload=(basename(file_hash_message.filename), file_hash_message.directories, 
-                                           file_hash_message.roothash, self._addresses()))
+                                  payload=(file_hash_message.filename, file_hash_message.directories, 
+                                           file_hash_message.roothash, file_hash_message.size, self._addresses()))
                         for _ in xrange(count)]
             self.dispersy.store_update_forward(messages, store, update, forward)
                 
