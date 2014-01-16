@@ -318,6 +318,13 @@ class MySwiftProcess(SwiftProcess):
                 d.i2ithread_moreinfo_callback(midict)
             elif words[0] == "ERROR":
                 d.i2ithread_info_callback(DLSTATUS_STOPPED_ON_ERROR, 0.0, 0, 0.0, 0.0, 0, 0, 0, 0)
+                    
+            elif words[0] == "CHANNELCLOSED":
+                saddr = Address.unknown(words[2])
+                paddr = Address.unknown(words[3])
+                if d._channel_closed_callback is not None:
+                    d._channel_closed_callback(roothash, saddr, paddr)
+                
     
     def write(self, msg):
         if self.is_running():

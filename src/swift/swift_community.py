@@ -180,6 +180,7 @@ class SwiftCommunity(object):
         d.set_download_ready_callback(self.download_is_ready_callback)
         d.set_moreinfo_callback(self.moreinfo_callback)
         d.set_bad_swarm_callback(self.bad_swarm_callback)
+        d.set_channel_closed_callback(self.channel_closed_callback)
         return d    
         
     def download_is_ready_callback(self, roothash):
@@ -214,7 +215,17 @@ class SwiftCommunity(object):
             download.set_bad_swarm(True)
             self.do_callback(MESSAGE_KEY_BAD_SWARM, download.filename)
         else:
-            logger.warning("We don't know this swarm %s", roothash)
+            logger.warning("We don't know this swarm %s", binascii.hexlify(roothash))
+            
+    def channel_closed_callback(self, roothash, socket_addr, peer_addr):
+        logger.debug("Channel %s %s %s closed", binascii.hexlify(roothash), socket_addr, peer_addr)
+        download = self.downloads.get(roothash, None)
+        if download is not None:
+            download.channel_closed(socket_addr, peer_addr)
+            if not download.active():
+                self.clean_up_files(download)
+        else:
+            logger.debug("Unknown swarm %s", binascii.hexlify(roothash))
 
     def add_to_downloads(self, roothash, filename, download_impl, addresses=None, seed=False, download=False, destination=None):
         """
@@ -304,7 +315,7 @@ class SwiftCommunity(object):
         raw_total_up = 0
         raw_total_down = 0
         for d in self.downloads.itervalues():
-            if not d.is_bad_swarm() and d.started():
+            if not d.is_bad_swarm() and d.active():
                 upspeed += d.speed("up")
                 downspeed += d.speed("down")
                 total_up += d.total("up")
@@ -313,9 +324,12 @@ class SwiftCommunity(object):
                 raw_total_down += d.total("down", raw=False)
         done_downloads = sum([d.is_finished() and d.is_download() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
         num_seeding = sum([d.seeder() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
-        num_peers = len(Set(p for d in self.downloads.itervalues() for p in d.peers()))
+        active_sockets = len(Set(s for d in self.downloads.itervalues() for s in d.active_sockets()))
+        active_peers = len(Set(p for d in self.downloads.itervalues() for p in d.active_peers()))
+        active_channels = len([c for d in self.downloads.itervalues() for c in d._active_channels])
         num_downloading = sum([d.seeder() and not d.is_finished() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
         return {"up_speed" : upspeed, "down_speed" : downspeed, "total_up" : total_up, 
                 "total_down" : total_down, "raw_total_up" : raw_total_up, "raw_total_down" : raw_total_down,
-                "num_downloads" : len(self.downloads), "done_downloads" : done_downloads, 
-                "num_seeding" : num_seeding, "num_downloading" : num_downloading, "num_peers" : num_peers}
+                "downloads" : len(self.downloads), "done_downloads" : done_downloads, 
+                "seeders" : num_seeding, "downloading" : num_downloading, "active_peers" : active_peers,
+                "active_sockets" : active_sockets, "active_channels" : active_channels}

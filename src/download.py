@@ -36,6 +36,9 @@ class Peer(object):
         for a in self.addresses:
             h |= hash(a)
         return h
+    
+    def has_any(self, addrs):
+        return len([a for a in addrs if a in self.addresses]) > 0
 
 class Download(object):
     '''
@@ -68,8 +71,7 @@ class Download(object):
         self._destination = destination
         self.cleaned = False # True when this download has been cleaned up
         self._bad_swarm = False
-        self._active_sockets = Set()
-        self._active_addresses = Set()
+        self._active_channels = Set()
         
     @property
     def roothash(self):
@@ -120,13 +122,10 @@ class Download(object):
         try:
             channels = self.downloadimpl.midict["channels"]
         except:
-            pass
+            logger.exception("No channels!")
         for c in channels:
-            self._active_addresses.add(Address(ip=c["ip"], port=c["port"])) # TODO: Add IPv6
-            self._active_sockets.add(Address(ip=c["socket_ip"], port=c["socket_port"]))
-    
-    def started(self):
-        return len(self._active_addresses) > 0
+            self._active_channels.add((Address(ip=c["socket_ip"], port=int(c["socket_port"])), 
+                                       Address(ip=c["ip"], port=int(c["port"])))) # TODO: Add IPv6
     
     def add_address(self, address):
         assert isinstance(address, Address)
@@ -196,6 +195,18 @@ class Download(object):
     def known_address(self, addr):
         assert isinstance(addr, Address)
         return addr in [a for p in self._peers for a in p.addresses]
+        
+    def active(self):
+        return len(self._active_channels) > 0
+    
+    def active_sockets(self):
+        return [c[0] for c in self._active_channels]
+    
+    def active_addresses(self):
+        return [c[1] for c in self._active_channels]
+    
+    def active_peers(self):
+        return [p for p in self._peers if p.has_any(self._active_addresses)]
     
     def speed(self, direction):
         try:
@@ -221,6 +232,13 @@ class Download(object):
                 "current_down_speed" : self.downloadimpl.get_current_speed("down"),
                 "current_up_speed" : self.downloadimpl.get_current_speed("up"),   
                 "leechers" : self.downloadimpl.numleech, "seeders" : self.downloadimpl.numseeds,
+                "channels" : len(self._active_channels),
                 "moreinfo" : self.downloadimpl.network_create_spew_from_channels()}
         return data
+    
+    def channel_closed(self, socket_addr, peer_addr):
+        try:
+            self._active_channels.remove((socket_addr, peer_addr))
+        except:
+            logger.warning("%s, %s channel should have been in the active channels set", socket_addr, peer_addr)
         

@@ -81,18 +81,26 @@ class SwiftHandler(TunnelEndpoint):
             self._api_callback(key, *args, **kwargs)
         
     def swift_add_peer(self, d, addr, sock_addr=None):
+        """
+        @type d: SwiftDownloadImpl
+        @type addr: Address
+        @type sock_addr: Address
+        """
         self.lock.acquire()
         if not self._swift.is_ready():
             self.enqueue_swift_queue(self.swift_add_peer, d, addr, sock_addr=sock_addr)
             logger.debug("Add peer is queued")
             self.lock.release()
             return
-        if d is not None and not any([addr == a and d.get_def().get_roothash_as_hex() == h and sock_addr == s for a, h, s in self.added_peers]):
+        if d is not None and not any([addr == a and d.get_def().get_roothash() == h and sock_addr == s for a, h, s in self.added_peers]):
             self._swift.add_peer(d, addr, sock_addr)
-            self.added_peers.add((addr, d.get_def().get_roothash_as_hex(), sock_addr))
+            self.added_peers.add((addr, d.get_def().get_roothash(), sock_addr))
         self.lock.release()
             
     def swift_checkpoint(self, d):
+        """
+        @type d: SwiftDownloadImpl
+        """
         if not self._swift.is_ready():
             self.enqueue_swift_queue(self.swift_checkpoint, d)
             logger.debug("Checkpoint is queued")
@@ -101,20 +109,27 @@ class SwiftHandler(TunnelEndpoint):
             self._swift.checkpoint_download(d)
         
     def swift_start(self, d):
+        """
+        @type d: SwiftDownloadImpl
+        """
         self.lock.acquire()
         if not self._swift.is_ready():
             self.enqueue_swift_queue(self.swift_start, d) 
             logger.debug("Start is queued")
             self.lock.release()
             return
-        if not d.get_def().get_roothash_as_hex() in self.started_downloads:
+        if not d.get_def().get_roothash() in self.started_downloads:
+            self.started_downloads.add(d.get_def().get_roothash())
             self._swift.start_download(d)
-            self.started_downloads.add(d.get_def().get_roothash_as_hex())
         else:
             logger.warning("This roothash %s was already started!", d.get_def().get_roothash_as_hex())
         self.lock.release()
         
     def swift_moreinfo(self, d, yes):
+        """
+        @type d: SwiftDownloadImpl
+        @type yes: boolean
+        """
         self.lock.acquire()
         if not self._swift.is_ready():
             self.enqueue_swift_queue(self.swift_start, d, yes) 
@@ -125,16 +140,27 @@ class SwiftHandler(TunnelEndpoint):
         self.lock.release()
         
     def swift_remove_download(self, d, rm_state, rm_content):
+        """
+        @type d: SwiftDownloadImpl
+        @type rm_state: boolean
+        @type rm_content: boolean
+        """
         self.lock.acquire()
         if not self._swift.is_ready():
             self.enqueue_swift_queue(self.swift_remove_download, d, rm_state, rm_content)
             logger.debug("Remove download is queued")
             self.lock.release()
-            return        
-        self._swift.remove_download(d, rm_state, rm_content)
+            return
+        if d.get_def().get_roothash() in self.started_downloads:
+            self.started_downloads.remove(d.get_def().get_roothash())
+            self._swift.remove_download(d, rm_state, rm_content)
         self.lock.release()
         
     def swift_pex(self, d, enable):
+        """
+        @type d: SwiftDownloadImpl
+        @type enable: boolean
+        """
         self.lock.acquire()
         if not self._swift.is_ready():
             self.enqueue_swift_queue(self.swift_pex, d, enable)
@@ -146,9 +172,9 @@ class SwiftHandler(TunnelEndpoint):
         
     def retrieve_download_impl(self, roothash):
         """
-        Retrieve DownloadImpl with roothash
+        Retrieve SwiftDownloadImpl with roothash
         
-        @return: DownloadImpl, otherwise None
+        @return: SwiftDownloadImpl, otherwise None
         """
         logger.debug("Retrieve download implementation, %s", roothash)
         self.lock.acquire()
@@ -745,14 +771,14 @@ def try_socket(addr, log=True):
         (error_number, error_message) = ex
         if error_number == EADDRINUSE: # Socket is already bound
             if log:
-                logger.exception("Bummer, %s is already bound!", str(addr))
+                logger.debug("Bummer, %s is already bound!", str(addr))
             return False
         if error_number == EADDRNOTAVAIL: # Interface is most likely gone so nothing on this ip can be bound
             if log:
-                logger.exception("Shit, %s can't be bound! Interface gone?", str(addr))
+                logger.debug("Shit, %s can't be bound! Interface gone?", str(addr))
             return False
         if log:
-            logger.exception("He, we haven't taken into account this error yet!!\n%s", error_message)
+            logger.debug("He, we haven't taken into account this error yet!!\n%s", error_message)
         return False
     finally:
         s.close()
