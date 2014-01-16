@@ -43,7 +43,7 @@ done
 FILEDATE=`date +%Y%m%d`
 FILE=${FILEDATE}_${STARTTIME}
 
-if [ $ZEROED != "" ]; then
+if [ ! -z "$ZEROED" ]; then
 	FILE="${FILE}_z"
 fi
 

@@ -68,7 +68,8 @@ class Download(object):
         self._destination = destination
         self.cleaned = False # True when this download has been cleaned up
         self._bad_swarm = False
-        self._has_moreinfo = False
+        self._active_sockets = Set()
+        self._active_addresses = Set()
         
     @property
     def roothash(self):
@@ -114,11 +115,18 @@ class Download(object):
     def is_bad_swarm(self):
         return self._bad_swarm
     
-    def got_moreinfo(self, got):
-        self._has_moreinfo = got
+    def got_moreinfo(self):
+        channels = []
+        try:
+            channels = self.downloadimpl.midict["channels"]
+        except:
+            pass
+        for c in channels:
+            self._active_addresses.add(Address(ip=c["ip"], port=c["port"])) # TODO: Add IPv6
+            self._active_sockets.add(Address(ip=c["socket_ip"], port=c["socket_port"]))
     
-    def has_moreinfo(self):
-        return self._has_moreinfo
+    def started(self):
+        return len(self._active_addresses) > 0
     
     def add_address(self, address):
         assert isinstance(address, Address)

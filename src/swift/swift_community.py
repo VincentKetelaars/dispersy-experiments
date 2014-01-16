@@ -202,7 +202,7 @@ class SwiftCommunity(object):
         """
         logger.debug("More info %s", binascii.hexlify(roothash))
         download = self.downloads[roothash]
-        download.got_moreinfo(True)
+        download.got_moreinfo()
         self.do_callback(MESSAGE_KEY_SWIFT_INFO, {"direct" : download.package()}) # If more info is not set for the download this is never called
         if download.is_finished():
             self.clean_up_files(download)
@@ -253,6 +253,7 @@ class SwiftCommunity(object):
         for d in self.downloads.itervalues():
             for a in addresses:
                 d.merge_peers(Peer([a]))
+        # This would be the time to add peers (At this point the other side needs to do that)
         
     def add_new_peers(self, sock_addr=None):
         """
@@ -303,7 +304,7 @@ class SwiftCommunity(object):
         raw_total_up = 0
         raw_total_down = 0
         for d in self.downloads.itervalues():
-            if not d.is_bad_swarm() and d.has_moreinfo():
+            if not d.is_bad_swarm() and d.started():
                 upspeed += d.speed("up")
                 downspeed += d.speed("down")
                 total_up += d.total("up")
