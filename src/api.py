@@ -286,6 +286,13 @@ class API(Thread, PipeHandler):
     def _swift_pid(self, pid):
         self._children_recur.append(pid)
 
+def _dispersy_running_decorator(func):
+    def dec(self, *args, **kwargs):
+        if self.state == STATE_RUNNING:
+            return func(self, *args, **kwargs)
+        else:
+            self._enqueue(func, self, *args, **kwargs)
+    return dec
     
 class ReceiverAPI(PipeHandler):
     """
@@ -356,43 +363,36 @@ class ReceiverAPI(PipeHandler):
             func(*args, **kwargs)
     
     """
-    INCOMING MESSAGES
+    API COMMANDS
     """        
     
-    def send_state(self):
-        self.send_message(MESSAGE_KEY_STATE, self.state)
-    
+    @_dispersy_running_decorator
     def add_message(self, message, addresses):
-        if self.state == STATE_RUNNING:
-            if len(message) < self.dispersy_instance._mtu:
-                addrs = [Address.unknown(a) for a in addresses]
-                self.dispersy_instance._register_some_message(APIMessageCarrier(message, addresses=addrs))
-            else:
-                logger.info("This message of length %d is to big to send with Dispersy", len(message))
-                # TODO: Alternative might be to write file to disk and send that..
-                # Will need candidate destination for this, so can't use filehash then.. 
+        if len(message) < self.dispersy_instance._mtu:
+            addrs = [Address.unknown(a) for a in addresses]
+            self.dispersy_instance._register_some_message(APIMessageCarrier(message, addresses=addrs))
         else:
-            self._enqueue(self.add_message, message, addresses)
+            logger.info("This message of length %d is to big to send with Dispersy", len(message))
+            # TODO: Alternative might be to write file to disk and send that..
+            # Will need candidate destination for this, so can't use filehash then.. 
     
+    @_dispersy_running_decorator
     def monitor_directory_for_files(self, directory):
-        if self.state == STATE_RUNNING:
-            return self.dispersy_instance._filepusher.set_directory(directory)
-        else:
-            self._enqueue(self.monitor_directory_for_files, directory)
-        
+        return self.dispersy_instance._filepusher.set_directory(directory)
+    
+    @_dispersy_running_decorator
     def add_file(self, file_):
-        if self.state == STATE_RUNNING:
-            return self.dispersy_instance._filepusher.add_files([file_])
-        else:
-            self._enqueue(self.add_file, file_)
+        return self.dispersy_instance._filepusher.add_files([file_])
             
+    @_dispersy_running_decorator
     def pause_file(self, file_):
         """
         Delete channel, but keep content and state
         """
         download = self.dispersy_instance._community.swift_community.get_download_by_file(file_)
         self.dispersy_instance._community.swift_community.pause_download(download)
-        
+    
+    @_dispersy_running_decorator
     def continue_file(self, file_):
         """
         Try finding file in downloads and start it again, otherwise add it
@@ -402,7 +402,8 @@ class ReceiverAPI(PipeHandler):
             self.add_file(file_)
         else:
             self.dispersy_instance._community.swift_community.continue_download(download)
-        
+    
+    @_dispersy_running_decorator
     def stop_file(self, file_):
         """
         Delete channel and state, but keep content
@@ -410,45 +411,36 @@ class ReceiverAPI(PipeHandler):
         download = self._dispersy_instance._community.swift_community.get_download_by_file(file_)
         self.dispersy_instance._community.swift_community.stop_download(download)
     
+    @_dispersy_running_decorator
     def add_peer(self, address):
         assert isinstance(address, Address)
-        if self.state == STATE_RUNNING:
-            self.dispersy_instance.send_introduction_request(address.addr())
-        else:
-            self._enqueue(self.add_peer, address)
-        
-    def add_socket(self, address):
-        assert isinstance(address, Address)
-        if self.state == STATE_RUNNING:
-            e = self.dispersy_instance._endpoint.add_endpoint(address, api_callback=self._generic_callback)
-            e.open(self.dispersy_instance._dispersy)
-        else:
-            self._enqueue(self.add_socket, address)
+        self.dispersy_instance.send_introduction_request(address.addr())
     
+    @_dispersy_running_decorator
+    def add_socket(self, address):
+        e = self.dispersy_instance._endpoint.add_endpoint(address, api_callback=self._generic_callback)
+        e.open(self.dispersy_instance._dispersy)
+    
+    @_dispersy_running_decorator
     def return_progress_data(self):
-        if self.state == STATE_RUNNING:
-            downloads = self.dispersy_instance._endpoint.downloads
-        else:
-            self._enqueue(self.return_progress_data)
+        downloads = self.dispersy_instance._endpoint.downloads
         # These downloads should contain most information
         # TODO: Find something to return
     
+    @_dispersy_running_decorator
     def interface_came_up(self, ip, if_name, device, gateway=None):
         logger.debug("Interface came up with %s %s %s %s", ip, if_name, device, gateway)
-        if self.state == STATE_RUNNING:
-            addr = Address.unknown(ip)
-            if addr.resolve_interface():
-                if addr.interface.name != if_name:
-                    return # Provided the wrong interface..
-                addr.interface.device = device
-                addr.interface.gateway = gateway
-                if addr.interface.address is None: # In case netifaces does not recognize interface such as ppp
-                    addr.interface.address = ip         
-                self.dispersy_instance._endpoint.interface_came_up(addr)               
-            else:
-                logger.debug("Bogus interface, cannot locate it")
+        addr = Address.unknown(ip)
+        if addr.resolve_interface():
+            if addr.interface.name != if_name:
+                return # Provided the wrong interface..
+            addr.interface.device = device
+            addr.interface.gateway = gateway
+            if addr.interface.address is None: # In case netifaces does not recognize interface such as ppp
+                addr.interface.address = ip         
+            self.dispersy_instance._endpoint.interface_came_up(addr)               
         else:
-            self._enqueue(self.interface_came_up, ip, if_name, device, gateway=gateway)
+            logger.debug("Bogus interface, cannot locate it")
             
     def set_API_logger(self, logger):
         logger = logger
@@ -456,6 +448,12 @@ class ReceiverAPI(PipeHandler):
     def set_dispersy_instance_logger(self, logger):
         pass
     
+    """
+    SEND MESSAGE
+    """   
+    
+    def send_state(self):
+        self.send_message(MESSAGE_KEY_STATE, self.state)
     
     """
     INCOMING CALLBACKS

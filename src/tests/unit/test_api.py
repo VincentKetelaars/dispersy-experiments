@@ -72,6 +72,8 @@ class TestAPI(unittest.TestCase):
             pass
         for f in self.files_to_remove:
             remove_files(f, True)
+        for f in FILES:
+            remove_files(f, False)
 
     def test_add_file_both(self):
         self.api2 = self.MyAPI("API2", self.workdir2, SWIFT_BINPATH, walker=False, listen=[Address(ip="127.0.0.1")])        

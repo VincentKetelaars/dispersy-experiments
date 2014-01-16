@@ -48,7 +48,19 @@ class EndpointStatistics(Statistics):
         
     def update(self):
         pass
-            
+
+def _swift_runnable_decorator(func):
+    def dec(self, *args, **kwargs):
+        self.lock.acquire()
+        if not self._swift.is_ready():
+            self.enqueue_swift_queue(func, self, *args, **kwargs)
+            logger.debug("%s is queued", func)
+            self.lock.release()
+            return
+        return func(self, *args, **kwargs)
+        self.lock.release()
+    return dec
+     
 class SwiftHandler(TunnelEndpoint):
     
     def __init__(self, swift_process, api_callback=None):
@@ -79,96 +91,63 @@ class SwiftHandler(TunnelEndpoint):
     def do_callback(self, key, *args, **kwargs):
         if self._api_callback is not None:
             self._api_callback(key, *args, **kwargs)
-        
+    
+    @_swift_runnable_decorator
     def swift_add_peer(self, d, addr, sock_addr=None):
         """
         @type d: SwiftDownloadImpl
         @type addr: Address
         @type sock_addr: Address
         """
-        self.lock.acquire()
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_add_peer, d, addr, sock_addr=sock_addr)
-            logger.debug("Add peer is queued")
-            self.lock.release()
-            return
         if d is not None and not any([addr == a and d.get_def().get_roothash() == h and sock_addr == s for a, h, s in self.added_peers]):
             self._swift.add_peer(d, addr, sock_addr)
             self.added_peers.add((addr, d.get_def().get_roothash(), sock_addr))
-        self.lock.release()
-            
+    
+    @_swift_runnable_decorator    
     def swift_checkpoint(self, d):
         """
         @type d: SwiftDownloadImpl
         """
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_checkpoint, d)
-            logger.debug("Checkpoint is queued")
-            return
         if d is not None:
             self._swift.checkpoint_download(d)
-        
+    
+    @_swift_runnable_decorator  
     def swift_start(self, d):
         """
         @type d: SwiftDownloadImpl
         """
-        self.lock.acquire()
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_start, d) 
-            logger.debug("Start is queued")
-            self.lock.release()
-            return
         if not d.get_def().get_roothash() in self.started_downloads:
             self.started_downloads.add(d.get_def().get_roothash())
             self._swift.start_download(d)
         else:
             logger.warning("This roothash %s was already started!", d.get_def().get_roothash_as_hex())
-        self.lock.release()
-        
+    
+    @_swift_runnable_decorator  
     def swift_moreinfo(self, d, yes):
         """
         @type d: SwiftDownloadImpl
         @type yes: boolean
         """
-        self.lock.acquire()
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_start, d, yes) 
-            logger.debug("More info is queued")
-            self.lock.release()
-            return
         self._swift.set_moreinfo_stats(d, yes)
-        self.lock.release()
-        
+    
+    @_swift_runnable_decorator
     def swift_remove_download(self, d, rm_state, rm_content):
         """
         @type d: SwiftDownloadImpl
         @type rm_state: boolean
         @type rm_content: boolean
         """
-        self.lock.acquire()
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_remove_download, d, rm_state, rm_content)
-            logger.debug("Remove download is queued")
-            self.lock.release()
-            return
         if d.get_def().get_roothash() in self.started_downloads:
             self.started_downloads.remove(d.get_def().get_roothash())
             self._swift.remove_download(d, rm_state, rm_content)
-        self.lock.release()
-        
+    
+    @_swift_runnable_decorator
     def swift_pex(self, d, enable):
         """
         @type d: SwiftDownloadImpl
         @type enable: boolean
         """
-        self.lock.acquire()
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_pex, d, enable)
-            logger.debug("Pex is queued")
-            self.lock.release()
-            return        
         self._swift.set_pex(d.get_def().get_roothash_as_hex(), enable)
-        self.lock.release()
         
     def retrieve_download_impl(self, roothash):
         """
