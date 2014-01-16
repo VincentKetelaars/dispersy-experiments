@@ -206,7 +206,7 @@ class Download(object):
         return [c[1] for c in self._active_channels]
     
     def active_peers(self):
-        return [p for p in self._peers if p.has_any(self._active_addresses)]
+        return [p for p in self._peers if p.has_any(self.active_addresses())]
     
     def speed(self, direction):
         try:
@@ -229,8 +229,8 @@ class Download(object):
         data = {"filename" : self.filename, "roothash" : self.roothash_as_hex(), "seeding" : self.seeder(), "path" : self.path(), 
                 "leeching" : not self.is_finished(), "dynasize" : self.downloadimpl.get_dynasize(),                        
                 "progress" : self.downloadimpl.get_progress(),                             
-                "current_down_speed" : self.downloadimpl.get_current_speed("down"),
-                "current_up_speed" : self.downloadimpl.get_current_speed("up"),   
+                "current_speed_down" : self.speed("down"),
+                "current_speed_up" : self.speed("up"),   
                 "leechers" : self.downloadimpl.numleech, "seeders" : self.downloadimpl.numseeds,
                 "channels" : len(self._active_channels),
                 "moreinfo" : self.downloadimpl.network_create_spew_from_channels()}

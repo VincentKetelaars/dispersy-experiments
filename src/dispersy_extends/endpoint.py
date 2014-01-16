@@ -50,6 +50,9 @@ class EndpointStatistics(Statistics):
         pass
 
 def _swift_runnable_decorator(func):
+    """
+    Ensure that swift is running before calling it by queuing it when necessary.
+    """
     def dec(self, *args, **kwargs):
         self.lock.acquire()
         if not self._swift.is_ready():
