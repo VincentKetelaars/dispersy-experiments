@@ -3,17 +3,16 @@ Created on Aug 27, 2013
 
 @author: Vincent Ketelaars
 '''
-
+import socket
+import time
+import logging
+import Queue
 from os import urandom
 from os.path import isfile, dirname, getmtime
 from datetime import datetime
 from threading import Thread, Event, RLock
 from sets import Set
 from errno import EADDRINUSE, EADDRNOTAVAIL
-import socket
-import time
-import logging
-import Queue
 
 from src.logger import get_logger
 from src.swift.swift_process import MySwiftProcess # This should be imported first, or it will screw up the logs.
@@ -55,14 +54,11 @@ def _swift_runnable_decorator(func):
     Ensure that swift is running before calling it by queuing it when necessary.
     """
     def dec(self, *args, **kwargs):
-        self.lock.acquire()
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(func, self, *args, **kwargs)
-            logger.debug("%s is queued", func)
-            self.lock.release()
-            return
-        return func(self, *args, **kwargs)
-        self.lock.release()
+        with self.lock:
+            if not self._swift.is_ready():
+                self.enqueue_swift_queue(func, self, *args, **kwargs)
+                return
+            return func(self, *args, **kwargs)
     return dec
      
 class SwiftHandler(TunnelEndpoint):
@@ -141,8 +137,9 @@ class SwiftHandler(TunnelEndpoint):
         @type rm_state: boolean
         @type rm_content: boolean
         """
-        if d.get_def().get_roothash() in self.started_downloads:
+        if d is not None and d.get_def().get_roothash() in self.started_downloads:
             self.started_downloads.remove(d.get_def().get_roothash())
+            [self.added_peers.remove(a) for a in self.added_peers if a[1] == d.get_def().get_roothash()]
             self._swift.remove_download(d, rm_state, rm_content)
     
     @_swift_runnable_decorator
@@ -221,6 +218,7 @@ class SwiftHandler(TunnelEndpoint):
         self.dequeue_swift_queue()
         
     def enqueue_swift_queue(self, func, *args, **kwargs):
+        logger.debug("%s is queued", func.__name__)
         self.swift_queue.put((func, args, kwargs))
         
     def dequeue_swift_queue(self):
@@ -312,26 +310,23 @@ class MultiEndpoint(CommonEndpoint):
         return list(endpoint.get_address() for endpoint in self.swift_endpoints)
     
     def send(self, candidates, packets):
-        self.lock.acquire();
-        if not self._swift.is_ready() or not self.socket_running:
-            if not self._dequeueing:
-                self.enqueue_swift_queue(self.send, candidates, packets)
-                logger.debug("Send is queued")
-            self.lock.release()
-            return False
-        logger.debug("Send %s %d", candidates, len(packets))
-        
-        # If filehash message, let SwiftCommunity know the peers!
-        name = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False).name
-        # TODO: Should we only check packet 0? I.e. can packets of different kinds go together?
-        if name == FILE_HASH_MESSAGE_NAME:
-            self._dispersy.notify_filehash_peers([Address.tuple(c.sock_addr) for c in candidates])
-        
-        for c in candidates:
-            new_c = self.determine_endpoint(c)
-            send_success = self._endpoint.send([new_c], packets)
-            self.update_dispersy_contacts_candidates_messages([new_c], packets, recv=False)
-        self.lock.release()
+        with self.lock:
+            if not self._swift.is_ready() or not self.socket_running:
+                if not self._dequeueing:
+                    self.enqueue_swift_queue(self.send, candidates, packets)
+                return False
+            logger.debug("Send %s %d", candidates, len(packets))
+            
+            # If filehash message, let SwiftCommunity know the peers!
+            name = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False).name
+            # TODO: Should we only check packet 0? I.e. can packets of different kinds go together?
+            if name == FILE_HASH_MESSAGE_NAME:
+                self._dispersy.notify_filehash_peers([Address.tuple(c.sock_addr) for c in candidates])
+            
+            for c in candidates:
+                new_c = self.determine_endpoint(c)
+                send_success = self._endpoint.send([new_c], packets)
+                self.update_dispersy_contacts_candidates_messages([new_c], packets, recv=False)
         return send_success
             
     def open(self, dispersy):
@@ -341,7 +336,7 @@ class MultiEndpoint(CommonEndpoint):
                     
         self.is_alive = True   
         
-        self._thread_loop = Thread(target=self._loop)
+        self._thread_loop = Thread(target=self._loop, name="MultiEndpoint_periodic_loop")
         self._thread_loop.daemon = True
         self._thread_loop.start()
         return ret
@@ -374,13 +369,12 @@ class MultiEndpoint(CommonEndpoint):
     
     def add_endpoint(self, addr, api_callback=None):
         logger.info("Add %s", addr)
-        self.lock.acquire()
-        new_endpoint = SwiftEndpoint(self._swift, addr, api_callback=api_callback)
-        self.swift_endpoints.append(new_endpoint)
-        if len(self.swift_endpoints) == 1:
-            self._endpoint = new_endpoint
+        with self.lock:
+            new_endpoint = SwiftEndpoint(self._swift, addr, api_callback=api_callback)
+            self.swift_endpoints.append(new_endpoint)
+            if len(self.swift_endpoints) == 1:
+                self._endpoint = new_endpoint
         # TODO: In case we have already send our local addresses around, now update this message with this new endpoint
-        self.lock.release()
         return new_endpoint
 
     def remove_endpoint(self, endpoint):
@@ -389,17 +383,16 @@ class MultiEndpoint(CommonEndpoint):
         """
         logger.info("Remove %s", endpoint)
         assert isinstance(endpoint, Endpoint), type(endpoint)
-        self.lock.acquire()
-        ret = False
-        for e in self.swift_endpoints:
-            if e == endpoint:
-                e.close()
-                self.swift_endpoints.remove(e)
-                if self._endpoint == e:
-                    self._endpoint = self._next_endpoint(e)
-                ret = True
-                break
-        self.lock.release()
+        with self.lock:
+            ret = False
+            for e in self.swift_endpoints:
+                if e == endpoint:
+                    e.close()
+                    self.swift_endpoints.remove(e)
+                    if self._endpoint == e:
+                        self._endpoint = self._next_endpoint(e)
+                    ret = True
+                    break
         return ret
     
     def get_endpoint(self, address):
@@ -594,7 +587,6 @@ class MultiEndpoint(CommonEndpoint):
         @type recv: boolean
         """
         logger.debug("Update known dispersy contacts, %s", [str(cam[0]) for cam in contacts_and_messages])
-        self.lock.acquire()
         contacts = [DispersyContact(cam[0], recv_messages=cam[1]) if recv else DispersyContact(cam[0], send_messages=cam[1]) 
                     for cam in contacts_and_messages if isinstance(cam, tuple) 
                     and not self.is_bootstrap_candidate(addr=cam[0])]
@@ -606,7 +598,6 @@ class MultiEndpoint(CommonEndpoint):
         self.dispersy_contacts.update(diff) # First update before sending them messages, just to be sure we don't start looping
         if diff: # Only useful if non empty
             self.send_addresses_to_communities([dc.address for dc in diff])
-        self.lock.release()
     
     def interface_came_up(self, addr):
         logger.debug("%s came up", addr.interface)

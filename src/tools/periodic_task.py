@@ -49,8 +49,8 @@ class Looper(Thread):
     or deleted
     """
     
-    def __init__(self, sleep=0.1):
-        Thread.__init__(self)
+    def __init__(self, sleep=0.1, name="Looper"):
+        Thread.__init__(self, name=name)
         self.setDaemon(True)
         self.sleep = sleep
         self.event = Event()

@@ -47,7 +47,7 @@ class MyCommunity(Community):
         self._update_bloomfilter = -1
         self._intro_request_updates = {}
         self._api_callback = api_callback
-        self._looper = Looper(0.1)
+        self._looper = Looper(sleep=0.1, name="MyCommunity_looper")
         self._looper.start()
         self.swift_community = SwiftCommunity(self, self.dispersy.endpoint, api_callback=api_callback)
         

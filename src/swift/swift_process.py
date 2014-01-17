@@ -436,4 +436,3 @@ class MySwiftProcess(SwiftProcess):
         if enable:
             onoff = "1"
         self.write('PEX ' + roothash_hex + ' ' + onoff + '\r\n')
-            

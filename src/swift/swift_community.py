@@ -34,7 +34,7 @@ class SwiftCommunity(object):
         self.downloads = {}
         
         self._thread_stop_event = Event()
-        self._thread_loop = Thread(target=self._loop)
+        self._thread_loop = Thread(target=self._loop, name="SwiftCommunity_periodic_loop")
         self._thread_loop.daemon = True
         self._thread_loop.start()
         
@@ -64,8 +64,6 @@ class SwiftCommunity(object):
             # Only add this peer if it is one of the addresses allowed by the download
             if self.downloads[roothash].known_address(addr) and not self.downloads[roothash].is_bad_swarm():
                 self.endpoint.swift_add_peer(d, addr, sock_addr)
-        else: # Swift is not available at this time
-            self.endpoint.enqueue_swift_queue(self.add_peer, roothash, addr, sock_addr)
             
     def clean_up_files(self, download):
         """
@@ -78,21 +76,16 @@ class SwiftCommunity(object):
         """
         if download.cleaned:
             return
-        roothash = download.roothash
         rm_state = not download.seeder()
         rm_download = DELETE_CONTENT
-        logger.debug("Clean up files, %s, %s, %s", roothash, rm_state, rm_download)        
-        if download.downloadimpl is not None:
-            if not rm_state or rm_download: # No point in doing checkpoint otherwise
-                self.endpoint.swift_checkpoint(download.downloadimpl)
-            # Do callback before removing, in case DELETE_CONTENT is True and someone wants to use it first
-            self.do_callback(MESSAGE_KEY_RECEIVE_FILE, download.filename)
-            if not download.seeder(): # If we close the download we cannot seed
-                self.endpoint.swift_remove_download(download.downloadimpl, rm_state, rm_download)
-            download.cleaned = True
-        else: # Swift is not available at this time
-            self.endpoint.enqueue_swift_queue(self.clean_up_file, download)
-        # Note that the endpoint will still have the hash and peers in its added_peers
+        logger.debug("Clean up files, %s, %s, %s", download.roothash_as_hex(), rm_state, rm_download)        
+        if not rm_state and not rm_download: # No point in doing checkpoint if not both false
+            self.endpoint.swift_checkpoint(download.downloadimpl)
+        # Do callback before removing, in case DELETE_CONTENT is True and someone wants to use it first
+        self.do_callback(MESSAGE_KEY_RECEIVE_FILE, download.filename)
+        if not download.seeder(): # If we close the download we cannot seed
+            self.endpoint.swift_remove_download(download.downloadimpl, rm_state, rm_download)
+        download.cleaned = True # Note that the swift calls might be queued
                 
     def do_callback(self, key, *args, **kwargs):
         if self._api_callback is not None:
