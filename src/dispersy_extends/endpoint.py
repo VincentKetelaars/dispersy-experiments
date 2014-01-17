@@ -32,6 +32,7 @@ from src.definitions import MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, M
 from src.dispersy_extends.payload import AddressesCarrier
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_contact import DispersyContact
+from src.download import Peer
 
 logger = get_logger(__name__)
 
@@ -277,6 +278,9 @@ class CommonEndpoint(SwiftHandler, EndpointStatistics):
                 self._dispersy._bootstrap_candidates.get(candidate.sock_addr) is not None):
                 return True
         return False
+    
+    def __str__(self):
+        return str(self.address)
 
 class MultiEndpoint(CommonEndpoint):
     '''
@@ -316,7 +320,6 @@ class MultiEndpoint(CommonEndpoint):
             self.lock.release()
             return False
         logger.debug("Send %s %d", candidates, len(packets))
-        self.update_dispersy_contacts_candidates_messages(candidates, packets, recv=False)
         
         # If filehash message, let SwiftCommunity know the peers!
         name = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False).name
@@ -325,8 +328,9 @@ class MultiEndpoint(CommonEndpoint):
             self._dispersy.notify_filehash_peers([Address.tuple(c.sock_addr) for c in candidates])
         
         for c in candidates:
-            self.determine_endpoint(Address.tuple(c.sock_addr))
-            send_success = self._endpoint.send([c], packets)
+            new_c = self.determine_endpoint(c)
+            send_success = self._endpoint.send([new_c], packets)
+            self.update_dispersy_contacts_candidates_messages([new_c], packets, recv=False)
         self.lock.release()
         return send_success
             
@@ -434,6 +438,7 @@ class MultiEndpoint(CommonEndpoint):
         
         @param peer: The address of the peer that a message will be sent to
         @type peer: Address
+        @param endpoints: List of endpoints to use (defaults to self.swift_endpoints)
         @rtype: SwiftEndpoint
         @return: List(Endpoint) that last had contact with peer
         """
@@ -444,8 +449,8 @@ class MultiEndpoint(CommonEndpoint):
             for c in e.dispersy_contacts:
                 if peer == c.address and c.last_contact() > datetime.min:
                     last_contacts.append((e, c.last_contact()))
-        sorted(last_contacts, key=lambda x: x[1], reverse=True)
-        return [lc[0] for lc in last_contacts]
+        sorted_last_contacts = sorted(last_contacts, key=lambda x: x[1], reverse=True)
+        return [lc[0] for lc in sorted_last_contacts]
     
     def _subnet_endpoints(self, peer, endpoints=[]):
         """
@@ -453,6 +458,7 @@ class MultiEndpoint(CommonEndpoint):
         These are either point to point or local connections, which will likely be fastest(?).
         
         @type peer: Address 
+        @param endpoints: List of endpoints to use (defaults to self.swift_endpoints)
         """
         if not endpoints:
             endpoints = self.swift_endpoints
@@ -460,15 +466,54 @@ class MultiEndpoint(CommonEndpoint):
         for e in endpoints:
             if e.address.same_subnet(peer.ip):
                 same_subnet.append(e)
-        return same_subnet               
+        return same_subnet
     
-    def determine_endpoint(self, peer):
+    def _get_channel_speeds(self):
+        """
+        Get up/downspeed of each swift channel
+        
+        @rtype: List of ((socket_ip, socket_port), (peer_ip, peer_port), upspeed, downspeed)
+        """
+        r = []
+        for d in self.swift.roothash2dl.values():
+            if not isinstance(d, MultiEndpoint) and len(d.midict.values()) > 0: # Ensure there is something to get
+                r.append(((d.midict.get("socket_ip", None), int(d.midict.get("socket_port", -1))),
+                         (d.midict.get("ip", None), int(d.midict.get("port", -1))),
+                         float(d.midict.get("cur_speed_up", 0)), float(d.midict.get("cur_speed_down", 0))))
+        return r
+    
+    def _top_speed_endpoints(self, peer=None, endpoints=[]):
+        """
+        Determine which endpoints have a channel with this peer (or if None, all channels of this socket), 
+        and sort them by combined up/download speed, returning only those with positive speeds
+        
+        @type peer: Address
+        @param endpoints: List of endpoints to use (defaults to self.swift_endpoints)
+        """
+        if not endpoints: # []
+            endpoints = self.swift_endpoints
+        speeds = self._get_channel_speeds()
+        r = []
+        for e in endpoints:
+            total = 0
+            for saddr, paddr, up, down in speeds:
+                if e.address.addr() == saddr and (peer is None or peer.addr() == paddr):
+                    total += up + down
+            if total > 0: # No point in adding endpoints with zero speed
+                r.append((e, total))
+        sorted_endpoints = sorted(r, key=lambda x: x[1], reverse=True) # Biggest first
+        return [se[0] for se in sorted_endpoints] # Only return endpoints
+        
+    def determine_endpoint(self, candidate):
         """
         The endpoint that will take care of the task at hand, will be chosen here. 
         The chosen endpoint will be assigned to self._endpoint
         If no appropriate endpoint is found, the current endpoint will remain.
+        Using self.dispersy_contacts it will also be determined which socket is best suited for this task,
+        and this socket will be returned as Candidate
         
-        @type peer: Address
+        @type peer: Candidate
+        @rtype: Candidate
         """
         
         def recur(endpoint):
@@ -476,36 +521,51 @@ class MultiEndpoint(CommonEndpoint):
                 recur(self._next_endpoint(endpoint))
             return endpoint
         
-        def determine():
-            # Choose the endpoint that contact last with the peer
+        def determine(peer):
+            # Choose the endpoint that currently has the highest transfer speed with this peer
+            for e in self._top_speed_endpoints(peer):
+                if e is not None and e.is_alive and e.socket_running:
+                    logger.debug("Package will be sent with fastest endpoint %s", e)
+                    return e
+            # Choose the endpoint that had contact last with the peer
             for e in self._last_endpoints(peer):
                 if e is not None and e.is_alive and e.socket_running:
+                    logger.debug("Package will be sent with the last contacted endpoint %s", e)
                     return e
             # In case no contact has been made with this peer (or those endpoint are not available)
             for e in self._subnet_endpoints(peer):
                 if e is not None and e.is_alive and e.socket_running:
-                    return e
-            
+                    logger.debug("Package will be sent with an endpoint, %s, in the same subnet", e)
+                    return e            
             return recur(self._endpoint)
         
         if (len(self.swift_endpoints) == 0):
             self._endpoint = None
         elif (len(self.swift_endpoints) > 1):
-            self._endpoint = determine()
+            self._endpoint = determine(Address.tuple(candidate.sock_addr))
         else:
             self._endpoint = self.swift_endpoints[0]
+        # TODO: Determine the best candidate for the job!
+        return candidate
         
     def i2ithread_data_came_in(self, session, sock_addr, data, incoming_addr=Address()):
         logger.debug("Data came in with %s on %s from %s", session, incoming_addr, sock_addr)
         
+        # Spoof sock_addr. Dispersy knows only about the first socket address of a peer, 
+        # to keep things clean.
+        contact = Address.tuple(sock_addr)
+        for dc in self.dispersy_contacts:
+            if dc.has_address(contact):
+                sock_addr = dc.address.addr()
+        
         e = self.get_endpoint(incoming_addr)
         if e is not None:
-            e.i2ithread_data_came_in(session, sock_addr, data)
+            e.i2ithread_data_came_in(session, sock_addr, data) # Ensure that you fool the SwiftEndpoint as well
             return
-        # In case the incoming_port number does not match any of the endpoints
+        # In case the incoming_addr does not match any of the endpoints
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
         
-        self.update_dispersy_contacts([(Address.tuple(sock_addr), [data])], recv=True)
+        self.update_dispersy_contacts([(contact, [data])], recv=True)
         
     def dispersythread_data_came_in(self, sock_addr, data, timestamp):
         self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), data)], True, timestamp)
@@ -528,20 +588,23 @@ class MultiEndpoint(CommonEndpoint):
     def update_dispersy_contacts(self, contacts_and_messages, recv=True):
         """
         Update the list of known dispersy contacts (excluding bootstrappers), with addresses and messages
-        Note that if the list grows, the new addresses will be called used for distributing
-        local addresses and adding peers to swift
+        Note that if the list grows, the new addresses will be send a list of local sockets        
+        Recv is used to determine wether the messages are incoming or outgoing
         @type contacts_and_messages: tuple(Address, Iterable(Packet))
         @type recv: boolean
         """
-        logger.debug("Update known addresses, %s", [str(cam[0]) for cam in contacts_and_messages])
+        logger.debug("Update known dispersy contacts, %s", [str(cam[0]) for cam in contacts_and_messages])
         self.lock.acquire()
         contacts = [DispersyContact(cam[0], recv_messages=cam[1]) if recv else DispersyContact(cam[0], send_messages=cam[1]) 
                     for cam in contacts_and_messages if isinstance(cam, tuple) 
                     and not self.is_bootstrap_candidate(addr=cam[0])]
-        diff = Set(contacts).difference(self.dispersy_contacts)
-        if len(diff) > 0:
-            logger.debug("New dispersy contacts: %s", [str(dc.address) for dc in diff])
-            self.dispersy_contacts.update(diff)
+        diff = []
+        for c in contacts:
+            if not any([dc.has_address(c.address) for dc in self.dispersy_contacts]): # Don't know this address
+                diff.append(c)
+                logger.info("New dispersy contact %s", c.address)
+        self.dispersy_contacts.update(diff) # First update before sending them messages, just to be sure we don't start looping
+        if diff: # Only useful if non empty
             self.send_addresses_to_communities([dc.address for dc in diff])
         self.lock.release()
     
@@ -574,6 +637,8 @@ class MultiEndpoint(CommonEndpoint):
         message = AddressesCarrier([e.address for e in self.swift_endpoints])
         for c in self._dispersy.get_communities():
             if isinstance(c, MyCommunity): # Ensure that the create_addresses_messages exists
+                # TODO: Note that it is kind of superfluous to send when we have only one socket
+                # TODO: Note also that we should consider only using active sockets
                 self._dispersy.callback.register(c.create_addresses_messages, (1,message,candidates), 
                                                  kargs={"update":False}, delay=0.0)
                 
@@ -594,6 +659,14 @@ class MultiEndpoint(CommonEndpoint):
         for e in self.swift_endpoints: # We need to add the reference to the new swift to each endpoint
             e._swift = self._swift
         # TODO: This wasn't always necessary, what changed??
+        
+    def peer_endpoints_received(self, messages):
+        for x in messages:
+            addresses = [Address.unknown(a) for a in x.payload.addresses]
+            for dc in self.dispersy_contacts:
+                if dc.address in addresses:
+                    dc.set_peer(Peer(addresses))
+                    break # There should be only one dispersy endpoint with this address
     
 class SwiftEndpoint(CommonEndpoint):
     
@@ -660,13 +733,17 @@ class SwiftEndpoint(CommonEndpoint):
     
             finally:
                 self._swift.splock.release()
-                
+            
+            # This contact may be spoofed by MultiEndpoint, which ensures that we don't have DispersyContacts
+            # that resolve to the same peer
             self.dispersy_contacts.update([DispersyContact(Address.tuple(c.sock_addr), send_messages=packets)
                                            for c in candidates if isinstance(c.sock_addr, tuple)
                                            and not self.is_bootstrap_candidate(addr=Address.tuple(c.sock_addr), candidate=c)])
         
     def i2ithread_data_came_in(self, session, sock_addr, data):
         if isinstance(sock_addr, tuple):
+            # This contact may be spoofed by MultiEndpoint, which ensures that we don't have DispersyContacts
+            # that resolve to the same peer
             self.dispersy_contacts.add(DispersyContact(Address.tuple(sock_addr), recv_messages=[data]))
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
             

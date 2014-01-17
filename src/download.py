@@ -38,6 +38,10 @@ class Peer(object):
         return h
     
     def has_any(self, addrs):
+        """
+        Return whether any of these addresses is the same as any of this peers'
+        @param addrs: List(Address)
+        """
         return len([a for a in addrs if a in self.addresses]) > 0
 
 class Download(object):
@@ -205,6 +209,9 @@ class Download(object):
     def active_addresses(self):
         return [c[1] for c in self._active_channels]
     
+    def inactive_addresses(self):
+        return Set([a for p in self._peers for a in p.addresses]).difference(self.active_addresses())
+        
     def active_peers(self):
         return [p for p in self._peers if p.has_any(self.active_addresses())]
     

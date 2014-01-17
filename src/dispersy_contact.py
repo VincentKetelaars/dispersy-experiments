@@ -13,17 +13,16 @@ class DispersyContact(object):
     Each incoming and outgoing message to this address is noted.
     '''
 
-
     def __init__(self, address, send_messages=[], recv_messages=[]):
-        self.address = address
+        self.address = address # Primary address
         self.last_send_time = datetime.min
         self.last_recv_time = datetime.min
         self.count_send = 0
         self.count_recv = 0
         self.peer = None
-        if not send_messages:
+        if send_messages: # not []
             self.send(send_messages)
-        if not recv_messages:
+        if recv_messages: # not []
             self.recv(recv_messages)
        
     def recv(self, messages):
@@ -45,7 +44,17 @@ class DispersyContact(object):
         return max(self.last_send_time, self.last_recv_time)
     
     def set_peer(self, peer):
+        """
+        @type peer: Peer
+        """
         self.peer = peer
+        
+    def has_address(self, address):
+        """
+        Return whether this address belongs to this contact
+        @type address: Address
+        """
+        return address == self.address or (self.peer is not None and self.peer.has_any([address]))
         
     # We only care about the address when comparing
     def __eq__(self, other):
@@ -60,5 +69,6 @@ class DispersyContact(object):
     
     # Create this hash function to make it easily comparible in a set..
     # The address should be the key
+    # We do not use peer because we rely on the user to ensure that the same peer does not get multiple DispersyContacts
     def __hash__(self, *args, **kwargs):
         return hash(self.address)

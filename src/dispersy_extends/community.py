@@ -4,7 +4,7 @@ Created on Aug 7, 2013
 @author: Vincent Ketelaars
 '''
 from threading import Event
-from os.path import isfile, basename
+from os.path import isfile
 
 from src.logger import get_logger
 from dispersy.community import Community
@@ -115,6 +115,7 @@ class MyCommunity(Community):
         Handle Callback
         """
         self.swift_community.peer_endpoints_received(messages)
+        self.dispersy.endpoint.peer_endpoints_received(messages)
         
     def api_message_check(self, messages):
         """
@@ -164,6 +165,7 @@ class MyCommunity(Community):
                                   distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
                                   payload=(file_hash_message.filename, file_hash_message.directories, 
                                            file_hash_message.roothash, file_hash_message.size, self._addresses()))
+                        # TODO: Perhaps only send active sockets?
                         for _ in xrange(count)]
             self.dispersy.store_update_forward(messages, store, update, forward)
                 

@@ -275,9 +275,8 @@ class SwiftCommunity(object):
         logger.debug("Add new peers!")
         for roothash in self.downloads.keys():
             if self.downloads[roothash].seeder():
-                for peer in self.downloads[roothash].peers():
-                    for addr in peer.addresses:
-                        self.add_peer(roothash, addr, sock_addr)
+                for addr in self.downloads[roothash].inactive_addresses():
+                    self.add_peer(roothash, addr, sock_addr)
                         
     def get_download_by_file(self, file_):
         for d in self.downloads.itervalues():

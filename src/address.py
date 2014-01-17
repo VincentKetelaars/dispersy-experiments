@@ -58,7 +58,7 @@ class Address(object):
             return cls(ip=addr.ip, port=addr.port, family=addr.family, flowinfo=addr.flowinfo, scopeid=addr.scopeid, 
                        interface=addr.interface)
         except:
-            logger.debug("Not an Address instance!")
+            logger.debug("%s is not an Address instance!", addr)
             return cls()
     
     @classmethod
@@ -69,7 +69,7 @@ class Address(object):
             port = int(port_str)
             return cls(port=port)
         except:
-            logger.debug("Not a number format! Fall back to default")
+            logger.debug("%s is not a number format! Fall back to default", port_str)
             return cls()
         
     @classmethod
@@ -79,7 +79,7 @@ class Address(object):
             (ip, port) = cls.parse_ipv4_string(addr_str.strip())
             return cls(ip=ip, port=port, family=AF_INET)
         except:
-            logger.debug("Not an ipv4 format! Fall back to default")
+            logger.debug("%s is not an ipv4 format! Fall back to default", addr_str)
             return cls()
         
     @classmethod
@@ -90,7 +90,7 @@ class Address(object):
             (ip, port, flowinfo, scopeid) = cls.parse_ipv6_string(addr_str.strip())
             return cls(ip=ip, port=port, family=AF_INET6, flowinfo=flowinfo, scopeid=scopeid)
         except:
-            logger.debug("Not an ipv6 format! Fall back to default ipv6")
+            logger.debug("%s is not an ipv6 format! Fall back to default ipv6", addr_str)
             return cls(ip="::0", family=AF_INET6)
     
     @classmethod
@@ -117,7 +117,7 @@ class Address(object):
                 # Assume ipv4
                 return cls.ipv4(addr)
         except:
-            logger.debug("Unknown address format! Fall back to default")
+            logger.warning("%s is an unknown address format! Fall back to default", addr)
             return cls()
             
     @classmethod
@@ -128,7 +128,7 @@ class Address(object):
             else:
                 return cls.ipv4(tuple_addr[0] + ":" + str(tuple_addr[1]))
         except:
-            logger.exception("Irregular tuple! Fall back to default")
+            logger.debug("%s is an irregular tuple! Fall back to default", tuple_addr)
             return cls()
     
     @staticmethod
