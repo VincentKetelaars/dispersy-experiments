@@ -134,16 +134,11 @@ class SwiftCommunity(object):
         def create_file():
             try:
                 path = join(self.dcomm.dest_dir, filename)
-                f = open(path, "w")
-                f.write(contents)
+                with open(path, "w") as f:
+                    f.write(contents)
                 self.do_callback(MESSAGE_KEY_RECEIVE_FILE, filename)
-            except:
-                logger.exception("Can't write to %s", filename)
-            finally:
-                try:
-                    f.close()
-                except:
-                    pass
+            except IOError:
+                logger.exception("Can't write to %s", path)
                 
         t = Thread(target=create_file, name="create_" + filename)
         t.start()

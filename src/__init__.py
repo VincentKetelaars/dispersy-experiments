@@ -11,7 +11,7 @@ if exists("logger.conf"):
     try:
         fileConfig("logger.conf")
         print "logger.conf configured logging"
-    except:
+    except IOError:
         print "Could not open logger.conf", sys.exc_info()
 else:
     print "logger.conf does not exist"

@@ -81,11 +81,11 @@ class TestSwiftCommunity(unittest.TestCase):
         self._dispersy2.stop()
         for f in FILES:
             remove_files(f) # Remove hashmap and bin files
-#         dir_ = os.path.join(self._dest_dir, self._directories)
-#         if os.path.isdir(dir_):
-#             for f in os.listdir(dir_):
-#                 os.remove(os.path.join(dir_, f))
-#             os.removedirs(dir_)
+        dir_ = os.path.join(self._dest_dir, self._directories)
+        if os.path.isdir(dir_):
+            for f in os.listdir(dir_):
+                os.remove(os.path.join(dir_, f))
+            os.removedirs(dir_)
           
     def test_seed_and_download(self):           
         self.add_file(self._callback, self._community, 

@@ -18,7 +18,7 @@ def get_uav_logger(name):
     try:
         from Common.API import get_log
         uav_logger = get_log(name)
-    except:
+    except ImportError:
         pass    
 #     logger.addHandler(logging.StreamHandler(sys.stderr))
 #     logger.setLevel(logging.DEBUG)

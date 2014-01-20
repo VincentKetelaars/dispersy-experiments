@@ -172,7 +172,7 @@ class SwiftHandler(TunnelEndpoint):
         d = None
         try:
             d = self._swift.roothash2dl[roothash]
-        except:
+        except KeyError:
             logger.error("Could not retrieve downloadimpl from roothash2dl")
         finally:
             self.lock.release()
@@ -214,8 +214,11 @@ class SwiftHandler(TunnelEndpoint):
             temp_queue = Queue.Queue();
             while not self._swift_cmd_queue.empty():
                 temp_queue.put(self._swift_cmd_queue.get())
-                
-            self._dispersy.on_swift_restart(temp_queue)               
+            
+            try:
+                self._dispersy.on_swift_restart(temp_queue)    
+            except AttributeError:
+                pass           
                             
             while not temp_queue.empty():
                 self._swift_cmd_queue.put(temp_queue.get())
@@ -818,7 +821,7 @@ class SwiftEndpoint(CommonEndpoint):
         if addr is not None:
             try:
                 self._swift.listenaddrs.remove(self.address) # Remove old value
-            except:
+            except KeyError:
                 logger.exception("Why can't we remove this address? %s", self.address)
             self.address = addr
         if not self._swift.is_ready():
@@ -845,8 +848,8 @@ def get_hash(filename, swift_path):
                 with file(mbinmap) as f:
                     f.readline()
                     hashline = f.readline()
-                    roothash = hashline.strip().split(" ")[2]
-            except Exception:
+                roothash = hashline.strip().split(" ")[2]
+            except (IndexError, IOError):
                 logger.exception("Reading mbinmap failed")
         if roothash is not None:
             logger.debug("Found roothash in mbinmap: %s", roothash)
@@ -888,7 +891,7 @@ def try_socket(addr, log=True):
         s = socket.socket(addr.family, socket.SOCK_DGRAM)
         s.bind(addr.addr())
         return True
-    except Exception, ex:
+    except socket.error, ex:
         (error_number, error_message) = ex
         if error_number == EADDRINUSE: # Socket is already bound
             if log:

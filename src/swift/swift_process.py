@@ -19,10 +19,11 @@ from Tribler.Core.Swift.SwiftProcess import SwiftProcess, DONE_STATE_WORKING, DO
 
 from src.address import Address
 from src.definitions import LIBEVENT_LIBRARY
+import socket
 
 try:
     os.environ["LD_LIBRARY_PATH"]
-except:
+except KeyError:
     os.environ["LD_LIBRARY_PATH"] = LIBEVENT_LIBRARY
 
 logger = get_logger(__name__)
@@ -241,7 +242,6 @@ class MySwiftProcess(SwiftProcess):
             roothash = binascii.unhexlify(words[1])
 
             if words[0] == "ERROR":
-                print >> sys.stderr, "sp: i2ithread_readlinecallback:", cmd
                 if words[2] == "bad" and words[3] == "swarm": # bad swarm does not lead to shutdown!!!!
                     logger.debug("This is a bad swarm %s", words[1])
                     d = self.roothash2dl.get(roothash, None)
@@ -253,39 +253,12 @@ class MySwiftProcess(SwiftProcess):
                 else:
                     self.connection_lost(self.get_cmdport(), error=words[2:])
 
-            elif words[0] == "CLOSE_EVENT":
-                roothash_hex = words[1]
-                address = words[2].split(":")
-                address = (address[0], int(address[1]))
-                raw_bytes_up = int(words[3])
-                raw_bytes_down = int(words[4])
-                cooked_bytes_up = int(words[5])
-                cooked_bytes_down = int(words[6])
-
-                if roothash_hex in self._channel_close_callbacks:
-                    for callback in self._channel_close_callbacks[roothash_hex]:
-                        try:
-                            callback(roothash_hex, address, raw_bytes_up, raw_bytes_down, cooked_bytes_up, cooked_bytes_down)
-                        except:
-                            pass
-                for callback in self._channel_close_callbacks["ALL"]:
-                    try:
-                        callback(roothash_hex, address, raw_bytes_up, raw_bytes_down, cooked_bytes_up, cooked_bytes_down)
-                    except:
-                        pass
-
             self.splock.acquire()
             try:
-                if roothash not in self.roothash2dl.keys():
-                    if DEBUG:
-                        print >> sys.stderr, "sp: i2ithread_readlinecallback: unknown roothash", words[1]
-                    return
-
                 d = self.roothash2dl[roothash]
-            except:
-                # print >>sys.stderr,"GOT", words
-                # print >>sys.stderr,"HAVE", [key.encode("HEX") for key in self.roothash2dl.keys()]
-                raise
+            except AttributeError:
+                logger.debug("Unknown roothash %s", roothash)
+                return
             finally:
                 self.splock.release()
 
@@ -330,7 +303,7 @@ class MySwiftProcess(SwiftProcess):
             logger.debug("CMD OUT: %s", msg[0:100])
             try:
                 SwiftProcess.write(self, msg)
-            except:
+            except (AttributeError, socket.error):
                 logger.warning("FastConnection is down")
             
     def connection_lost(self, port, error=None, output_read=False):

@@ -20,6 +20,7 @@ class FakeSwift(object):
     def __init__(self, addresses):
         self.listenaddrs = addresses
         self.confirmedaddrs = addresses
+        self.roothash2dl = {}
         
     def set_on_swift_restart_callback(self, callback):
         pass

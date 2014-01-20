@@ -63,12 +63,12 @@ class TestAPI(unittest.TestCase):
         self.api1.stop()
         try:
             self.api2.stop() # Only necessary when test creates this second api
-        except:
+        except AttributeError:
             pass
         self.api1._done_event.wait(2)
         try:
             self.api2._done_event.wait(2)
-        except:
+        except AttributeError:
             pass
         for f in self.files_to_remove:
             remove_files(f, True)

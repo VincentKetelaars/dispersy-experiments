@@ -57,7 +57,7 @@ class Address(object):
         try:
             return cls(ip=addr.ip, port=addr.port, family=addr.family, flowinfo=addr.flowinfo, scopeid=addr.scopeid, 
                        interface=addr.interface)
-        except:
+        except AttributeError:
             logger.debug("%s is not an Address instance!", addr)
             return cls()
     
@@ -68,7 +68,7 @@ class Address(object):
         try:
             port = int(port_str)
             return cls(port=port)
-        except:
+        except ValueError:
             logger.debug("%s is not a number format! Fall back to default", port_str)
             return cls()
         
@@ -78,7 +78,7 @@ class Address(object):
         try:
             (ip, port) = cls.parse_ipv4_string(addr_str.strip())
             return cls(ip=ip, port=port, family=AF_INET)
-        except:
+        except AttributeError:
             logger.debug("%s is not an ipv4 format! Fall back to default", addr_str)
             return cls()
         
@@ -89,7 +89,7 @@ class Address(object):
         try:
             (ip, port, flowinfo, scopeid) = cls.parse_ipv6_string(addr_str.strip())
             return cls(ip=ip, port=port, family=AF_INET6, flowinfo=flowinfo, scopeid=scopeid)
-        except:
+        except (AttributeError, ValueError):
             logger.debug("%s is not an ipv6 format! Fall back to default ipv6", addr_str)
             return cls(ip="::0", family=AF_INET6)
     
@@ -102,7 +102,7 @@ class Address(object):
             p = int(addr)
             # If it is an integer, it is a port
             return cls(port=p)
-        except:
+        except ValueError:
             pass
         if len(addr) == 2:
             return cls.tuple(addr)
@@ -116,7 +116,7 @@ class Address(object):
             else:
                 # Assume ipv4
                 return cls.ipv4(addr)
-        except:
+        except AttributeError:
             logger.warning("%s is an unknown address format! Fall back to default", addr)
             return cls()
             
@@ -127,7 +127,7 @@ class Address(object):
                 return cls.ipv6(tuple_addr[0] + ":" + str(tuple_addr[1]))
             else:
                 return cls.ipv4(tuple_addr[0] + ":" + str(tuple_addr[1]))
-        except:
+        except IndexError:
             logger.debug("%s is an irregular tuple! Fall back to default", tuple_addr)
             return cls()
     
@@ -136,7 +136,10 @@ class Address(object):
         sp = addr_str.split(":")
         port = 0
         if len(sp) == 2:
-            port = int(sp[1])
+            try:
+                port = int(sp[1])
+            except ValueError:
+                pass
         return (sp[0], port)
     
     @staticmethod
@@ -186,13 +189,10 @@ class Address(object):
         if self.is_wildcard_ip():
             self._if = Interface(self.IFNAME_WILDCARD, self._ip, self._ip, self._ip)
             return True
-        try:
-            for if_ in get_interface_addresses():            
-                if self.same_subnet(if_.address, interface=if_): # Same subnet
-                    self._if = Interface(if_.name, if_.address, if_.netmask, if_.broadcast)
-                    return True
-        except:
-            logger.exception("Failed to find %s", self._ip)
+        for if_ in get_interface_addresses():            
+            if self.same_subnet(if_.address, interface=if_): # Same subnet
+                self._if = Interface(if_.name, if_.address, if_.netmask, if_.broadcast)
+                return True
         return False
     
     def same_subnet(self, ip, interface=None):
@@ -203,7 +203,7 @@ class Address(object):
         if interface is None:
             interface = self._if
         if interface is None:
-            return False # TODO: Not false, but unknown
+            return False # TODO: Not false, but unknown, raise exception?
         return (self.ipstr_to_int(ip) & self.ipstr_to_int(interface.netmask) == 
                     self.ipstr_to_int(self.ip) & self.ipstr_to_int(interface.netmask))
     

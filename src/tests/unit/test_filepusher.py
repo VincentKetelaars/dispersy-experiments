@@ -17,11 +17,8 @@ all_success = False
         
 def success_decorater(func):
     def dec(*args, **kwargs):
-        try:
-            func(*args, **kwargs)
-            TestFilePusher.set_success()
-        except:
-            raise
+        func(*args, **kwargs)
+        TestFilePusher.set_success()
     return dec
 
 class TestFilePusher(unittest.TestCase): 

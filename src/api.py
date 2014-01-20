@@ -87,7 +87,7 @@ class PipeHandler(object):
             self.is_alive_event.wait()
             try:
                 self.conn.send((key, args, kwargs))
-            except:
+            except ValueError:
                 logger.exception("%s failed to send %s %s %s", self.name, key, args, kwargs)
         
         self.sender.put(send)
@@ -105,7 +105,7 @@ class PipeHandler(object):
         try:
             func = self.MESSAGE_KEY_MAP[message[0]]
             func(*message[1], **message[2])
-        except:
+        except KeyError:
             logger.exception("%s failed to dispatch incoming message %d %s %s", self.name, message[0], message[1], message[2])
             
     def _connection_process_gone(self):
@@ -123,7 +123,7 @@ class API(Thread, PipeHandler):
         self._state = STATE_NOT
         parent_conn, self.child_conn = Pipe()
         
-        self.MESSAGE_KEY_MAP = {MESSAGE_KEY_STOP : self._api_stop,
+        self.MESSAGE_KEY_MAP = {MESSAGE_KEY_STOP : self.on_dispersy_stopped,
                                 MESSAGE_KEY_STATE : self._state_change,
                                 MESSAGE_KEY_RECEIVE_FILE : self.file_received_callback,
                                 MESSAGE_KEY_API_MESSAGE : self.message_received_callback,
@@ -181,7 +181,7 @@ class API(Thread, PipeHandler):
         logger.debug("Joining %s", self._children_recur[0] if self._children_recur else "child")
         try:
             self.receiver_api.join(1) # If the process hasn't started, you cannot join it
-        except:
+        except RuntimeError:
             pass
         
         # join should timeout after 1 second if necessary (should be plenty enough time for normal join)
@@ -191,13 +191,13 @@ class API(Thread, PipeHandler):
                 os.kill(pid, signal.SIGKILL) # Kill child process
                 had_to_kill = True
                 logger.debug("Had to kill process %d", pid)
-            except:
+            except OSError:
                 pass
         
         if had_to_kill: # In case a hard kill was necessary we have to try and join again
             try:
                 self.receiver_api.join(1) # Try joining again
-            except:
+            except RuntimeError:
                 pass
         logger.debug("finished %s", self._children_recur[0])
     
@@ -320,7 +320,7 @@ class ReceiverAPI(PipeHandler):
         logger.debug("Calling DispersyInstance with %s %s", args, kwargs)
         try:
             self.dispersy_instance = DispersyInstance(*args, **kwargs)
-        except:
+        except TypeError:
             logger.exception("Could not initiate Dispersy!")
             self.is_alive_event.set()
             self.send_message(MESSAGE_KEY_STOP)
@@ -463,7 +463,7 @@ class ReceiverAPI(PipeHandler):
         try:
             func = self.dispersy_callbacks_map[key]
             func(*args, **kwargs)
-        except:
+        except KeyError:
             self.send_message(key, *args, **kwargs)            
 
     def _state_change(self, state):

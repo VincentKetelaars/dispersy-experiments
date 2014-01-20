@@ -147,12 +147,11 @@ class DispersyInstance(object):
             if self._filepusher is not None:
                 self._filepusher.stop()
             return self._dispersy.stop()
-        except:
-            logger.error("STOPPING HAS FAILED!")
+        except AttributeError:
+            logger.error("Could not stop Dispersy")
         finally:
             self.state = STATE_DONE
             # TODO: How do we make sure that we are completely done?
-            pass
 
     @property
     def state(self):

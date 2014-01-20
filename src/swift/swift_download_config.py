@@ -56,7 +56,7 @@ class FakeLaunchManyCore(object):
                 (infohash, pstate) = d.network_checkpoint()
                 self.save_download_pstate(infohash, pstate)
         except:
-            pass
+            logger.exception("What kind of exception can you throw?")
         
     def save_download_pstate(self, infohash, pstate):
         """ Called by network thread """

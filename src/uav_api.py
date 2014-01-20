@@ -95,7 +95,7 @@ class UAVAPI(API):
         
     def on_dispersy_stopped(self):
         logger.debug("Dispersy has stopped")
-        self._stop()
+        self.stop()
         
     def on_quit(self, signal, frame):
         logger.debug("Asked to quit")
@@ -158,7 +158,7 @@ class UAVAPI(API):
                 self.status[base_endpoint + name + ".total_up"] = e["total_up"]
                 self.status[base_endpoint + name + ".total_down"] = e["total_down"]
                 self.status[base_endpoint + name + ".total_send"] = e["total_send"]
-        except:
+        except KeyError:
             pass
             
     def socket_state_callback(self, address, state):
@@ -202,7 +202,7 @@ class UAVAPI(API):
             parameters = []
             try:
                 parameters = self.cfg.get(param).get_children()
-            except:
+            except AttributeError:
                 logger.exception("Failed to recover %s", param)
             return parameters
         
@@ -226,7 +226,7 @@ class UAVAPI(API):
         """
         try:
             res = self.db_reader.get_last_status_value(channel, value)
-        except:
+        except AttributeError:
             logger.exception("Can't get %s %s", channel, value)
             return None 
         return None if res[1] is None else res[1].encode("UTF-8")
@@ -235,7 +235,7 @@ class UAVAPI(API):
         channels = []
         try:
             channels = self.db_reader.get_channels()
-        except:
+        except AttributeError:
             pass
         return [c for c in channels if c.startswith("Network.Dialer") and not c.endswith("ChannelChecker")]
     
