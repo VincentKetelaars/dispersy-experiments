@@ -189,6 +189,9 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
             d['raw_dtotal'] = channel['raw_bytes_down'] / 1024.0
             d['current_speed_up'] = channel["cur_speed_up"] / 1024.0
             d['current_speed_down'] = channel["cur_speed_down"] / 1024.0
+            d['send_buffer'] = channel["send_queue"]
+            d['last_packet_drop'] = channel["last_drop"]
+            d['average_rtt'] = channel["avg_rtt"]
             plist.append(d)
         
         total = {'timestamp' : self.midict['timestamp'], 'raw_total_up' : self.midict['raw_bytes_up'] / 1024.0, 
