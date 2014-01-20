@@ -122,12 +122,7 @@ class Download(object):
         return self._bad_swarm
     
     def got_moreinfo(self):
-        channels = []
-        try:
-            channels = self.downloadimpl.midict["channels"]
-        except:
-            logger.exception("No channels!")
-        for c in channels:
+        for c in self.downloadimpl.midict.get("channels", []):
             self._active_channels.add((Address(ip=c["socket_ip"], port=int(c["socket_port"])), 
                                        Address(ip=c["ip"], port=int(c["port"])))) # TODO: Add IPv6
     
@@ -214,21 +209,7 @@ class Download(object):
         
     def active_peers(self):
         return [p for p in self._peers if p.has_any(self.active_addresses())]
-    
-    def speed(self, direction):
-        try:
-            return self.downloadimpl.get_current_speed(direction)
-        except:
-            logger.debug("Could not fetch speed %s", direction)
-            return 0
-    
-    def total(self, direction, raw=False):
-        try:
-            return self.downloadimpl.midict[("raw_" if raw else "") + "bytes_" + direction] / 1024.0
-        except:
-            logger.debug("Could not fetch total %s %s", direction, raw)
-            return 0
-    
+        
     def package(self):
         """
         @return dictionary with data from this class
@@ -236,8 +217,8 @@ class Download(object):
         data = {"filename" : self.filename, "roothash" : self.roothash_as_hex(), "seeding" : self.seeder(), "path" : self.path(), 
                 "leeching" : not self.is_finished(), "dynasize" : self.downloadimpl.get_dynasize(),                        
                 "progress" : self.downloadimpl.get_progress(),                             
-                "current_speed_down" : self.speed("down"),
-                "current_speed_up" : self.speed("up"),   
+                "current_speed_down" : self.downloadimpl.speed("down"),
+                "current_speed_up" : self.downloadimpl.speed("up"),   
                 "leechers" : self.downloadimpl.numleech, "seeders" : self.downloadimpl.numseeds,
                 "channels" : len(self._active_channels),
                 "moreinfo" : self.downloadimpl.network_create_spew_from_channels()}
@@ -246,6 +227,6 @@ class Download(object):
     def channel_closed(self, socket_addr, peer_addr):
         try:
             self._active_channels.remove((socket_addr, peer_addr))
-        except:
+        except KeyError:
             logger.warning("%s, %s channel should have been in the active channels set", socket_addr, peer_addr)
         

@@ -12,6 +12,9 @@ import test_runner
 import test_address
 import test_download
 import test_api
+import test_dispersy_instance
+import test_periodic_task
+import test_swift_community
 
 def suite():
     suite = unittest.TestSuite()
@@ -25,6 +28,9 @@ def suite():
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_address))
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_download))
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_api))
+    suite.addTest(unittest.TestLoader().loadTestsFromModule(test_dispersy_instance))
+    suite.addTest(unittest.TestLoader().loadTestsFromModule(test_periodic_task))
+    suite.addTest(unittest.TestLoader().loadTestsFromModule(test_swift_community))
     # For testing of tests
 #     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(test_endpoint.TestEndpointNoConnection))
     return suite

@@ -98,8 +98,10 @@ class FilePusher(object):
     def send_file_hash_message(self, absfilename, dirs=None):
         roothash = get_hash(absfilename, self.swift_path)
         size = getsize(absfilename)
-        logger.debug("Determined roothash %s, for %s, with dirs %s", roothash, absfilename, dirs)
-        self._callback(message=FileHashCarrier(absfilename, dirs, roothash, size, None))
+        modified = getmtime(absfilename)
+        logger.debug("Determined roothash %s, for %s, with dirs %s of size %d at time %f", 
+                     roothash, absfilename, dirs, size, modified)
+        self._callback(message=FileHashCarrier(absfilename, dirs, roothash, size, modified, None))
             
     def stop(self):
         """

@@ -7,7 +7,6 @@ import os
 import Queue
 import socket
 import signal
-import logging.config
 from threading import Thread, Event
 from multiprocessing import Process, Pipe
 

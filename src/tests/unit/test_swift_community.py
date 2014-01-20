@@ -12,7 +12,7 @@ from src.swift.swift_process import MySwiftProcess # Before other import because
 from dispersy.callback import Callback
 
 from src.address import Address
-from src.definitions import SWIFT_BINPATH, TIMEOUT_TESTS, SLEEP_TIME,\
+from src.definitions import SWIFT_BINPATH, SLEEP_TIME,\
     MASTER_MEMBER_PUBLIC_KEY, SECURITY
 from src.dispersy_extends.endpoint import MultiEndpoint, get_hash
 from src.dispersy_extends.community import MyCommunity
@@ -20,7 +20,7 @@ from src.dispersy_extends.mydispersy import MyDispersy
 from src.dispersy_extends.payload import FileHashCarrier
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 
-from src.tests.unit.definitions import DIRECTORY, FILES, DISPERSY_WORKDIR
+from src.tests.unit.definitions import DIRECTORY, FILES, DISPERSY_WORKDIR, TIMEOUT_TESTS
 from src.tests.unit.test_endpoint import remove_files
 
 from src.logger import get_logger
@@ -89,7 +89,8 @@ class TestSwiftCommunity(unittest.TestCase):
           
     def test_seed_and_download(self):           
         self.add_file(self._callback, self._community, 
-                      FileHashCarrier(self._filename, self._directories, self._roothash, None))
+                      FileHashCarrier(self._filename, self._directories, self._roothash, os.path.getsize(self._filename), 
+                                      os.path.getmtime(self._filename), None))
         self._community.add_candidate(self.candidate(self._addrs2[0].addr()))
            
         self._wait(self._swiftcomm2)
@@ -98,9 +99,11 @@ class TestSwiftCommunity(unittest.TestCase):
     
     def test_seed_and_download_both(self):           
         self.add_file(self._callback, self._community, 
-                      FileHashCarrier(self._filename, self._directories, self._roothash, None))
+                      FileHashCarrier(self._filename, self._directories, self._roothash, os.path.getsize(self._filename), 
+                                      os.path.getmtime(self._filename), None))
         self.add_file(self._callback2, self._community2, 
-                      FileHashCarrier(self._filename2, self._directories, self._roothash2, None))
+                      FileHashCarrier(self._filename2, self._directories, self._roothash2, os.path.getsize(self._filename2), 
+                                      os.path.getmtime(self._filename2), None))
         self._community.add_candidate(self.candidate(self._addrs2[0].addr()))
            
         self._wait(self._swiftcomm, self._swiftcomm2, n=2)
@@ -110,15 +113,18 @@ class TestSwiftCommunity(unittest.TestCase):
     
     def test_duplicate_roothash_and_cleanup(self):           
         self.add_file(self._callback, self._community, 
-                      FileHashCarrier(self._filename, self._directories, self._roothash, None))
+                      FileHashCarrier(self._filename, self._directories, self._roothash, os.path.getsize(self._filename), 
+                                      os.path.getmtime(self._filename), None))
         self._community.add_candidate(self.candidate(self._addrs2[0].addr()))
         self.add_file(self._callback, self._community, 
-                      FileHashCarrier(self._filename, self._directories, self._roothash, None))
+                      FileHashCarrier(self._filename, self._directories, self._roothash, os.path.getsize(self._filename), 
+                                      os.path.getmtime(self._filename), None))
         self._community.add_candidate(self.candidate(self._addrs2[0].addr()))
         file2 = FILES[1]
         roothash2 = get_hash(file2, SWIFT_BINPATH)
         self.add_file(self._callback, self._community, 
-                      FileHashCarrier(file2, self._directories, roothash2, None))
+                      FileHashCarrier(file2, self._directories, roothash2, os.path.getsize(file2), 
+                                      os.path.getmtime(file2), None))
         # TODO: Make sure that we're not doing too many things twice
         self._wait(self._swiftcomm2)
          
@@ -140,7 +146,8 @@ class TestSwiftCommunity(unittest.TestCase):
         # Send fake message over cmdgw, which will lead to an error 
         self._endpoint._swift.write("message designed to crash tcp conn\n")
         self.add_file(self._callback, self._community, 
-                      FileHashCarrier(self._filename, self._directories, self._roothash, None))
+                      FileHashCarrier(self._filename, self._directories, self._roothash, os.path.getsize(self._filename), 
+                                      os.path.getmtime(self._filename), None))
         self._community.add_candidate(self.candidate(self._addrs2[0].addr()))
   
         self._wait(self._swiftcomm2)
@@ -157,10 +164,8 @@ class TestSwiftCommunity(unittest.TestCase):
             for sc in scomms:
                 for d in sc.downloads.values():
                     if not d.is_finished():
-                        logger.debug("Not ready %s", d.roothash_as_hex())
                         check = False
                 if len(sc.downloads.values()) < n:
-                    logger.debug("%s has only %d downloads", sc, len(sc.downloads.values()))
                     check = False
             if check:
                 break

@@ -229,7 +229,7 @@ class MySwiftProcess(SwiftProcess):
             state = -1
             try:
                 state = int(words[2])
-            except:
+            except ValueError:
                 pass
             if saddr != Address():
                 if state == 0 and not saddr in self.confirmedaddrs:
@@ -248,7 +248,7 @@ class MySwiftProcess(SwiftProcess):
                     if d is not None:
                         try:
                             d._bad_swarm_callback(roothash) # TODO: Callback should be directly, not via downloadimpl
-                        except:
+                        except AttributeError:
                             pass
                 else:
                     self.connection_lost(self.get_cmdport(), error=words[2:])

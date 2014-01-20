@@ -101,7 +101,8 @@ class MyCommunity(Community):
         for x in messages:
             if len(x.payload.filename) >= 1 and x.payload.directories is not None and len(x.payload.roothash) == HASH_LENGTH:
                 self.swift_community.filehash_received(x.payload.filename, x.payload.directories, 
-                                                       x.payload.roothash, x.payload.size, x.payload.addresses, x.destination)
+                                                       x.payload.roothash, x.payload.size, x.payload.timestamp,
+                                                       x.payload.addresses, x.destination)
     
     def addresses_message_check(self, messages):
         """
@@ -164,13 +165,15 @@ class MyCommunity(Community):
             messages = [meta.impl(authentication=(self.my_member,), 
                                   distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
                                   payload=(file_hash_message.filename, file_hash_message.directories, 
-                                           file_hash_message.roothash, file_hash_message.size, self._addresses()))
+                                           file_hash_message.roothash, file_hash_message.size, 
+                                           file_hash_message.timestamp, self._addresses()))
                         # TODO: Perhaps only send active sockets?
                         for _ in xrange(count)]
             self.dispersy.store_update_forward(messages, store, update, forward)
                 
             # Let Swift know that it should seed this file
-            self.swift_community.add_file(file_hash_message.filename, file_hash_message.roothash, messages[0].destination)
+            self.swift_community.add_file(file_hash_message.filename, file_hash_message.roothash, messages[0].destination,
+                                          file_hash_message.size, file_hash_message.timestamp)
                 
     def create_addresses_messages(self, count, addresses_message, candidates, store=True, update=True, forward=True):
         """

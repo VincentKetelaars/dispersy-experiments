@@ -89,26 +89,21 @@ PATH_SEPARATOR = "/"
 DISTRIBUTION_DIRECTION = u"ASC" # "ASC" or "DESC"
 DISTRIBUTION_PRIORITY = 127
 NUMBER_OF_PEERS_TO_SYNC = 1
-HASH_LENGTH = 40
+HASH_LENGTH = 40 # HEX CHARACTERS
 
 SMALL_FILE_MESSAGE_NAME = u"small_file_message"
 FILE_HASH_MESSAGE_NAME = u"file_hash_message"
 ADDRESSES_MESSAGE_NAME = u"addresses_message"
 API_MESSAGE_NAME = u"api_message"
 
-MIN_MTU = 1500 # Bloomfilters will be this big unless we change that as well
-MAX_MTU = 2**16
-DISPERSY_MESSAGE_MINIMUM = 60
+MIN_MTU = 1500 # Bytes. Bloomfilters will be this big unless we change that as well
+MAX_MTU = 2**16 # Bytes
+DISPERSY_MESSAGE_MINIMUM = 60 # Bytes
 MAX_FILE_SIZE = MAX_MTU - DISPERSY_MESSAGE_MINIMUM
 
 # Filepusher
 FILETYPES_NOT_TO_SEND = [".mhash",".mbinmap"]
 FILENAMES_NOT_TO_SEND = ["swifturl-"]
-
-"""
-Tests
-"""
-TIMEOUT_TESTS = 10 # Seconds
 
 """
 Swift
@@ -118,6 +113,8 @@ LIBEVENT_LIBRARY = "/usr/local/lib"
 MOREINFO = True # Don't change this to False because it might affect things
 DELETE_CONTENT = False # If True it will be deleted immediately when finished, after callback
 PEXON = False # If True Swift might disseminate data to unauthorized peers
+MAX_CONCURRENT_DOWNLOADING_SWARMS = 5
+ALMOST_DONE_DOWNLOADING_TIME = 5.0 # Seconds
 
 """
 Timeout

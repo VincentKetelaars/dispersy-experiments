@@ -43,7 +43,7 @@ class SmallFilePayload(Payload):
         
 class FileHashCarrier():
     
-    def __init__(self, filename, directories, roothash, size, addresses):
+    def __init__(self, filename, directories, roothash, size, timestamp, addresses):
         self._filename = filename
         if directories is None:
             self._directories = ""
@@ -51,6 +51,7 @@ class FileHashCarrier():
             self._directories = directories
         self._roothash = roothash
         self._size = size
+        self._timestamp = timestamp # Time in seconds since epoch
         self._addresses = addresses
         
     @property
@@ -70,6 +71,10 @@ class FileHashCarrier():
         return self._size 
     
     @property
+    def timestamp(self):
+        return self._timestamp
+    
+    @property
     def addresses(self):
         return self._addresses
     
@@ -77,12 +82,13 @@ class FileHashPayload(Payload):
     
     class Implementation(Payload.Implementation):
         
-        def __init__(self, meta, filename, directories, roothash, size, addresses):
+        def __init__(self, meta, filename, directories, roothash, size, timestamp, addresses):
             super(Payload.Implementation, self).__init__(meta)
             self._filename = basename(filename)
             self._directories = directories
             self._roothash = roothash
             self._size = size
+            self._timestamp = timestamp # Time in seconds since epoch
             self._addresses = addresses
         
         @property
@@ -100,6 +106,10 @@ class FileHashPayload(Payload):
         @property
         def size(self):
             return self._size
+        
+        @property
+        def timestamp(self):
+            return self._timestamp
 
         @property
         def addresses(self):

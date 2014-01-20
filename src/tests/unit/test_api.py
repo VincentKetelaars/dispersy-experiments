@@ -11,8 +11,8 @@ from threading import Event
 from src.logger import get_logger
 
 from src.api import API
-from src.tests.unit.definitions import DISPERSY_WORKDIR, FILES
-from src.definitions import SWIFT_BINPATH, TIMEOUT_TESTS, STATE_RESETTING
+from src.tests.unit.definitions import DISPERSY_WORKDIR, FILES, TIMEOUT_TESTS
+from src.definitions import SWIFT_BINPATH, STATE_RESETTING
 from src.address import Address
 from src.tests.unit.test_endpoint import remove_files
 

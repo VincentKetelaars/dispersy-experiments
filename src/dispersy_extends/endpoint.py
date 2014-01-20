@@ -27,7 +27,8 @@ from src.address import Address
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.definitions import MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, MESSAGE_KEY_SWIFT_PID,\
      STATE_RESETTING, STATE_RUNNING, STATE_STOPPED,\
-    REPORT_DISPERSY_INFO_TIME, MESSAGE_KEY_DISPERSY_INFO, FILE_HASH_MESSAGE_NAME
+    REPORT_DISPERSY_INFO_TIME, MESSAGE_KEY_DISPERSY_INFO, FILE_HASH_MESSAGE_NAME,\
+    MAX_CONCURRENT_DOWNLOADING_SWARMS, ALMOST_DONE_DOWNLOADING_TIME
 from src.dispersy_extends.payload import AddressesCarrier
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_contact import DispersyContact
@@ -69,10 +70,13 @@ class SwiftHandler(TunnelEndpoint):
         self._socket_running = -1
         self._resetting = False
         self._waiting_on_cmd_connection = False
-        self.swift_queue = Queue.Queue()
-        self._dequeueing = False
-        self.started_downloads = Set()
-        self.added_peers = Set()
+        self._swift_cmd_queue = Queue.Queue()
+        self._dequeueing_cmd_queue = False
+        self._started_downloads = Set()
+        self._file_stack = []
+        self._added_peers = Set()
+        self._peers_to_add = Set()
+        
         self.lock = RLock() # Reentrant Lock
         
     @property
@@ -99,16 +103,18 @@ class SwiftHandler(TunnelEndpoint):
         @type addr: Address
         @type sock_addr: Address
         """
-        if d is not None and not any([addr == a and d.get_def().get_roothash() == h and sock_addr == s for a, h, s in self.added_peers]):
+        if d is not None and not d.get_def().get_roothash() in self._started_downloads:
+            return self._peers_to_add.add((addr, d.get_def().get_roothash(), sock_addr))
+        if d is not None and not any([addr == a and d.get_def().get_roothash() == h and sock_addr == s for a, h, s in self._added_peers]):
             self._swift.add_peer(d, addr, sock_addr)
-            self.added_peers.add((addr, d.get_def().get_roothash(), sock_addr))
+            self._added_peers.add((addr, d.get_def().get_roothash(), sock_addr))
     
     @_swift_runnable_decorator    
     def swift_checkpoint(self, d):
         """
         @type d: SwiftDownloadImpl
         """
-        if d is not None:
+        if d is not None and d.get_def().get_roothash() in self._started_downloads:
             self._swift.checkpoint_download(d)
     
     @_swift_runnable_decorator  
@@ -116,9 +122,12 @@ class SwiftHandler(TunnelEndpoint):
         """
         @type d: SwiftDownloadImpl
         """
-        if not d.get_def().get_roothash() in self.started_downloads:
-            self.started_downloads.add(d.get_def().get_roothash())
+        if not d.get_def().get_roothash() in self._started_downloads:
+            self._started_downloads.add(d.get_def().get_roothash())
             self._swift.start_download(d)
+            for peer in self._peers_to_add:
+                if peer[1] == d.get_def().get_roothash():
+                    self.swift_add_peer(*peer)
         else:
             logger.warning("This roothash %s was already started!", d.get_def().get_roothash_as_hex())
     
@@ -128,7 +137,8 @@ class SwiftHandler(TunnelEndpoint):
         @type d: SwiftDownloadImpl
         @type yes: boolean
         """
-        self._swift.set_moreinfo_stats(d, yes)
+        if d is not None and d.get_def().get_roothash() in self._started_downloads:
+            self._swift.set_moreinfo_stats(d, yes)
     
     @_swift_runnable_decorator
     def swift_remove_download(self, d, rm_state, rm_content):
@@ -137,9 +147,9 @@ class SwiftHandler(TunnelEndpoint):
         @type rm_state: boolean
         @type rm_content: boolean
         """
-        if d is not None and d.get_def().get_roothash() in self.started_downloads:
-            self.started_downloads.remove(d.get_def().get_roothash())
-            [self.added_peers.remove(a) for a in self.added_peers if a[1] == d.get_def().get_roothash()]
+        if d is not None and d.get_def().get_roothash() in self._started_downloads:
+            self._started_downloads.remove(d.get_def().get_roothash())
+            [self._added_peers.remove(a) for a in self._added_peers if a[1] == d.get_def().get_roothash()]
             self._swift.remove_download(d, rm_state, rm_content)
     
     @_swift_runnable_decorator
@@ -148,7 +158,8 @@ class SwiftHandler(TunnelEndpoint):
         @type d: SwiftDownloadImpl
         @type enable: boolean
         """
-        self._swift.set_pex(d.get_def().get_roothash_as_hex(), enable)
+        if d is not None and d.get_def().get_roothash() in self._started_downloads:
+            self._swift.set_pex(d.get_def().get_roothash_as_hex(), enable)
         
     def retrieve_download_impl(self, roothash):
         """
@@ -181,8 +192,8 @@ class SwiftHandler(TunnelEndpoint):
             self._resetting = True
             logger.info("Resetting swift")
             self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RESETTING, error=error)
-            self.added_peers = Set() # Reset the peers added before restarting
-            self.started_downloads = Set() # Reset the started downloads before restarting
+            self._added_peers = Set() # Reset the peers added before restarting
+            self._started_downloads = Set() # Reset the started downloads before restarting
             
             # Try the sockets to see if they are in use
             if not try_sockets([e.address for e in self.swift_endpoints], timeout=1.0):
@@ -201,13 +212,13 @@ class SwiftHandler(TunnelEndpoint):
             # First add all calls to the queue and then start the TCP connection
             # Be sure to put all current queued items at the back of the startup queue
             temp_queue = Queue.Queue();
-            while not self.swift_queue.empty():
-                temp_queue.put(self.swift_queue.get())
+            while not self._swift_cmd_queue.empty():
+                temp_queue.put(self._swift_cmd_queue.get())
                 
             self._dispersy.on_swift_restart(temp_queue)               
                             
             while not temp_queue.empty():
-                self.swift_queue.put(temp_queue.get())
+                self._swift_cmd_queue.put(temp_queue.get())
             
             self._waiting_on_cmd_connection = True
             self._swift.start_cmd_connection() # Normally in open
@@ -219,15 +230,15 @@ class SwiftHandler(TunnelEndpoint):
         
     def enqueue_swift_queue(self, func, *args, **kwargs):
         logger.debug("%s is queued", func.__name__)
-        self.swift_queue.put((func, args, kwargs))
+        self._swift_cmd_queue.put((func, args, kwargs))
         
     def dequeue_swift_queue(self):
-        self._dequeueing = True
-        while not self.swift_queue.empty() and self._swift.is_ready():
-            func, args, kargs = self.swift_queue.get()
+        self._dequeueing_cmd_queue = True
+        while not self._swift_cmd_queue.empty() and self._swift.is_ready():
+            func, args, kargs = self._swift_cmd_queue.get()
             logger.debug("Dequeue %s %s %s", func, args, kargs)
             func(*args, **kargs)            
-        self._dequeueing = False        
+        self._dequeueing_cmd_queue = False        
 
     def set_callbacks(self):
         self._swift.set_on_swift_restart_callback(self.restart_swift)
@@ -258,7 +269,66 @@ class SwiftHandler(TunnelEndpoint):
             if not address.resolve_interface():
                 logger.debug("Cannot resolve interface")
             if try_socket(address):
-                logger.debug("Yelp, socket is gone!")                
+                logger.debug("Yelp, socket is gone!")
+                
+    def put_swift_file_stack(self, func, size, timestamp, priority=0):
+        """
+        Put (func, size, timestamp) on stack
+        Sort by increasing priority first then increasing timestamp
+        @param func: Function that will be executed when popped of the stack
+        @param size: Size of the file
+        @param timestamp: Modification / creation time of file
+        @type timestamp: float (Important that it is comparable)
+        @param priority: priority of the file
+        @type priority: int
+        """
+        i = len(self._file_stack)
+        for i in range(len(self._file_stack) - 1, -1, -1): # Starting at the end
+            if self._file_stack[i][3] < priority or (self._file_stack[i][3] == priority and 
+                                                     self._file_stack[i][2] < timestamp):
+                i += 1
+                break
+        # TODO: Implement binary search two increase insert speed
+        self._file_stack[i:i] = [(func, size, timestamp, priority)]
+        logger.debug("Put file of size %d, timestamp %f, with priority %d at position %d", 
+                     size, timestamp, priority, i)
+        
+    def pop_swift_file_stack(self):
+        """
+        Pop (func, size, timestamp, priority) from stack
+        @return: None if empty, (func, size, timestamp, priority) otherwise
+        """
+        if len(self._file_stack) == 0:
+            return None
+        item = self._file_stack.pop()
+        logger.debug("Pop file of size %d, timestamp %f, with priority %d", item[1], item[2], item[3])
+        return item
+    
+    def evaluate_swift_swarms(self):
+        """
+        This function determines the state of all downloading swarms.
+        It determines the number of swarms (almost) done, 
+        and subsequently pops new swarms to be created of the stack if there is room
+        """
+        downloading_swarms = 0
+        almost_done_swarms = 0
+        for d in self.swift.roothash2dl.values():
+            if not isinstance(d, MultiEndpoint) and len(d.midict.values()) > 0 and not d.seeding():
+                downloading_swarms += 1
+                speed = d.speed("down")
+                if speed != 0:
+                    # The estimated number of seconds left before download is finished
+                    dw_time_left = d.dynasize * (1 - d.progress) / 1024 / speed
+                    if dw_time_left < ALMOST_DONE_DOWNLOADING_TIME:
+                        almost_done_swarms += 1
+                        logger.debug("Estimate %s to be done downloading in %f", 
+                                     d.get_def().get_roothash_as_hex(), dw_time_left)
+        # Start new swarms if there is room
+        for _ in range(downloading_swarms - almost_done_swarms, MAX_CONCURRENT_DOWNLOADING_SWARMS):
+            item = self.pop_swift_file_stack()
+            if item is None:
+                break # Nothing on the stack, so break
+            item[0]() # Call function
         
 class CommonEndpoint(SwiftHandler, EndpointStatistics):
     
@@ -312,7 +382,7 @@ class MultiEndpoint(CommonEndpoint):
     def send(self, candidates, packets):
         with self.lock:
             if not self._swift.is_ready() or not self.socket_running:
-                if not self._dequeueing:
+                if not self._dequeueing_cmd_queue:
                     self.enqueue_swift_queue(self.send, candidates, packets)
                 return False
             logger.debug("Send %s %d", candidates, len(packets))
@@ -566,6 +636,7 @@ class MultiEndpoint(CommonEndpoint):
     def _loop(self):
         while not self._thread_stop_event.is_set():
             self.dequeue_swift_queue()
+            self.evaluate_swift_swarms()
             self._thread_stop_event.wait(REPORT_DISPERSY_INFO_TIME)
             data = []
             for e in self.swift_endpoints:

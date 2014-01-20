@@ -154,6 +154,23 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         # If this is used, most likely self.sp will be None. 
         # self.sp.start_download(self)
         
+    def speed(self, direction):
+        try:
+            return self.get_current_speed(direction)
+        except KeyError:
+            logger.debug("Could not fetch speed %s", direction)
+            return 0
+    
+    def total(self, direction, raw=False):
+        try:
+            return self.midict[("raw_" if raw else "") + "bytes_" + direction] / 1024.0
+        except KeyError:
+            logger.debug("Could not fetch total %s %s", direction, raw)
+            return 0
+        
+    def seeding(self):
+        return self.dlstatus == DLSTATUS_SEEDING
+        
     def network_create_spew_from_channels(self):
         if not 'channels' in self.midict:
             return ([], None)

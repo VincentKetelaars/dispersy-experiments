@@ -38,7 +38,7 @@ class SwiftCommunity(object):
         self._thread_loop.daemon = True
         self._thread_loop.start()
         
-    def add_file(self, filename, roothash, destination):
+    def add_file(self, filename, roothash, destination, size, timestamp):
         logger.debug("Add file, %s %s", filename, roothash)        
         roothash = binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys() and len(roothash) == HASH_LENGTH / 2: # Check if not already added, and if the unhexlified roothash has the proper length
@@ -91,7 +91,7 @@ class SwiftCommunity(object):
         if self._api_callback is not None:
             self._api_callback(key, *args, **kwargs)
         
-    def filehash_received(self, filename, directories, roothash, size, addresses, destination):
+    def filehash_received(self, filename, directories, roothash, size, timestamp, addresses, destination):
         """
         @param filename: The name the file will get
         @param directories: Optional path of directories within the destination directory
@@ -100,10 +100,9 @@ class SwiftCommunity(object):
         @param addresses: The sockets available to the peer that sent us this file
         @type destination: Destination.Implementation
         """
-        logger.debug("Start download %s %s %s %d %s %s", filename, directories, roothash, size, self.dcomm.dest_dir, addresses)
         roothash=binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys():
-            logger.info("Start download of %s with roothash %s", filename, roothash)
+            logger.debug("Start download %s %s %s %d %f %s %s", filename, directories, roothash, size, timestamp, self.dcomm.dest_dir, addresses)
             dir_ = self.dcomm.dest_dir + "/" + directories
             if not exists(dir_):
                 makedirs(dir_)
@@ -114,9 +113,12 @@ class SwiftCommunity(object):
             # Add download first, because it might take while before swift process returns
             self.add_to_downloads(roothash, d.get_dest_dir(), d, addresses=addresses, seed=seed, download=True, destination=destination)
             
-            self.endpoint.swift_start(d)
-            self.endpoint.swift_moreinfo(d, MOREINFO)
-            self.endpoint.swift_pex(d, PEXON)          
+            def func():
+                self.endpoint.swift_start(d)
+                self.endpoint.swift_moreinfo(d, MOREINFO)
+                self.endpoint.swift_pex(d, PEXON)
+                
+            self.endpoint.put_swift_file_stack(func, size, timestamp, priority=0)
             
             # TODO: Make sure that this peer is not added since the peer has already added us!                
             self.add_new_peers() # Notify our other peers that we have something new available!
@@ -136,7 +138,7 @@ class SwiftCommunity(object):
                 f.write(contents)
                 self.do_callback(MESSAGE_KEY_RECEIVE_FILE, filename)
             except:
-                logger.exception("Can't write file")
+                logger.exception("Can't write to %s", filename)
             finally:
                 try:
                     f.close()
@@ -308,12 +310,12 @@ class SwiftCommunity(object):
         raw_total_down = 0
         for d in self.downloads.itervalues():
             if not d.is_bad_swarm() and d.active():
-                upspeed += d.speed("up")
-                downspeed += d.speed("down")
-                total_up += d.total("up")
-                total_down += d.total("down")
-                raw_total_up += d.total("up", raw=True)
-                raw_total_down += d.total("down", raw=False)
+                upspeed += d.downloadimpl.speed("up")
+                downspeed += d.downloadimpl.speed("down")
+                total_up += d.downloadimpl.total("up")
+                total_down += d.downloadimpl.total("down")
+                raw_total_up += d.downloadimpl.total("up", raw=True)
+                raw_total_down += d.downloadimpl.total("down", raw=False)
         done_downloads = sum([d.is_finished() and d.is_download() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
         num_seeding = sum([d.seeder() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
         active_sockets = len(Set(s for d in self.downloads.itervalues() for s in d.active_sockets()))
