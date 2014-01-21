@@ -14,7 +14,7 @@ class TestDownload(unittest.TestCase):
 
 
     def setUp(self):
-        self.download = Download(None, None, None)
+        self.download = Download(None, None, None, None, None)
         self.address1 = Address(port=123)
         self.address2 = Address(ip="::1", port=1234)
         self.address3 = Address(ip="0.0.1.2", port=1234)

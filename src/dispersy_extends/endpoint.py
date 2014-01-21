@@ -103,9 +103,11 @@ class SwiftHandler(TunnelEndpoint):
         @type addr: Address
         @type sock_addr: Address
         """
-        if d is not None and not d.get_def().get_roothash() in self._started_downloads:
-            return self._peers_to_add.add((addr, d.get_def().get_roothash(), sock_addr))
-        if d is not None and not any([addr == a and d.get_def().get_roothash() == h and sock_addr == s for a, h, s in self._added_peers]):
+        if d is None:
+            return
+        if not d.get_def().get_roothash() in self._started_downloads:
+            return self._peers_to_add.add((d, addr, sock_addr))
+        if not any([addr == a and d.get_def().get_roothash() == h and sock_addr == s for a, h, s in self._added_peers]):
             self._swift.add_peer(d, addr, sock_addr)
             self._added_peers.add((addr, d.get_def().get_roothash(), sock_addr))
     
@@ -126,7 +128,7 @@ class SwiftHandler(TunnelEndpoint):
             self._started_downloads.add(d.get_def().get_roothash())
             self._swift.start_download(d)
             for peer in self._peers_to_add:
-                if peer[1] == d.get_def().get_roothash():
+                if peer[0].get_def().get_roothash() == d.get_def().get_roothash():
                     self.swift_add_peer(*peer)
         else:
             logger.warning("This roothash %s was already started!", d.get_def().get_roothash_as_hex())
@@ -160,23 +162,6 @@ class SwiftHandler(TunnelEndpoint):
         """
         if d is not None and d.get_def().get_roothash() in self._started_downloads:
             self._swift.set_pex(d.get_def().get_roothash_as_hex(), enable)
-        
-    def retrieve_download_impl(self, roothash):
-        """
-        Retrieve SwiftDownloadImpl with roothash
-        
-        @return: SwiftDownloadImpl, otherwise None
-        """
-        logger.debug("Retrieve download implementation, %s", roothash)
-        self.lock.acquire()
-        d = None
-        try:
-            d = self._swift.roothash2dl[roothash]
-        except KeyError:
-            logger.error("Could not retrieve downloadimpl from roothash2dl")
-        finally:
-            self.lock.release()
-        return d
     
     def restart_swift(self, error=None):
         """
@@ -274,7 +259,7 @@ class SwiftHandler(TunnelEndpoint):
             if try_socket(address):
                 logger.debug("Yelp, socket is gone!")
                 
-    def put_swift_file_stack(self, func, size, timestamp, priority=0):
+    def put_swift_file_stack(self, func, size, timestamp, priority=0, args=(), kwargs={}):
         """
         Put (func, size, timestamp) on stack
         Sort by increasing priority first then increasing timestamp
@@ -292,9 +277,10 @@ class SwiftHandler(TunnelEndpoint):
                 i += 1
                 break
         # TODO: Implement binary search two increase insert speed
-        self._file_stack[i:i] = [(func, size, timestamp, priority)]
+        self._file_stack[i:i] = [(func, size, timestamp, priority, args, kwargs)]
         logger.debug("Put file of size %d, timestamp %f, with priority %d at position %d", 
                      size, timestamp, priority, i)
+        self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
         
     def pop_swift_file_stack(self):
         """
@@ -304,7 +290,8 @@ class SwiftHandler(TunnelEndpoint):
         if len(self._file_stack) == 0:
             return None
         item = self._file_stack.pop()
-        logger.debug("Pop file of size %d, timestamp %f, with priority %d", item[1], item[2], item[3])
+        logger.debug("Pop file of size %d, timestamp %f, with priority %d and function arguments %s %s", 
+                     item[1], item[2], item[3], item[4], item[5])
         return item
     
     def evaluate_swift_swarms(self):
@@ -331,7 +318,7 @@ class SwiftHandler(TunnelEndpoint):
             item = self.pop_swift_file_stack()
             if item is None:
                 break # Nothing on the stack, so break
-            item[0]() # Call function
+            item[0](*item[4], **item[5]) # Call function
         
 class CommonEndpoint(SwiftHandler, EndpointStatistics):
     

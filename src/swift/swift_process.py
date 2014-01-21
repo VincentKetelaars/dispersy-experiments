@@ -256,7 +256,7 @@ class MySwiftProcess(SwiftProcess):
             self.splock.acquire()
             try:
                 d = self.roothash2dl[roothash]
-            except AttributeError:
+            except KeyError:
                 logger.debug("Unknown roothash %s", roothash)
                 return
             finally:

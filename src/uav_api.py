@@ -139,10 +139,8 @@ class UAVAPI(API):
                     self.use_interfaces[if_name] = (time.time(), u"up", c["sock_ip"]) # Insert this interface into the known interfaces
                 else:
                     if_name = "unknown"
-            self.status[basechannel + if_name + "." + peer_name + "." + download["roothash"] + ".total_up"] = c["utotal"] # KB
-            self.status[basechannel + if_name + "." + peer_name + "." + download["roothash"] + ".total_down"] = c["dtotal"] # KB
-            self.status[basechannel + if_name + "." + peer_name + "." + download["roothash"] + ".raw_total_up"] = c["raw_utotal"] # KB
-            self.status[basechannel + if_name + "." + peer_name + "." + download["roothash"] + ".raw_total_down"] = c["raw_dtotal"] # KB
+            for k, v in c.iteritems():
+                self.status[basechannel + if_name + "." + peer_name + "." + download["roothash"] + "." + k] = v
         
         for k, v in total.iteritems():
             self.status[base + k] = v

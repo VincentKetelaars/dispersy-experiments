@@ -183,10 +183,10 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
             d['port'] = channel['port']
             d['sock_ip'] = channel['socket_ip']
             d['sock_port'] = channel['socket_port']
-            d['utotal'] = channel['bytes_up'] / 1024.0
-            d['dtotal'] = channel['bytes_down'] / 1024.0
-            d['raw_utotal'] = channel['raw_bytes_up'] / 1024.0
-            d['raw_dtotal'] = channel['raw_bytes_down'] / 1024.0
+            d['total_up'] = channel['bytes_up'] / 1024.0
+            d['total_down'] = channel['bytes_down'] / 1024.0
+            d['raw_total_up'] = channel['raw_bytes_up'] / 1024.0
+            d['raw_total_down'] = channel['raw_bytes_down'] / 1024.0
             d['current_speed_up'] = channel["cur_speed_up"] / 1024.0
             d['current_speed_down'] = channel["cur_speed_down"] / 1024.0
             d['send_buffer'] = channel["send_queue"]

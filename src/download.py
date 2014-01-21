@@ -51,7 +51,7 @@ class Download(object):
     Peers are only added if allowed by the destination.
     '''
 
-    def __init__(self, roothash, filename, downloadimpl, directories="", seed=False, download=False, moreinfo=True, destination=None, size=-1):
+    def __init__(self, roothash, filename, downloadimpl, size, timestamp, directories="", seed=False, download=False, moreinfo=True, destination=None, priority=0):
         '''
         Constructor
         '''
@@ -65,6 +65,8 @@ class Download(object):
         self._downloadimpl = downloadimpl
         self._peers = Set() # Set of Peers
         self._size = size
+        self._timestamp = timestamp
+        self._priority = priority
         
         self._start_time = datetime.utcnow()
         self._finished_time = datetime.max
@@ -93,6 +95,14 @@ class Download(object):
     def size(self):
         return self._size
     
+    @property
+    def timestamp(self):
+        return self._timestamp
+    
+    @property
+    def priority(self):
+        return self._priority
+        
     def roothash_as_hex(self):
         return None if self.roothash is None else binascii.hexlify(self.roothash)
     
