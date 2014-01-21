@@ -531,8 +531,8 @@ class MultiEndpoint(CommonEndpoint):
         for d in self.swift.roothash2dl.values():
             if not isinstance(d, MultiEndpoint) and "channels" in d.midict:
                 for c in d.midict.get("channels", []):
-                    saddr = Address.unknown(c["socket_ip"] + ":" + str(c["socket_port"]))
-                    paddr = Address.unknown(c["ip"] + ":" + str(c["port"]))
+                    saddr = Address.unknown(c["socket_ip"].encode("ascii", "ignore") + ":" + str(c["socket_port"]))
+                    paddr = Address.unknown(c["ip"].encode("ascii", "ignore") + ":" + str(c["port"]))
                     if peer is None or paddr in peer.addresses:
                         channels.append((c, saddr, paddr))
         return channels
