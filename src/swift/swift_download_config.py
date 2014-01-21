@@ -170,6 +170,10 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         
     def seeding(self):
         return self.dlstatus == DLSTATUS_SEEDING
+    
+    def dropped_packets_rate(self):
+        # TODO: Implement this!!!
+        return 0.0
         
     def network_create_spew_from_channels(self):
         if not 'channels' in self.midict:
@@ -190,7 +194,6 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
             d['current_speed_up'] = channel["cur_speed_up"] / 1024.0
             d['current_speed_down'] = channel["cur_speed_down"] / 1024.0
             d['send_buffer'] = channel["send_queue"]
-            d['last_packet_drop'] = channel["last_drop"]
             d['average_rtt'] = channel["avg_rtt"]
             plist.append(d)
         

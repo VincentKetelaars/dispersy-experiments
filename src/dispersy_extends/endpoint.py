@@ -459,6 +459,7 @@ class MultiEndpoint(CommonEndpoint):
         """
         Sockets are distinctly recognized by ip and port. Port can be initially 0 to let the system decide the port number.
         Even if multiple endpoints have the same ip with port 0, each will in turn get their port assigned.
+        @type address: Address
         """
         for e in self.swift_endpoints:
             if e.address.ip == address.ip and (e.address.port == 0 or e.address.port == address.port):
@@ -468,7 +469,7 @@ class MultiEndpoint(CommonEndpoint):
     
     def _next_endpoint(self, current):
         """
-        @param current: Endpoint
+        @type current: SwiftEndpoint
         @return the next endpoint in the swift_endpoints. If the current endpoint is not in the list,
         return the first in the list. If the list is empty return None
         """
@@ -484,78 +485,117 @@ class MultiEndpoint(CommonEndpoint):
             return self.swift_endpoints[0]
         return None
     
-    def _last_endpoints(self, peer, endpoints=[]):
+    def _last_endpoints(self, contact, endpoints=[]):
         """
         This function returns the endpoints that last had contact with this peer,
         sorted by time since the last contact, latest first
         
-        @param peer: The address of the peer that a message will be sent to
-        @type peer: Address
+        @type peer: DispersyContact
         @param endpoints: List of endpoints to use (defaults to self.swift_endpoints)
-        @rtype: SwiftEndpoint
-        @return: List(Endpoint) that last had contact with peer
+        @return: List((SwiftEndpoint, peer Address, datetime)) that last had contact with peer
         """
         if not endpoints:
             endpoints = self.swift_endpoints
         last_contacts = []
         for e in endpoints:
-            for c in e.dispersy_contacts:
-                if peer == c.address and c.last_contact() > datetime.min:
-                    last_contacts.append((e, c.last_contact()))
-        sorted_last_contacts = sorted(last_contacts, key=lambda x: x[1], reverse=True)
-        return [lc[0] for lc in sorted_last_contacts]
+            for paddr in contact.peer.addresses:
+                if contact.last_contact(paddr) > datetime.min:
+                    last_contacts.append((e, paddr, contact.last_contact()))
+        return sorted(last_contacts, key=lambda x: x[2], reverse=True)
     
     def _subnet_endpoints(self, peer, endpoints=[]):
         """
         This function returns the endpoints that reside in the same subnet.
         These are either point to point or local connections, which will likely be fastest(?).
         
-        @type peer: Address 
+        @type peer: Peer 
         @param endpoints: List of endpoints to use (defaults to self.swift_endpoints)
+        @return: List((SwiftEndpoint, peer Address))
         """
         if not endpoints:
             endpoints = self.swift_endpoints
         same_subnet = []
         for e in endpoints:
-            if e.address.same_subnet(peer.ip):
-                same_subnet.append(e)
+            for paddr in peer.addresses:
+                if e.address.same_subnet(paddr.ip):
+                    same_subnet.append((e, paddr))
         return same_subnet
     
-    def _get_channel_speeds(self):
+    def _get_channels(self, peer=None):
         """
-        Get up/downspeed of each swift channel
+        Retrieve channels from DownloadImpls
+        Include the socket and peer address as well
+        @rtype List((Dict, Address, Address))
+        """
+        channels = []
+        for d in self.swift.roothash2dl.values():
+            if not isinstance(d, MultiEndpoint) and "channels" in d.midict:
+                for c in d.midict.get("channels", []):
+                    saddr = Address.unknown(c["socket_ip"] + ":" + str(c["socket_port"]))
+                    paddr = Address.unknown(c["ip"] + ":" + str(c["port"]))
+                    if peer is None or paddr in peer.addresses:
+                        channels.append((c, saddr, paddr))
+        return channels
+    
+    def _get_channel_speeds(self, peer=None):
+        """
+        Returns the list of (sock_addr, peer_addr, upspeed, downspeed), where speeds are in bytes/s
         
-        @rtype: List of ((socket_ip, socket_port), (peer_ip, peer_port), upspeed, downspeed)
+        @rtype: List((Address, Address, float, float))
         """
         r = []
-        for d in self.swift.roothash2dl.values():
-            if not isinstance(d, MultiEndpoint) and len(d.midict.values()) > 0: # Ensure there is something to get
-                r.append(((d.midict.get("socket_ip", None), int(d.midict.get("socket_port", -1))),
-                         (d.midict.get("ip", None), int(d.midict.get("port", -1))),
-                         float(d.midict.get("cur_speed_up", 0)), float(d.midict.get("cur_speed_down", 0))))
+        for c, saddr, paddr in self._get_channels(peer):
+            r.append((saddr, paddr, c.get("cur_speed_up", 0.0), c.get("cur_speed_down", 0.0)))
         return r
     
-    def _top_speed_endpoints(self, peer=None, endpoints=[]):
+    def _maximum_speed_endpoints(self, peer, endpoints=[]):
         """
         Determine which endpoints have a channel with this peer (or if None, all channels of this socket), 
         and sort them by combined up/download speed, returning only those with positive speeds
         
-        @type peer: Address
+        @type peer: Peer
         @param endpoints: List of endpoints to use (defaults to self.swift_endpoints)
+        @rtype: List((SwiftEndpoint, Address, float))
         """
         if not endpoints: # []
             endpoints = self.swift_endpoints
-        speeds = self._get_channel_speeds()
+        speeds = self._get_channel_speeds(peer)
         r = []
         for e in endpoints:
-            total = 0
             for saddr, paddr, up, down in speeds:
-                if e.address.addr() == saddr and (peer is None or peer.addr() == paddr):
-                    total += up + down
-            if total > 0: # No point in adding endpoints with zero speed
-                r.append((e, total))
-        sorted_endpoints = sorted(r, key=lambda x: x[1], reverse=True) # Biggest first
-        return [se[0] for se in sorted_endpoints] # Only return endpoints
+                if e.address == saddr and paddr in peer.addresses and up + down > 0:
+                    r.append((e, paddr, up + down))
+        return sorted(r, key=lambda x: x[2], reverse=True) # Largest speed first
+    
+    def _minimum_send_queue_endpoints(self, peer, endpoints=[]):
+        """
+        Determine the size of the send queue for each endpoint with a connection with peer
+        and return the list of these sorted from low to high.
+        @rtype: List((SwiftEndpoint, int))
+        """
+        if not endpoints: # []
+            endpoints = self.swift_endpoints
+        channels = self._get_channels(peer)
+        r = [(e, c["send_queue"]) for e in endpoints for c, saddr, _ in channels if e.address == saddr]
+        return sorted(r, key=lambda x: x[1]) # Lowest sendqueue first
+    
+    def _sort_endpoints_by_estimated_response_time(self, peer, endpoints=[]):
+        """
+        The endpoints will be sorted by: estimated response time = send_queue / upload_speed + round trip time
+        Only nonzero 
+        @rtype: List((SwiftEndpoint, Address, float))
+        """
+        if not endpoints:
+            endpoints = self.swift_endpoints
+        channels = self._get_channels(peer)
+        r = []
+        for e in endpoints:
+            for c, saddr, paddr in channels:
+                if e.address == saddr and c.get("cur_speed_up", 0) > 0:
+                    # send_queue (bytes) / upload_speed (bytes / s) + avg_rtt (us) / 10^6
+                    ert = c.get("send_queue", 0) / c.get("cur_speed_up", 1) + c.get("avg_rtt", 0) / 10**6
+                    r.append((e, paddr, ert))
+        return sorted(r, key=lambda x: x[2]) # From low to high
         
     def determine_endpoint(self, candidate):
         """
@@ -569,33 +609,42 @@ class MultiEndpoint(CommonEndpoint):
         @rtype: Candidate
         """
         
-        def recur(endpoint):
-            if not endpoint.is_alive or not endpoint.socket_running:
-                recur(self._next_endpoint(endpoint))
-            return endpoint
+        def recur(endpoint, max_it):
+            if max_it > 0 and not endpoint.is_alive or not endpoint.socket_running:
+                return recur(self._next_endpoint(endpoint), max_it - 1)
+            return (endpoint, candidate)
         
-        def determine(peer):
+        def determine(addr):
+            # Find the peer addresses
+            contact = DispersyContact(addr) # Default to the address supplied
+            for dc in self.dispersy_contacts:
+                if dc.address == addr:
+                    contact = dc
+                    break
+            
             # Choose the endpoint that currently has the highest transfer speed with this peer
-            for e in self._top_speed_endpoints(peer):
+            for e, paddr, ert in self._sort_endpoints_by_estimated_response_time(contact.peer):
                 if e is not None and e.is_alive and e.socket_running:
-                    logger.debug("Package will be sent with fastest endpoint %s", e)
-                    return e
+                    logger.debug("Package will be sent with endpoint %s to %s with estimated response time of %f ms", e, paddr, ert * 1000)
+                    return (e, paddr.addr())
             # Choose the endpoint that had contact last with the peer
-            for e in self._last_endpoints(peer):
+            for e, paddr, last_contact in self._last_endpoints(contact):
                 if e is not None and e.is_alive and e.socket_running:
-                    logger.debug("Package will be sent with the last contacted endpoint %s", e)
-                    return e
+                    logger.debug("Package will be sent with endpoint %s that had contact with %s at %s", e, paddr, 
+                                 last_contact.strftime("%H:%M:%S"))
+                    return (e, paddr.addr())
             # In case no contact has been made with this peer (or those endpoint are not available)
-            for e in self._subnet_endpoints(peer):
+            for e, paddr in self._subnet_endpoints(contact.peer):
                 if e is not None and e.is_alive and e.socket_running:
-                    logger.debug("Package will be sent with an endpoint, %s, in the same subnet", e)
-                    return e            
-            return recur(self._endpoint)
+                    logger.debug("Package will be sent with an endpoint, %s, in the same subnet as %s", e, paddr)
+                    return (e, paddr.addr())          
+            return recur(self._endpoint, len(self.swift_endpoints))
         
         if (len(self.swift_endpoints) == 0):
             self._endpoint = None
         elif (len(self.swift_endpoints) > 1):
-            self._endpoint = determine(Address.tuple(candidate.sock_addr))
+            self._endpoint, sock_addr = determine(Address.tuple(candidate.sock_addr))
+            candidate = WalkCandidate(sock_addr, False, sock_addr, sock_addr, u"unknown")
         else:
             self._endpoint = self.swift_endpoints[0]
         # TODO: Determine the best candidate for the job!

@@ -6,6 +6,8 @@ Created on Nov 21, 2013
 
 from datetime import datetime
 import collections
+from src.download import Peer
+from src.address import Address
 
 class DispersyContact(object):
     '''
@@ -15,33 +17,41 @@ class DispersyContact(object):
 
     def __init__(self, address, send_messages=[], recv_messages=[]):
         self.address = address # Primary address
-        self.last_send_time = datetime.min
-        self.last_recv_time = datetime.min
-        self.count_send = 0
-        self.count_recv = 0
-        self.peer = None
+        self.last_send_time = {address : datetime.min}
+        self.last_recv_time = {address : datetime.min}
+        self.count_send = {}
+        self.count_recv = {}
+        self.peer = Peer([address])
         if send_messages: # not []
             self.send(send_messages)
         if recv_messages: # not []
             self.recv(recv_messages)
        
-    def recv(self, messages):
+    def recv(self, messages, address=Address()):
         assert isinstance(messages, collections.Iterable)
-        self.count_recv += len(messages)
-        self.last_recv_time = datetime.utcnow()
+        self.count_recv[address] = self.count_recv.get(address, 0) + len(messages)
+        self.last_recv_time[address] = datetime.utcnow()
         
-    def send(self, messages):
+    def total_received(self):
+        return sum([v for k, v in self.count_recv.items() if k in self.peer.addresses])
+        
+    def send(self, messages, address=Address()):
         assert isinstance(messages, collections.Iterable)
-        self.count_send += len(messages)
-        self.last_send_time = datetime.utcnow()
+        self.count_send[address] = self.count_send.get(address, 0) + len(messages)
+        self.last_send_time[address] = datetime.utcnow()
         
-    def last_contact(self):
+    def total_send(self):
+        return sum([v for k, v in self.count_send.items() if k in self.peer.addresses])
+        
+    def last_contact(self, address=None):
         """
-        This function returns the last time there was either a send or a receive to or from this peer address
-        If there has been no contact it returns None
+        This function returns the last time there was either a send or a receive to or from the supplied address
+        If no address is supplied, the default address will be used
         @return the last contact, otherwise datetime.min
         """
-        return max(self.last_send_time, self.last_recv_time)
+        if address is None:
+            return max(self.last_send_time[self.address], self.last_recv_time[self.address])
+        return max(self.last_send_time.get(address, datetime.min), self.last_recv_time.get(address, datetime.min))
     
     def set_peer(self, peer):
         """
