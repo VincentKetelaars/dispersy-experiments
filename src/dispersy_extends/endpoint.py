@@ -17,7 +17,6 @@ from errno import EADDRINUSE, EADDRNOTAVAIL
 from src.logger import get_logger
 from src.swift.swift_process import MySwiftProcess # This should be imported first, or it will screw up the logs.
 from dispersy.endpoint import Endpoint, TunnelEndpoint
-from dispersy.statistics import Statistics
 from dispersy.candidate import BootstrapCandidate, WalkCandidate
 
 from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
@@ -750,7 +749,6 @@ class MultiEndpoint(CommonEndpoint):
         e = self.add_endpoint(addr, api_callback=self._api_callback) # If it is new create endpoint
         e.open(self._dispersy) # Don't forget to open it...
         # Now that we have a new socket we should tell it about the files to disseminate
-        self.distribute_all_hashes_to_peers(e.address)
         
     def update_dispersy_contacts(self, contacts_and_messages, recv=True):
         """

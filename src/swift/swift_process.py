@@ -380,22 +380,22 @@ class MySwiftProcess(SwiftProcess):
                 self.listenaddrs.append(saddr)
 
             saddrstr = str(saddr)
-            gateway = None
-            device = None
             if saddr.interface is not None:
-                gateway = saddr.interface.gateway
-                device = saddr.interface.device
-            self.send_add_socket(saddrstr, gateway, device)
+                self.send_add_socket(saddrstr, saddr.interface.name, saddr.interface.gateway, saddr.interface.device)
+            else:
+                self.send_add_socket(saddrstr)
         finally:
             self.splock.release()
             
-    def send_add_socket(self, saddrstr, gateway, device):
+    def send_add_socket(self, saddrstr, if_name=None, gateway=None, device=None):
         # assume splock is held to avoid concurrency on socket
         cmd = 'ADDSOCKET ' + saddrstr
         if gateway is not None:
             cmd+= ' ' + gateway 
         else:
             cmd+= ' 0.0.0.0'
+        if if_name is not None:
+            cmd+= ' ' + if_name
         if device is not None:
             cmd += ' ' + device
         cmd += '\r\n'

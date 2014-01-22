@@ -183,7 +183,7 @@ class TestAPINetworkInterface(unittest.TestCase):
         self.assertFalse(self.restarted)
         self.assertGreater(len(self.api.sock_states), 0) # Test so that the next one cannot give an error
         self.assertEqual(self.api.sock_states[0], 0) # Should be okay first
-        self.assertEqual(self.api.sock_states[-1], 0) # Last should be okay also       
-
+        self.assertEqual(self.api.sock_states[-1], 0) # Last should be okay also
+        
 if __name__ == "__main__":
     unittest.main()

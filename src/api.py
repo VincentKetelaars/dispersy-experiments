@@ -226,21 +226,40 @@ class API(Thread, PipeHandler):
     """           
                     
     def socket_state_callback(self, address, state):
+        """
+        @type address: Address
+        @type state: int
+        """
         pass
         
     def swift_info_callback(self, download):
+        """
+        @type download: dict
+        """
         pass
     
     def dispersy_info_callback(self, info):
+        """
+        @type info: dict
+        """
         pass    
     
     def file_received_callback(self, file_):
+        """
+        @type file_: string
+        """
         pass
         
     def message_received_callback(self, message):
+        """
+        @type message: string
+        """
         pass
     
     def bad_swarm_callback(self, filename):
+        """
+        @type filename: string
+        """
         pass
         
     """
