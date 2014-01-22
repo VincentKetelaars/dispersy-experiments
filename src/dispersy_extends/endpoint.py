@@ -36,20 +36,6 @@ from src.download import Peer
 
 logger = get_logger(__name__)
 
-class NoEndpointAvailableException(Exception):
-    pass
-
-class EndpointStatistics(Statistics):
-    
-    def __init__(self):
-        self.start_time = datetime.utcnow()
-        self.is_alive = False # The endpoint is alive between open and close
-        self.id = urandom(16)
-        self.dispersy_contacts = Set()
-        
-    def update(self):
-        pass
-
 def _swift_runnable_decorator(func):
     """
     Ensure that swift is running before calling it by queuing it when necessary.
@@ -76,6 +62,7 @@ class SwiftHandler(TunnelEndpoint):
         self._file_stack = []
         self._added_peers = Set()
         self._peers_to_add = Set()
+        self._closing = False
         
         self.lock = RLock() # Reentrant Lock
         
@@ -95,6 +82,27 @@ class SwiftHandler(TunnelEndpoint):
     def do_callback(self, key, *args, **kwargs):
         if self._api_callback is not None:
             self._api_callback(key, *args, **kwargs)
+            
+    def close(self):
+        self._closing = True
+        # We want to shutdown now, but if no connection to swift is available, we need to do it the hard way
+        if self._swift is not None:
+            if self._swift.is_ready():
+                logger.debug("Closing softly")
+                self._swift.remove_download(self, True, True)
+                self._swift.early_shutdown()
+                # Upon closing, checkpoints are created for those downloads that need it
+            else:
+                logger.debug("Closing harshly")
+                self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
+                self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
+            # Try the sockets to see if they are in use
+            if not try_sockets(self._swift.listenaddrs, timeout=1.0):
+                logger.warning("Socket(s) is/are still in use")
+                self._swift.network_shutdown() # End it at all cost
+            
+            self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_STOPPED)
+        return super(TunnelEndpoint, self).close()
     
     @_swift_runnable_decorator
     def swift_add_peer(self, d, addr, sock_addr=None):
@@ -172,9 +180,8 @@ class SwiftHandler(TunnelEndpoint):
         self.lock.acquire()
         # Don't restart on close, or if you are already resetting
         # TODO: In case a restart is necessary while restarting (e.g. can't bind to socket)
-        if ((self.is_alive and not self._resetting and not self._waiting_on_cmd_connection and not self._swift.is_running()) 
-            or not self._dispersy): # If open has not been called yet
-            self._resetting = True
+        if not self._closing and not self._resetting and not self._waiting_on_cmd_connection and not self._swift.is_running():
+            self._resetting = True # Probably not necessary because of the lock
             logger.info("Resetting swift")
             self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RESETTING, error=error)
             self._added_peers = Set() # Reset the peers added before restarting
@@ -320,11 +327,14 @@ class SwiftHandler(TunnelEndpoint):
                 break # Nothing on the stack, so break
             item[0](*item[4], **item[5]) # Call function
         
-class CommonEndpoint(SwiftHandler, EndpointStatistics):
+class CommonEndpoint(SwiftHandler):
     
     def __init__(self, swift_process, api_callback=None):
         SwiftHandler.__init__(self, swift_process, api_callback)
-        EndpointStatistics.__init__(self)
+        self.start_time = datetime.utcnow()
+        self.id = urandom(16)
+        self.dispersy_contacts = Set()
+        self.is_alive = False # The endpoint is alive between open and close
         self.address = Address()
             
     def is_bootstrap_candidate(self, addr=None, candidate=None):
@@ -336,6 +346,47 @@ class CommonEndpoint(SwiftHandler, EndpointStatistics):
                 self._dispersy._bootstrap_candidates.get(candidate.sock_addr) is not None):
                 return True
         return False
+        
+    def update_dispersy_contacts(self, contacts_and_messages, recv=True):
+        """
+        Update the list of known dispersy contacts (excluding bootstrappers), with addresses and number of messages
+        Recv is used to determine whether the messages are incoming or outgoing
+        @type contacts_and_messages: tuple(Address, int)
+        @type recv: boolean
+        @return: List of new DispersyContacts
+        """
+        contacts = [DispersyContact(cam[0], rcvd_messages=cam[1], rcvd_bytes=cam[2]) 
+                    if recv else DispersyContact(cam[0], sent_messages=cam[1], sent_bytes=cam[2]) 
+                    for cam in contacts_and_messages if isinstance(cam, tuple) 
+                    and not self.is_bootstrap_candidate(addr=cam[0])]
+        diff = []
+        for c in contacts:
+            found = False
+            for dc in self.dispersy_contacts:
+                if dc.has_address(c.address):
+                    found = True
+                    dc.merge_stats(c)
+            if not found:
+                diff.append(c)
+        self.dispersy_contacts.update(diff)
+        return diff
+        
+    def peer_endpoints_received(self, addresses):
+        same_contacts = []
+        for dc in self.dispersy_contacts:
+            if dc.peer.has_any(addresses):
+                same_contacts.append(dc)
+        if len(same_contacts) == 0: # Should not happen, contact should have already been made
+            dc = DispersyContact(addresses[0])
+            dc.set_peer(Peer(addresses))
+            self.dispersy_contacts.add(dc)
+        elif len(same_contacts) == 1: # The normal case
+            same_contacts[0].set_peer(Peer(addresses)) # update the peer to include all addresses
+        else: # Merge same_contacts into one
+            self.dispersy_contacts.difference_update(Set(same_contacts[1:])) # Remove all but first from set
+            for i in range(1,len(same_contacts)):
+                same_contacts[0].merge_stats(same_contacts[i]) # Merge statistics
+            same_contacts[0].set_peer(Peer(addresses))
     
     def __str__(self):
         return str(self.address)
@@ -384,9 +435,9 @@ class MultiEndpoint(CommonEndpoint):
                 self._dispersy.notify_filehash_peers([Address.tuple(c.sock_addr) for c in candidates])
             
             for c in candidates:
-                new_c = self.determine_endpoint(c)
+                new_c = self.determine_endpoint(c, packets)
                 send_success = self._endpoint.send([new_c], packets)
-                self.update_dispersy_contacts_candidates_messages([new_c], packets, recv=False)
+                self.update_dispersy_contacts([(Address.tuple(new_c.sock_addr), len(packets), sum([len(p) for p in packets]))], recv=False)
         return send_success
             
     def open(self, dispersy):
@@ -394,7 +445,7 @@ class MultiEndpoint(CommonEndpoint):
         self._swift.start_cmd_connection()
         ret = ret and all([x.open(dispersy) for x in self.swift_endpoints])
                     
-        self.is_alive = True   
+        self.is_alive = True
         
         self._thread_loop = Thread(target=self._loop, name="MultiEndpoint_periodic_loop")
         self._thread_loop.daemon = True
@@ -406,26 +457,10 @@ class MultiEndpoint(CommonEndpoint):
         self.is_alive = False # Must be set before swift is shut down
         self._thread_stop_event.set()
         self._thread_loop.join()
-        # We want to shutdown now, but if no connection to swift is available, we need to do it the hard way
-        if self._swift is not None:
-            if self._swift.is_ready():
-                logger.debug("Closing softly")
-                self._swift.remove_download(self, True, True)
-                self._swift.early_shutdown()
-                # Upon closing, checkpoints are created for those downloads that need it
-            else:
-                logger.debug("Closing harshly")
-                self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
-                self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
-            # Try the sockets to see if they are in use
-            if not try_sockets(self._swift.listenaddrs, timeout=1.0):
-                logger.warning("Socket(s) is/are still in use")
-                self._swift.network_shutdown() # End it at all cost
-            
-            self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_STOPPED)
         
+        SwiftHandler.close(self)
         # Note that the swift_endpoints are still available after return, although closed
-        return all([x.close(timeout) for x in self.swift_endpoints]) and super(TunnelEndpoint, self).close(timeout)
+        return all([x.close(timeout) for x in self.swift_endpoints])
     
     def add_endpoint(self, addr, api_callback=None):
         logger.info("Add %s", addr)
@@ -500,7 +535,7 @@ class MultiEndpoint(CommonEndpoint):
         for e in endpoints:
             for paddr in contact.peer.addresses:
                 if contact.last_contact(paddr) > datetime.min:
-                    last_contacts.append((e, paddr, contact.last_contact()))
+                    last_contacts.append((e, paddr, contact.last_contact(paddr)))
         return sorted(last_contacts, key=lambda x: x[2], reverse=True)
     
     def _subnet_endpoints(self, peer, endpoints=[]):
@@ -579,25 +614,35 @@ class MultiEndpoint(CommonEndpoint):
         r = [(e, c["send_queue"]) for e in endpoints for c, saddr, _ in channels if e.address == saddr]
         return sorted(r, key=lambda x: x[1]) # Lowest sendqueue first
     
-    def _sort_endpoints_by_estimated_response_time(self, peer, endpoints=[]):
+    def _sort_endpoints_by_estimated_response_time(self, peer, packet_size, endpoints=[]):
         """
-        The endpoints will be sorted by: estimated response time = send_queue / upload_speed + round trip time
-        Only nonzero 
+        The endpoints will be sorted by: 
+        estimated send time = send_queue / upload_speed (socket total) + packet_size / upload_speed(channel) 
+        or if channel upspeed is 0                                     + round trip time / 2
+        Only nonzero total upspeeds will be added to the list.
+        @type peer: Peer
+        @param packet_size = Total amount of bytes that need to be sent
         @rtype: List((SwiftEndpoint, Address, float))
         """
         if not endpoints:
             endpoints = self.swift_endpoints
         channels = self._get_channels(peer)
+        upspeeds ={}
+        for c, saddr, _ in channels:
+            upspeeds[saddr] = upspeeds.get(saddr, 0) + c["cur_speed_up"]
         r = []
         for e in endpoints:
             for c, saddr, paddr in channels:
-                if e.address == saddr and c.get("cur_speed_up", 0) > 0:
-                    # send_queue (bytes) / upload_speed (bytes / s) + avg_rtt (us) / 10^6
-                    ert = c.get("send_queue", 0) / c.get("cur_speed_up", 1) + c.get("avg_rtt", 0) / 10**6
-                    r.append((e, paddr, ert))
+                if e.address == saddr and upspeeds[saddr] > 0: # Only add if we have measured speed                    
+                    est = c["send_queue"] / float(upspeeds[saddr]) # send_queue (bytes) / total upload_speed (bytes/s)  
+                    if c["cur_speed_up"] > 0:
+                        est += packet_size / float(c["cur_speed_up"]) # packet_size (bytes) / upload_speed (bytes/s)
+                    else:
+                        est += c["avg_rtt"] / float(10**6) / 2 # avg_rtt (us) / 10^6 / 2
+                    r.append((e, paddr, est))
         return sorted(r, key=lambda x: x[2]) # From low to high
         
-    def determine_endpoint(self, candidate):
+    def determine_endpoint(self, candidate, packets):
         """
         The endpoint that will take care of the task at hand, will be chosen here. 
         The chosen endpoint will be assigned to self._endpoint
@@ -608,6 +653,7 @@ class MultiEndpoint(CommonEndpoint):
         @type peer: Candidate
         @rtype: Candidate
         """
+        total_size = sum([len(packet) for packet in packets])
         
         def recur(endpoint, max_it):
             if max_it > 0 and not endpoint.is_alive or not endpoint.socket_running:
@@ -623,20 +669,21 @@ class MultiEndpoint(CommonEndpoint):
                     break
             
             # Choose the endpoint that currently has the highest transfer speed with this peer
-            for e, paddr, ert in self._sort_endpoints_by_estimated_response_time(contact.peer):
+            for e, paddr, ert in self._sort_endpoints_by_estimated_response_time(contact.peer, total_size):
                 if e is not None and e.is_alive and e.socket_running:
-                    logger.debug("Package will be sent with endpoint %s to %s with estimated response time of %f ms", e, paddr, ert * 1000)
+                    logger.debug("%d bytes will be sent %s to %s with estimated response time of %f ms", total_size, 
+                                 e, paddr, ert * 1000)
                     return (e, paddr.addr())
             # Choose the endpoint that had contact last with the peer
             for e, paddr, last_contact in self._last_endpoints(contact):
                 if e is not None and e.is_alive and e.socket_running:
-                    logger.debug("Package will be sent with endpoint %s that had contact with %s at %s", e, paddr, 
+                    logger.debug("%d bytes will be sent with %s that had contact with %s at %s", total_size, e, paddr, 
                                  last_contact.strftime("%H:%M:%S"))
                     return (e, paddr.addr())
             # In case no contact has been made with this peer (or those endpoint are not available)
             for e, paddr in self._subnet_endpoints(contact.peer):
                 if e is not None and e.is_alive and e.socket_running:
-                    logger.debug("Package will be sent with an endpoint, %s, in the same subnet as %s", e, paddr)
+                    logger.debug("%d bytes will be sent with %s in the same subnet as %s", total_size, e, paddr)
                     return (e, paddr.addr())          
             return recur(self._endpoint, len(self.swift_endpoints))
         
@@ -656,6 +703,7 @@ class MultiEndpoint(CommonEndpoint):
         # Spoof sock_addr. Dispersy knows only about the first socket address of a peer, 
         # to keep things clean.
         contact = Address.tuple(sock_addr)
+        self.update_dispersy_contacts([(contact, 1, len(data))], recv=True)
         for dc in self.dispersy_contacts:
             if dc.has_address(contact):
                 sock_addr = dc.address.addr()
@@ -667,7 +715,6 @@ class MultiEndpoint(CommonEndpoint):
         # In case the incoming_addr does not match any of the endpoints
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
         
-        self.update_dispersy_contacts([(contact, [data])], recv=True)
         
     def dispersythread_data_came_in(self, sock_addr, data, timestamp):
         self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), data)], True, timestamp)
@@ -679,35 +726,12 @@ class MultiEndpoint(CommonEndpoint):
             self._thread_stop_event.wait(REPORT_DISPERSY_INFO_TIME)
             data = []
             for e in self.swift_endpoints:
-                data.append({"address" : e.address, "total_send" : e._total_send, "total_up" : e._total_up, 
-                             "total_down" : e._total_down})
-            info = {"multiendpoint" : data}
-            # TODO: List the data from DispersyContacts as well
-            self.do_callback(MESSAGE_KEY_DISPERSY_INFO, info)
-        
-    def update_dispersy_contacts_candidates_messages(self, candidates, packets, recv=True):
-        self.update_dispersy_contacts([(Address.tuple(c.sock_addr), packets) for c in candidates], recv)
-        
-    def update_dispersy_contacts(self, contacts_and_messages, recv=True):
-        """
-        Update the list of known dispersy contacts (excluding bootstrappers), with addresses and messages
-        Note that if the list grows, the new addresses will be send a list of local sockets        
-        Recv is used to determine wether the messages are incoming or outgoing
-        @type contacts_and_messages: tuple(Address, Iterable(Packet))
-        @type recv: boolean
-        """
-        logger.debug("Update known dispersy contacts, %s", [str(cam[0]) for cam in contacts_and_messages])
-        contacts = [DispersyContact(cam[0], recv_messages=cam[1]) if recv else DispersyContact(cam[0], send_messages=cam[1]) 
-                    for cam in contacts_and_messages if isinstance(cam, tuple) 
-                    and not self.is_bootstrap_candidate(addr=cam[0])]
-        diff = []
-        for c in contacts:
-            if not any([dc.has_address(c.address) for dc in self.dispersy_contacts]): # Don't know this address
-                diff.append(c)
-                logger.info("New dispersy contact %s", c.address)
-        self.dispersy_contacts.update(diff) # First update before sending them messages, just to be sure we don't start looping
-        if diff: # Only useful if non empty
-            self.send_addresses_to_communities([dc.address for dc in diff])
+                data.append({"address" : e.address, "contacts" : len(e.dispersy_contacts),
+                             "num_sent" : sum([dc.num_sent() for dc in e.dispersy_contacts]), 
+                             "bytes_sent" : sum([dc.total_sent() for dc in e.dispersy_contacts]), 
+                             "num_rcvd" : sum([dc.num_rcvd() for dc in e.dispersy_contacts]),
+                             "bytes_rcvd" : sum([dc.total_rcvd() for dc in e.dispersy_contacts])})
+            self.do_callback(MESSAGE_KEY_DISPERSY_INFO, {"multiendpoint" : data})
     
     def interface_came_up(self, addr):
         logger.debug("%s came up", addr.interface)
@@ -727,6 +751,14 @@ class MultiEndpoint(CommonEndpoint):
         e.open(self._dispersy) # Don't forget to open it...
         # Now that we have a new socket we should tell it about the files to disseminate
         self.distribute_all_hashes_to_peers(e.address)
+        
+    def update_dispersy_contacts(self, contacts_and_messages, recv=True):
+        """
+        Note that if the list of DispersyContacts grows, the new addresses will be send a list of local sockets        
+        """
+        diff = CommonEndpoint.update_dispersy_contacts(self, contacts_and_messages, recv=recv)
+        if diff: # Only useful if non empty
+            self.send_addresses_to_communities([dc.address for dc in diff])
     
     def send_addresses_to_communities(self, addresses):
         """
@@ -761,13 +793,12 @@ class MultiEndpoint(CommonEndpoint):
             e._swift = self._swift
         # TODO: This wasn't always necessary, what changed??
         
-    def peer_endpoints_received(self, messages):
+    def peer_endpoints_received(self, messages):        
         for x in messages:
             addresses = [Address.unknown(a) for a in x.payload.addresses]
-            for dc in self.dispersy_contacts:
-                if dc.address in addresses:
-                    dc.set_peer(Peer(addresses))
-                    break # There should be only one dispersy endpoint with this address
+        CommonEndpoint.peer_endpoints_received(self, addresses)
+        for e in self.swift_endpoints:
+            e.peer_endpoints_received(addresses)
     
 class SwiftEndpoint(CommonEndpoint):
     
@@ -810,9 +841,6 @@ class SwiftEndpoint(CommonEndpoint):
             if any(len(packet) > 2**16 - 60 for packet in packets):
                 raise RuntimeError("UDP does not support %d byte packets" % len(max(len(packet) for packet in packets)))
 
-            self._total_up += sum(len(data) for data in packets) * len(candidates)
-            self._total_send += (len(packets) * len(candidates))
-
             self._swift.splock.acquire()
             try:
                 for candidate in candidates:
@@ -828,24 +856,24 @@ class SwiftEndpoint(CommonEndpoint):
                             logger.debug("%30s -> %15s:%-5d %4d bytes", name, sock_addr[0], sock_addr[1], len(data))
                             self._dispersy.statistics.dict_inc(self._dispersy.statistics.endpoint_send, name)
                         self._swift.send_tunnel(self._session, sock_addr, data, self.address)
+                        
+                # This contact may be spoofed by MultiEndpoint, which ensures that we don't have DispersyContacts
+                # that resolve to the same peer
+                self.update_dispersy_contacts([(Address.tuple(c.sock_addr), len(packets), sum([len(p) for p in packets])) 
+                                               for c in candidates], recv=False)
     
                 # return True when something has been send
                 return candidates and packets
     
             finally:
                 self._swift.splock.release()
-            
-            # This contact may be spoofed by MultiEndpoint, which ensures that we don't have DispersyContacts
-            # that resolve to the same peer
-            self.dispersy_contacts.update([DispersyContact(Address.tuple(c.sock_addr), send_messages=packets)
-                                           for c in candidates if isinstance(c.sock_addr, tuple)
-                                           and not self.is_bootstrap_candidate(addr=Address.tuple(c.sock_addr), candidate=c)])
         
     def i2ithread_data_came_in(self, session, sock_addr, data):
         if isinstance(sock_addr, tuple):
             # This contact may be spoofed by MultiEndpoint, which ensures that we don't have DispersyContacts
             # that resolve to the same peer
-            self.dispersy_contacts.add(DispersyContact(Address.tuple(sock_addr), recv_messages=[data]))
+                
+                self.update_dispersy_contacts([(Address.tuple(sock_addr), 1, len(data))], recv=True)
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
             
     def dispersythread_data_came_in(self, sock_addr, data, timestamp):

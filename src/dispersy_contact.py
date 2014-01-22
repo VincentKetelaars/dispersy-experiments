@@ -9,39 +9,50 @@ import collections
 from src.download import Peer
 from src.address import Address
 
+from src.logger import get_logger
+logger = get_logger(__name__)
+
 class DispersyContact(object):
     '''
     This object represents a Dispersy contact (i.e. peer address). 
     Each incoming and outgoing message to this address is noted.
     '''
 
-    def __init__(self, address, send_messages=[], recv_messages=[]):
+    def __init__(self, address, sent_messages=0, sent_bytes=0, rcvd_messages=0, rcvd_bytes=0):
         self.address = address # Primary address
         self.last_send_time = {address : datetime.min}
         self.last_recv_time = {address : datetime.min}
-        self.count_send = {}
-        self.count_recv = {}
+        self.count_sent = {}
+        self.count_rcvd = {}
+        self.bytes_sent = {}
+        self.bytes_rcvd = {}
         self.peer = Peer([address])
-        if send_messages: # not []
-            self.send(send_messages)
-        if recv_messages: # not []
-            self.recv(recv_messages)
+        if sent_messages > 0:
+            self.sent(sent_messages, sent_bytes, address=address)
+        if rcvd_messages > 0:
+            self.rcvd(rcvd_messages, rcvd_bytes, address=address)
        
-    def recv(self, messages, address=Address()):
-        assert isinstance(messages, collections.Iterable)
-        self.count_recv[address] = self.count_recv.get(address, 0) + len(messages)
+    def rcvd(self, num_messages, bytes_rcvd, address=Address()):
+        self.count_rcvd[address] = self.count_rcvd.get(address, 0) + num_messages
+        self.bytes_rcvd[address] = self.bytes_rcvd.get(address, 0) + bytes_rcvd
         self.last_recv_time[address] = datetime.utcnow()
         
-    def total_received(self):
-        return sum([v for k, v in self.count_recv.items() if k in self.peer.addresses])
+    def num_rcvd(self):
+        return sum([v for k, v in self.count_rcvd.items() if k in self.peer.addresses])
+    
+    def total_rcvd(self):
+        return sum([v for k, v in self.bytes_rcvd.items() if k in self.peer.addresses])
         
-    def send(self, messages, address=Address()):
-        assert isinstance(messages, collections.Iterable)
-        self.count_send[address] = self.count_send.get(address, 0) + len(messages)
+    def sent(self, num_messages, bytes_sent, address=Address()):
+        self.count_sent[address] = self.count_sent.get(address, 0) + num_messages
+        self.bytes_sent[address] = self.bytes_sent.get(address, 0) + bytes_sent
         self.last_send_time[address] = datetime.utcnow()
         
-    def total_send(self):
-        return sum([v for k, v in self.count_send.items() if k in self.peer.addresses])
+    def num_sent(self):
+        return sum([v for k, v in self.count_sent.items() if k in self.peer.addresses])
+    
+    def total_sent(self):
+        return sum([v for k, v in self.bytes_sent.items() if k in self.peer.addresses])
         
     def last_contact(self, address=None):
         """
@@ -65,6 +76,29 @@ class DispersyContact(object):
         @type address: Address
         """
         return address == self.address or (self.peer is not None and self.peer.has_any([address]))
+    
+    def merge_stats(self, contact):
+        """
+        Merge statistics of this contact with that of another DispersyContact
+        @type contact: DispersyContact
+        """
+        assert (contact, DispersyContact)
+        for k, v in contact.last_send_time.iteritems():
+            self.last_send_time[k] = max(self.last_send_time.get(k, datetime.min), v)
+        for k, v in contact.last_recv_time.iteritems():
+            self.last_recv_time[k] = max(self.last_recv_time.get(k, datetime.min), v)
+        for k, v in contact.count_sent.iteritems():
+            self.count_sent[k] = self.count_sent.get(k, 0) + v
+        for k, v in contact.bytes_sent.iteritems():
+            self.bytes_sent[k] = self.bytes_sent.get(k, 0) + v
+        for k, v in contact.count_rcvd.iteritems():
+            self.count_rcvd[k] = self.count_rcvd.get(k, 0) + v
+        for k, v in contact.bytes_rcvd.iteritems():
+            self.bytes_rcvd[k] = self.bytes_rcvd.get(k, 0) + v
+            
+    def __str__(self):
+        return "%s, %d:%d sent, %d:%d received, at %s" % (self.address, self.num_sent(), self.total_sent(), 
+                                                          self.num_rcvd(), self.total_rcvd(), self.last_contact())
         
     # We only care about the address when comparing
     def __eq__(self, other):
