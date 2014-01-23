@@ -11,7 +11,7 @@ from src.logger import get_logger
 
 from src.address import Address
 from src.dispersy_instance import verify_addresses_are_free
-from src.definitions import RANDOM_PORTS
+from src.definitions import ALLOWED_PORTS
 from src.tools.networks import get_interface_addresses
 
 
@@ -29,7 +29,7 @@ class TestVerifyAddresses(unittest.TestCase):
         interfaces = get_interface_addresses()
         self.addresses = []
         for i in interfaces: # AF_INET only
-            addr = Address(ip=i.address, port=random.randint(*RANDOM_PORTS))
+            addr = Address(ip=i.address, port=random.randint(*ALLOWED_PORTS))
             self.addresses.append(addr)
             s = socket.socket(addr.family, socket.SOCK_DGRAM)
             s.bind(addr.addr())

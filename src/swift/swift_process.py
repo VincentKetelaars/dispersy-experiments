@@ -360,6 +360,11 @@ class MySwiftProcess(SwiftProcess):
         self.write(cmd)
 
     def add_socket(self, saddr, overwrite=False):
+        """
+        Send ADDSOCKET to Swift
+        @type saddr: Address
+        @param overwrite: If the address is already familiar, saddr will replace it if overwrite is true
+        """
         logger.debug("Add socket %s %s",saddr, saddr.interface)
         self.splock.acquire()
         try:

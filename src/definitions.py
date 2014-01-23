@@ -66,7 +66,7 @@ SECURITY = u"medium"
 
 MASTER_MEMBER_PUBLIC_KEY = "307e301006072a8648ce3d020106052b81040024036a0004004b2c2fbbf036a0ae1dedf4420ff724869e324bc63064ec2e7bad062a7a9c7f31a7c3ff17a11fd582c9eb8b727dacb228afceb2002ad6e916efd4531e79f040341c7259c99938aae9f6ece17c5075b7ab8e9c92f7ff4493468d1e354a31d139e73928266b824fe3".decode("HEX")
 
-RANDOM_PORTS = (socket.IPPORT_USERRESERVED, 2**16 - 1)
+ALLOWED_PORTS = (socket.IPPORT_USERRESERVED, 2**16 - 1)
 
 DEFAULT_MESSAGE_COUNT = 1
 DEFAULT_MESSAGE_DELAY = 0.0 # Seconds
@@ -100,6 +100,8 @@ MIN_MTU = 1500 # Bytes. Bloomfilters will be this big unless we change that as w
 MAX_MTU = 2**16 # Bytes
 DISPERSY_MESSAGE_MINIMUM = 60 # Bytes
 MAX_FILE_SIZE = MAX_MTU - DISPERSY_MESSAGE_MINIMUM
+ENDPOINT_SOCKET_TIMEOUT = 180.0 # Seconds
+ENDPOINT_CONTACT_TIMEOUT = 10.0 # Seconds
 
 # Filepusher
 FILETYPES_NOT_TO_SEND = [".mhash",".mbinmap"]
@@ -115,6 +117,8 @@ DELETE_CONTENT = False # If True it will be deleted immediately when finished, a
 PEXON = False # If True Swift might disseminate data to unauthorized peers
 MAX_CONCURRENT_DOWNLOADING_SWARMS = 5
 ALMOST_DONE_DOWNLOADING_TIME = 5.0 # Seconds
+BUFFER_DRAIN_TIME = 2.0 # Seconds
+MAX_SOCKET_INITIALIZATION_TIME = 0.9 # Seconds
 
 """
 Timeout

@@ -9,10 +9,10 @@ import logging
 import Queue
 from os import urandom
 from os.path import isfile, dirname, getmtime
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Thread, Event, RLock
 from sets import Set
-from errno import EADDRINUSE, EADDRNOTAVAIL
+from errno import EADDRINUSE, EADDRNOTAVAIL, EWOULDBLOCK
 
 from src.logger import get_logger
 from src.swift.swift_process import MySwiftProcess # This should be imported first, or it will screw up the logs.
@@ -27,7 +27,9 @@ from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.definitions import MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, MESSAGE_KEY_SWIFT_PID,\
      STATE_RESETTING, STATE_RUNNING, STATE_STOPPED,\
     REPORT_DISPERSY_INFO_TIME, MESSAGE_KEY_DISPERSY_INFO, FILE_HASH_MESSAGE_NAME,\
-    MAX_CONCURRENT_DOWNLOADING_SWARMS, ALMOST_DONE_DOWNLOADING_TIME
+    MAX_CONCURRENT_DOWNLOADING_SWARMS, ALMOST_DONE_DOWNLOADING_TIME,\
+    BUFFER_DRAIN_TIME, MAX_SOCKET_INITIALIZATION_TIME, ENDPOINT_SOCKET_TIMEOUT,\
+    ENDPOINT_CONTACT_TIMEOUT
 from src.dispersy_extends.payload import AddressesCarrier
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_contact import DispersyContact
@@ -41,7 +43,8 @@ def _swift_runnable_decorator(func):
     """
     def dec(self, *args, **kwargs):
         with self.lock:
-            if not self._swift.is_ready():
+            # We can't go putting stuff on swift when it isn't working, or we don't have any available sockets
+            if not self._swift.is_ready() or not self.socket_running: 
                 self.enqueue_swift_queue(func, self, *args, **kwargs)
                 return
             return func(self, *args, **kwargs)
@@ -52,7 +55,7 @@ class SwiftHandler(TunnelEndpoint):
     def __init__(self, swift_process, api_callback=None):
         TunnelEndpoint.__init__(self, swift_process)
         self._api_callback = api_callback
-        self._socket_running = -1
+        self._socket_running = (-1, datetime.utcnow())
         self._resetting = False
         self._waiting_on_cmd_connection = False
         self._swift_cmd_queue = Queue.Queue()
@@ -71,11 +74,12 @@ class SwiftHandler(TunnelEndpoint):
     
     @property
     def socket_running(self):
-        return self._socket_running == 0
+        return self._socket_running[0] == 0 or (self._socket_running[0] == EWOULDBLOCK and 
+                                                self._socket_running[1] > datetime.utcnow() - timedelta(seconds=BUFFER_DRAIN_TIME))
     
     @socket_running.setter
     def socket_running(self, state):
-        self._socket_running = state
+        self._socket_running = (state, datetime.utcnow())
         self.do_callback(MESSAGE_KEY_SOCKET_STATE, self.address, state)
     
     def do_callback(self, key, *args, **kwargs):
@@ -230,7 +234,7 @@ class SwiftHandler(TunnelEndpoint):
         self._dequeueing_cmd_queue = True
         while not self._swift_cmd_queue.empty() and self._swift.is_ready():
             func, args, kargs = self._swift_cmd_queue.get()
-            logger.debug("Dequeue %s %s %s", func, args, kargs)
+            logger.debug("Dequeue %s", func.__name__)
             func(*args, **kargs)            
         self._dequeueing_cmd_queue = False        
 
@@ -240,30 +244,7 @@ class SwiftHandler(TunnelEndpoint):
         self._swift.set_on_sockaddr_info_callback(self.sockaddr_info_callback)
         
     def sockaddr_info_callback(self, address, state):
-        logger.debug("Socket info callback %s %d", address, state)
-        if state < 0 or address.ip == "AF_UNSPEC":
-            logger.debug("Something is going on, but don't know what.")
-        elif state == 0:
-            logger.debug("Socket is bound and active")
-            if address.resolve_interface():
-                e = self.get_endpoint(address)
-                if e is not None:
-                    e.socket_running = state
-                else:
-                    logger.warning("This %s is not in %s", address, [e.address for e in self.swift_endpoints])
-                self.dequeue_swift_queue()
-            else:
-                logger.debug("Might have been able to bind to something, but unable to resolve interface")
-        elif state == 11: # We're overloading the buffer        
-            logger.debug("Buffer overload!")
-        elif state > 0:
-            e = self.get_endpoint(address)
-            if e is not None:
-                e.socket_running = state
-            if not address.resolve_interface():
-                logger.debug("Cannot resolve interface")
-            if try_socket(address):
-                logger.debug("Yelp, socket is gone!")
+        self.socket_running = state
                 
     def put_swift_file_stack(self, func, size, timestamp, priority=0, args=(), kwargs={}):
         """
@@ -325,6 +306,23 @@ class SwiftHandler(TunnelEndpoint):
             if item is None:
                 break # Nothing on the stack, so break
             item[0](*item[4], **item[5]) # Call function
+            
+    def retrieve_download_impl(self, roothash):
+        """
+        Retrieve SwiftDownloadImpl with roothash
+        
+        @return: SwiftDownloadImpl, otherwise None
+        """
+        logger.debug("Retrieve download implementation, %s", roothash)
+        self.lock.acquire()
+        d = None
+        try:
+            d = self._swift.roothash2dl[roothash]
+        except KeyError:
+            logger.error("Could not retrieve downloadimpl from roothash2dl")
+        finally:
+            self.lock.release()
+        return d
         
 class CommonEndpoint(SwiftHandler):
     
@@ -386,6 +384,24 @@ class CommonEndpoint(SwiftHandler):
             for i in range(1,len(same_contacts)):
                 same_contacts[0].merge_stats(same_contacts[i]) # Merge statistics
             same_contacts[0].set_peer(Peer(addresses))
+            
+    def send_addresses_to_communities(self, addresses):
+        """
+        The addresses should be reachable from the candidates point of view
+        Local addresses will not benefit the candidate or us
+        """
+        logger.debug("Send address to %s", addresses)
+        candidates = [WalkCandidate(a.addr(), False, a.addr(), a.addr(), u"unknown") for a in addresses]
+        message = AddressesCarrier([e.address for e in self.swift_endpoints])
+        for c in self._dispersy.get_communities():
+            if isinstance(c, MyCommunity): # Ensure that the create_addresses_messages exists
+                # TODO: Note that it is kind of superfluous to send when we have only one socket
+                # TODO: Note also that we should consider only using active sockets
+                self._dispersy.callback.register(c.create_addresses_messages, (1,message,candidates), 
+                                                 kargs={"update":False}, delay=0.0)
+                
+    def last_contact(self):
+        return max([dc.last_contact() for dc in self.dispersy_contacts])
     
     def __str__(self):
         return str(self.address)
@@ -475,19 +491,18 @@ class MultiEndpoint(CommonEndpoint):
         """
         Remove endpoint.
         """
-        logger.info("Remove %s", endpoint)
         assert isinstance(endpoint, Endpoint), type(endpoint)
         with self.lock:
-            ret = False
-            for e in self.swift_endpoints:
-                if e == endpoint:
-                    e.close()
-                    self.swift_endpoints.remove(e)
-                    if self._endpoint == e:
-                        self._endpoint = self._next_endpoint(e)
-                    ret = True
-                    break
-        return ret
+            endpoint.close()
+            if self._endpoint == endpoint:
+                self._endpoint = self._next_endpoint(endpoint)                    
+            try:
+                self.swift_endpoints.remove(endpoint)                
+                logger.info("Removed %s", endpoint)
+                return True
+            except KeyError:
+                logger.info("%s is not part of the SwiftEndpoints", endpoint)
+        return False
     
     def get_endpoint(self, address):
         """
@@ -722,6 +737,7 @@ class MultiEndpoint(CommonEndpoint):
         while not self._thread_stop_event.is_set():
             self.dequeue_swift_queue()
             self.evaluate_swift_swarms()
+            self.check_endpoints()
             self._thread_stop_event.wait(REPORT_DISPERSY_INFO_TIME)
             data = []
             for e in self.swift_endpoints:
@@ -731,6 +747,25 @@ class MultiEndpoint(CommonEndpoint):
                              "num_rcvd" : sum([dc.num_rcvd() for dc in e.dispersy_contacts]),
                              "bytes_rcvd" : sum([dc.total_rcvd() for dc in e.dispersy_contacts])})
             self.do_callback(MESSAGE_KEY_DISPERSY_INFO, {"multiendpoint" : data})
+            
+    def check_endpoints(self):
+        marked_remove = []
+        for e in self.swift_endpoints:
+            # In case an error has persisted for more than ENDPOINT_SOCKET_TIMEOUT seconds, remove endpoint
+            if e._socket_running[0] > 0 and e._socket_running[1] < datetime.utcnow() - timedelta(seconds=ENDPOINT_SOCKET_TIMEOUT):
+                marked_remove.append(e)
+        for e in marked_remove:
+            self.remove_endpoint(e)
+        # In case an endpoint has not done any sending or receiving (Tunnelled or not), ensure the socket is still working
+#         for e in self.swift_endpoints:
+#             if (e.last_contact() < datetime.utcnow() - timedelta(ENDPOINT_CONTACT_TIMEOUT) and
+#                 not e.address in [c[1] for c in self._get_channels()]):
+#                 logger.info("%s has not had any contact with anyone for at least %d seconds", e.address, ENDPOINT_CONTACT_TIMEOUT)
+                
+    
+    def dequeue_swift_queue(self):
+        if self.socket_running:
+            CommonEndpoint.dequeue_swift_queue(self)
     
     def interface_came_up(self, addr):
         logger.debug("%s came up", addr.interface)
@@ -738,6 +773,9 @@ class MultiEndpoint(CommonEndpoint):
             return
         for e in self.swift_endpoints:
             if e.address.ip == addr.ip:
+                # Don't try and overwrite this endpoint if it is working or trying to work
+                if e.socket_running or e.socket_initializing(): 
+                    return
                 addr.set_port(e.address.port)
                 return e.swift_add_socket(addr) # If ip already exists, try adding it to swift (only if not already working)
         for e in self.swift_endpoints:
@@ -757,21 +795,23 @@ class MultiEndpoint(CommonEndpoint):
         diff = CommonEndpoint.update_dispersy_contacts(self, contacts_and_messages, recv=recv)
         if diff: # Only useful if non empty
             self.send_addresses_to_communities([dc.address for dc in diff])
-    
-    def send_addresses_to_communities(self, addresses):
-        """
-        The addresses should be reachable from the candidates point of view
-        Local addresses will not benefit the candidate or us
-        """
-        logger.debug("Send address to %s", addresses)
-        candidates = [WalkCandidate(a.addr(), False, a.addr(), a.addr(), u"unknown") for a in addresses]
-        message = AddressesCarrier([e.address for e in self.swift_endpoints])
-        for c in self._dispersy.get_communities():
-            if isinstance(c, MyCommunity): # Ensure that the create_addresses_messages exists
-                # TODO: Note that it is kind of superfluous to send when we have only one socket
-                # TODO: Note also that we should consider only using active sockets
-                self._dispersy.callback.register(c.create_addresses_messages, (1,message,candidates), 
-                                                 kargs={"update":False}, delay=0.0)
+                
+    def sockaddr_info_callback(self, address, state):
+        logger.debug("Socket info callback %s %d", address, state)
+        if state < 0 or address.ip == "AF_UNSPEC":
+            return logger.warning("Something is going on, but don't know what.")        
+        e = self.get_endpoint(address)
+        if e is not None:
+            e.sockaddr_info_callback(address, state)
+        else:
+            logger.warning("This %s is not in %s", address, [e.address for e in self.swift_endpoints])
+        self.dequeue_swift_queue()
+        if state == 0:
+            for addr, roothash, sock_addr in self._added_peers:
+                if sock_addr != address:
+                    d = self.retrieve_download_impl(roothash)
+                    if d is not None:
+                        self.swift_add_peer(d, addr, address)
                 
     def swift_started_running_callback(self):
         logger.info("The TCP connection with Swift is up")
@@ -797,6 +837,14 @@ class MultiEndpoint(CommonEndpoint):
         CommonEndpoint.peer_endpoints_received(self, addresses)
         for e in self.swift_endpoints:
             e.peer_endpoints_received(addresses)
+            
+    def swift_add_peer(self, d, addr, sock_addr=None):
+        if not sock_addr is None:
+            CommonEndpoint.swift_add_peer(self, d, addr, sock_addr=sock_addr)
+        else:
+            for e in self.swift_endpoints:
+                if e.socket_running:
+                    CommonEndpoint.swift_add_peer(self, d, addr, sock_addr=e.address)
     
 class SwiftEndpoint(CommonEndpoint):
     
@@ -877,6 +925,10 @@ class SwiftEndpoint(CommonEndpoint):
     def dispersythread_data_came_in(self, sock_addr, data, timestamp):
         self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), 
                                              data)], True, timestamp)
+    
+    def socket_initializing(self):
+        return (self._socket_running[0] == -1 and 
+                self._socket_running[1] > datetime.utcnow() - timedelta(seconds=MAX_SOCKET_INITIALIZATION_TIME))
         
     def swift_add_socket(self, addr=None):
         logger.debug("SwiftEndpoint add socket %s", addr)
@@ -891,6 +943,15 @@ class SwiftEndpoint(CommonEndpoint):
         else:
             if not self.socket_running:
                 self._swift.add_socket(self.address, True)
+                
+    def sockaddr_info_callback(self, address, state):
+        if self.address == address: # Should be redundant
+            self.socket_running = state
+        else:
+            logger.warning("Socket info callback for %s is at %s", address, self.address)
+        if state == EWOULDBLOCK:
+            logger.info("%s has buffer issues", self.address)
+        # TODO: Ensure that this socket can go on working.. Whether it is a new or old interface!
                     
 def get_hash(filename, swift_path):
     """
