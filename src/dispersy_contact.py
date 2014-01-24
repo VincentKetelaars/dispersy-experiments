@@ -5,7 +5,6 @@ Created on Nov 21, 2013
 '''
 
 from datetime import datetime
-import collections
 from src.download import Peer
 from src.address import Address
 

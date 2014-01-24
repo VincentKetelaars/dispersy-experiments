@@ -21,7 +21,8 @@ from src.dispersy_extends.mydispersy import MyDispersy
 from src.filepusher import FilePusher
 from src.definitions import MASTER_MEMBER_PUBLIC_KEY, SECURITY, DEFAULT_MESSAGE_COUNT, DEFAULT_MESSAGE_DELAY, \
 SLEEP_TIME, STATE_INITIALIZED, STATE_RUNNING, STATE_STOPPED, STATE_DONE, MESSAGE_KEY_STATE,\
-    MESSAGE_KEY_SWIFT_STATE, MAX_MTU, DISPERSY_MESSAGE_MINIMUM
+    MESSAGE_KEY_SWIFT_STATE, MAX_MTU, DISPERSY_MESSAGE_MINIMUM,\
+    BOOTSTRAPPERS_RESOLVE_TIME
 from src.address import Address
 
 logger = get_logger(__name__)
@@ -47,7 +48,7 @@ class DispersyInstance(object):
         @param files: Files that should be disseminated
         @param run_time: Total run time in seconds
         @param bloomfilter_update: Period after which another introduction request is sent in seconds
-        @param walker: If enable the Dispersy walker will enabled
+        @param walker: If enable the Dispersy walker will be enabled
         @param gateways: Ip addresses of the gateways for specific interfaces (eth0=192.168.0.1)
         @param mtu: Maximum transmission unit directs the maximum size of messages
         @param callback: Callback function that will called on certain events
@@ -103,7 +104,8 @@ class DispersyInstance(object):
         self._dispersy = MyDispersy(self._callback, self._endpoint, self._dispersy_work_dir, self._sqlite_database)
         
         # Timeout determines how long the bootstrappers should try before continuing (at the moment)
-        self._dispersy.start(timeout=1.0) 
+        timeout = BOOTSTRAPPERS_RESOLVE_TIME if self._walker else 0.0 # 0.0 bootstrap will be registered instead of blocking call
+        self._dispersy.start(timeout=timeout) 
         print "Dispersy is listening on port %d" % self._dispersy.lan_address[1]
         
         self._community = self._callback.call(self.create_mycommunity)

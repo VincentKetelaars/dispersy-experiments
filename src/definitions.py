@@ -76,6 +76,7 @@ SLEEP_TIME = 0.5
 TOTAL_RUN_TIME = 10
 BLOOM_FILTER_UPDATE = 5.0
 REPORT_DISPERSY_INFO_TIME = 1.0
+BOOTSTRAPPERS_RESOLVE_TIME = 10.0
 
 DEST_DIR = os.getenv("HOME") + "/Desktop/tests_dest"
 SWIFT_BINPATH = os.getenv("HOME") + "/git/dispersy-experiments/libswift/swift" #os.getenv("HOME") + "/svn/libswift/ppsp/swift" # "/git/dispersy-experiments/tribler/Tribler/SwiftEngine/swift"
