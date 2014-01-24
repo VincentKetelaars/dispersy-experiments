@@ -9,9 +9,9 @@ import binascii
 import pickle
 
 from src.logger import get_logger
-from Tribler.Core.DownloadConfig import DownloadStartupConfig, DownloadConfigInterface
-from Tribler.Core.Swift.SwiftDownloadImpl import SwiftDownloadImpl
-from Tribler.Core.simpledefs import DLSTATUS_STOPPED, DLSTATUS_SEEDING
+from src.swift.tribler.DownloadConfig import DownloadStartupConfig, DownloadConfigInterface
+from src.swift.tribler.SwiftDownloadImpl import SwiftDownloadImpl
+from src.swift.tribler.simpledefs import DLSTATUS_STOPPED, DLSTATUS_SEEDING
 
 logger = get_logger(__name__)
 

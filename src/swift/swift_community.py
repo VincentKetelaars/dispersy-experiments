@@ -9,8 +9,8 @@ from os.path import exists, basename, join
 from sets import Set
 from threading import Thread, Event
 
-from Tribler.Core.Swift.SwiftDef import SwiftDef
 
+from src.swift.tribler.SwiftDef import SwiftDef
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
 from src.download import Download, Peer
 from src.definitions import MESSAGE_KEY_RECEIVE_FILE, MESSAGE_KEY_SWIFT_INFO, HASH_LENGTH,\
