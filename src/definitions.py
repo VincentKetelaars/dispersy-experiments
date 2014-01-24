@@ -3,9 +3,8 @@ Created on Sep 10, 2013
 
 @author: Vincent Ketelaars
 '''
-import os
 import socket
-from datetime import datetime
+import os
 
 """
 API
@@ -78,9 +77,7 @@ BLOOM_FILTER_UPDATE = 5.0
 REPORT_DISPERSY_INFO_TIME = 1.0
 BOOTSTRAPPERS_RESOLVE_TIME = 10.0
 
-DEST_DIR = os.getenv("HOME") + "/Desktop/tests_dest"
-SWIFT_BINPATH = os.getenv("HOME") + "/git/dispersy-experiments/libswift/swift" #os.getenv("HOME") + "/svn/libswift/ppsp/swift" # "/git/dispersy-experiments/tribler/Tribler/SwiftEngine/swift"
-DISPERSY_WORK_DIR = os.getenv("HOME") + "/Music/"+ datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(os.getpid()) + "/"
+SWIFT_BINPATH = os.getenv("PWD") + "/libswift/swift"
 SQLITE_DATABASE = ":memory:"
 ENABLE_CANDIDATE_WALKER = False
 
@@ -125,13 +122,3 @@ MAX_SOCKET_INITIALIZATION_TIME = 0.9 # Seconds
 Timeout
 """
 TIMEOUT_INTRODUCTION_REQUEST = 5.0 # Seconds
-
-"""
-Git Repository
-"""
-REPOSITORY_HOME = os.getenv("HOME") + "/git/dispersy-experiments"
-
-"""
-UAV Repository
-"""
-UAV_REPOSITORY_HOME = os.getenv("HOME") + "/svn/norut/uav/trunk"

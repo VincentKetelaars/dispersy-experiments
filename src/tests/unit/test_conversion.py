@@ -8,9 +8,9 @@ import unittest
 from src.logger import get_logger
 from dispersy.candidate import Candidate
 
-from src.tests.unit.definitions import SMALL_TASK_TIMEOUT
+from src.tests.unit.definitions import SMALL_TASK_TIMEOUT, DEST_DIR
 from src.dispersy_instance import DispersyInstance
-from src.definitions import SWIFT_BINPATH, DEST_DIR, FILE_HASH_MESSAGE_NAME, SMALL_FILE_MESSAGE_NAME,\
+from src.definitions import SWIFT_BINPATH, FILE_HASH_MESSAGE_NAME, SMALL_FILE_MESSAGE_NAME,\
     ADDRESSES_MESSAGE_NAME, API_MESSAGE_NAME
 from src.dispersy_extends.conversion import FileHashConversion, SmallFileConversion, AddressesConversion,\
     APIMessageConversion
