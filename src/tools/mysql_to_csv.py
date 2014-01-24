@@ -6,7 +6,6 @@ Created on Dec 13, 2013
 import argparse
 import csv
 import sys
-from sets import Set
 from datetime import datetime
 
 from Common.InternalDB import mysql
@@ -48,7 +47,7 @@ class ConfigElement():
         self.parent = None
         self.version = version
         self.comment = comment
-        self.children = Set()
+        self.children = set()
         
     def add_child(self, child):
         self.children.add(child)

@@ -6,7 +6,6 @@ Created on Sep 10, 2013
 import binascii
 import os
 from datetime import datetime
-from sets import Set
 
 from src.address import Address
 from src.logger import get_logger
@@ -17,9 +16,9 @@ logger = get_logger(__name__)
 class Peer(object):
     
     def __init__(self, addresses):
-        self.addresses = Set()
+        self.addresses = set()
         if addresses is not None:
-            self.addresses = Set(addresses)
+            self.addresses = set(addresses)
             
     def merge(self, peer):
         for a in peer.addresses:
@@ -63,7 +62,7 @@ class Download(object):
         self._seed = seed
         self._download = download
         self._downloadimpl = downloadimpl
-        self._peers = Set() # Set of Peers
+        self._peers = set() # Set of Peers
         self._size = size
         self._timestamp = timestamp
         self._priority = priority
@@ -77,7 +76,7 @@ class Download(object):
         self._destination = destination
         self.cleaned = False # True when this download has been cleaned up
         self._bad_swarm = False
-        self._active_channels = Set()
+        self._active_channels = set()
         
     @property
     def roothash(self):
@@ -192,7 +191,7 @@ class Download(object):
     
     def merge_peers(self, new_peer):
         if new_peer is not None and self._allow_peer(new_peer) and not new_peer in self._peers:
-            diff = Set()
+            diff = set()
             for peer in self._peers:
                 if any([a in peer.addresses for a in new_peer.addresses]):
                     diff.add(peer)
@@ -215,7 +214,7 @@ class Download(object):
         return [c[1] for c in self._active_channels]
     
     def inactive_addresses(self):
-        return Set([a for p in self._peers for a in p.addresses]).difference(self.active_addresses())
+        return set([a for p in self._peers for a in p.addresses]).difference(self.active_addresses())
         
     def active_peers(self):
         return [p for p in self._peers if p.has_any(self.active_addresses())]

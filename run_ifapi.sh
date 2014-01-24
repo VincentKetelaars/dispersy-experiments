@@ -1,5 +1,3 @@
-export PYTHONPATH=${PYTHONPATH}:${PWD}:${PWD}/tribler
-
 python -O -m src.tests.main_interface_api -d /home/vincent/Desktop/test_very_very_large -D /home/vincent/Desktop/tests_dest -t 60 \
 -p 193.156.108.78:12346 -b 5 &> ~/Desktop/logs1 &
 python -O -m src.tests.main_interface_api -d /home/vincent/Desktop/tests -D /home/vincent/Desktop/tests_dest_2 -t 60 \

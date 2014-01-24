@@ -7,7 +7,6 @@ import os
 import random
 import sys
 from threading import Event
-from sets import Set
 
 from src.logger import get_logger
 from src.swift.swift_process import MySwiftProcess  # This should be imported first, or it will screw up the logs. # TODO: Fix this
@@ -216,7 +215,7 @@ def verify_addresses_are_free(addrs):
     if not addrs: # None or []
         logger.warning("No address to return!")
         return addrs
-    l = Set() # No doubles!
+    l = set() # No doubles!
     for addr in addrs:
         if not addr.resolve_interface():
             logger.debug("Interface for %s does not exist", addr)

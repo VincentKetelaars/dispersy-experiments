@@ -1,6 +1,6 @@
 UAV=${HOME}/svn/norut/uav/trunk
 
-export PYTHONPATH=${PWD}:${PWD}/tribler:$UAV:.
+export PYTHONPATH=${PWD}:$UAV:.
 
 cd $UAV
 python -m Tools.ConfigTool delete version -v default

@@ -11,7 +11,6 @@ from os import urandom
 from os.path import isfile, dirname, getmtime
 from datetime import datetime, timedelta
 from threading import Thread, Event, RLock
-from sets import Set
 from errno import EADDRINUSE, EADDRNOTAVAIL, EWOULDBLOCK
 
 from src.logger import get_logger
@@ -58,10 +57,10 @@ class SwiftHandler(TunnelEndpoint):
         self._waiting_on_cmd_connection = False
         self._swift_cmd_queue = Queue.Queue()
         self._dequeueing_cmd_queue = False
-        self._started_downloads = Set()
+        self._started_downloads = set()
         self._file_stack = []
-        self._added_peers = Set()
-        self._peers_to_add = Set()
+        self._added_peers = set()
+        self._peers_to_add = set()
         self._closing = False
         
         self.lock = RLock() # Reentrant Lock
@@ -185,8 +184,8 @@ class SwiftHandler(TunnelEndpoint):
             self._resetting = True # Probably not necessary because of the lock
             logger.info("Resetting swift")
             self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RESETTING, error=error)
-            self._added_peers = Set() # Reset the peers added before restarting
-            self._started_downloads = Set() # Reset the started downloads before restarting
+            self._added_peers = set() # Reset the peers added before restarting
+            self._started_downloads = set() # Reset the started downloads before restarting
             
             # Try the sockets to see if they are in use
             if not try_sockets([e.address for e in self.swift_endpoints], timeout=1.0):
@@ -328,7 +327,7 @@ class CommonEndpoint(SwiftHandler):
         SwiftHandler.__init__(self, swift_process, api_callback)
         self.start_time = datetime.utcnow()
         self.id = urandom(16)
-        self.dispersy_contacts = Set()
+        self.dispersy_contacts = set()
         self.is_alive = False # The endpoint is alive between open and close
         self.address = Address()
             
@@ -378,7 +377,7 @@ class CommonEndpoint(SwiftHandler):
         elif len(same_contacts) == 1: # The normal case
             same_contacts[0].set_peer(Peer(addresses)) # update the peer to include all addresses
         else: # Merge same_contacts into one
-            self.dispersy_contacts.difference_update(Set(same_contacts[1:])) # Remove all but first from set
+            self.dispersy_contacts.difference_update(set(same_contacts[1:])) # Remove all but first from set
             for i in range(1,len(same_contacts)):
                 same_contacts[0].merge_stats(same_contacts[i]) # Merge statistics
             same_contacts[0].set_peer(Peer(addresses))
@@ -859,7 +858,7 @@ class SwiftEndpoint(CommonEndpoint):
             elif address in self._swift.confirmedaddrs:
                 self.socket_running = 0
             elif address.port == 0: # In case the port is zero, check for any confirmed address not in listenaddrs
-                s = Set(self._swift.confirmedaddrs).difference(Set(self._swift.listenaddrs))
+                s = set(self._swift.confirmedaddrs).difference(set(self._swift.listenaddrs))
                 for a in s:
                     if a.ip == self.address.ip: # If any matches the ip then claim this address as your own
                         self.address.set_port(a.port)

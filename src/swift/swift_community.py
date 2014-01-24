@@ -6,7 +6,6 @@ Created on Jan 7, 2014
 import binascii
 from os import makedirs
 from os.path import exists, basename, join
-from sets import Set
 from threading import Thread, Event
 
 
@@ -30,7 +29,7 @@ class SwiftCommunity(object):
         self.dcomm = dispersy_community
         self.endpoint = endpoint
         self._api_callback = api_callback
-        self.peers = Set()
+        self.peers = set()
         self.downloads = {}
         
         self._thread_stop_event = Event()
@@ -153,7 +152,7 @@ class SwiftCommunity(object):
                 # TODO: Protect against unreachable local addresses
                 download.merge_peers(Peer(addresses))
                 for p in self.peers:
-                    if len(Set(p.addresses).intersection(Set(addresses))) > 0:
+                    if len(set(p.addresses).intersection(set(addresses))) > 0:
                         p.merge(Peer(addresses))
                         break # There should be no other peer in there with a address from this payload
             
@@ -330,8 +329,8 @@ class SwiftCommunity(object):
                 raw_total_down += d.downloadimpl.total("down", raw=False)
         done_downloads = sum([d.is_finished() and d.is_download() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
         num_seeding = sum([d.seeder() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
-        active_sockets = len(Set(s for d in self.downloads.itervalues() for s in d.active_sockets()))
-        active_peers = len(Set(p for d in self.downloads.itervalues() for p in d.active_peers()))
+        active_sockets = len(set(s for d in self.downloads.itervalues() for s in d.active_sockets()))
+        active_peers = len(set(p for d in self.downloads.itervalues() for p in d.active_peers()))
         active_channels = len([c for d in self.downloads.itervalues() for c in d._active_channels])
         num_downloading = sum([d.seeder() and not d.is_finished() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
         return {"up_speed" : upspeed, "down_speed" : downspeed, "total_up" : total_up, 

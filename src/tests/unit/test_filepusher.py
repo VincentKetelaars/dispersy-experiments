@@ -9,7 +9,6 @@ import time
 
 from src.filepusher import FilePusher
 from src.definitions import SWIFT_BINPATH, MAX_FILE_SIZE, HASH_LENGTH, FILENAMES_NOT_TO_SEND, FILETYPES_NOT_TO_SEND
-from sets import Set
 
 from src.tests.unit.definitions import DIRECTORY, FILES
 
@@ -31,7 +30,7 @@ class TestFilePusher(unittest.TestCase):
     def setUp(self):
         self._directory = DIRECTORY
         self._files = FILES
-        self._copy_files = Set(self._files)
+        self._copy_files = set(self._files)
         self._filepusher = None
 
     def tearDown(self):
@@ -84,12 +83,12 @@ class TestFilePusher(unittest.TestCase):
         
         time.sleep(1) # Wait another second because empty queue does not mean finished yet.
         
-        self.assertEqual(all_files, Set())
+        self.assertEqual(all_files, set())
     
     def test_directory(self):        
         if all_success:
             raise unittest.SkipTest("The combined test case test_dir_and_files has already been succesful")
-        all_files = Set(self.get_files_from_directory_recur(self._directory))
+        all_files = set(self.get_files_from_directory_recur(self._directory))
 
         def callback(message):
             all_files.remove(message.filename)
@@ -103,7 +102,7 @@ class TestFilePusher(unittest.TestCase):
         self.wait_and_asses(all_files)
     
     def test_files(self):
-        all_files = Set(self.get_files_from_directory_recur(self._directory))
+        all_files = set(self.get_files_from_directory_recur(self._directory))
 
         def callback(message):
             all_files.remove(message.filename)
@@ -118,7 +117,7 @@ class TestFilePusher(unittest.TestCase):
     
     @success_decorater
     def test_dir_and_files(self):
-        all_files = Set(self.get_files_from_directory_recur(self._directory)).union(Set(self._files))
+        all_files = set(self.get_files_from_directory_recur(self._directory)).union(set(self._files))
         
         def callback(message):
             all_files.remove(message.filename)
