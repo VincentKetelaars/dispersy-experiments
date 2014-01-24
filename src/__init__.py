@@ -6,12 +6,17 @@ Created on Aug 7, 2013
 import sys
 from os.path import exists
 from logging.config import fileConfig
+from logging import basicConfig, DEBUG
+from ConfigParser import NoSectionError
 
-if exists("logger.conf"):
+logfile = "logger.conf"
+
+if exists(logfile):
     try:
-        fileConfig("logger.conf")
-        print "logger.conf configured logging"
-    except IOError:
-        print "Could not open logger.conf", sys.exc_info()
+        fileConfig(logfile)
+        print logfile, "configured logging"
+    except (IOError, NoSectionError):
+        basicConfig(stream = sys.stderr, level=DEBUG, format='%(filename)s:%(lineno)s %(levelname)s:%(message)s')
+        print "Could not open", logfile, sys.exc_info()
 else:
-    print "logger.conf does not exist"
+    print logfile, "does not exist"
