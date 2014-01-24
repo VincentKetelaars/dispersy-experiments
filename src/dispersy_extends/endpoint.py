@@ -18,9 +18,8 @@ from src.logger import get_logger
 from src.swift.swift_process import MySwiftProcess # This should be imported first, or it will screw up the logs.
 from dispersy.endpoint import Endpoint, TunnelEndpoint
 from dispersy.candidate import BootstrapCandidate, WalkCandidate
-
-from Tribler.Core.Swift.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
-from Tribler.Core.Swift.SwiftDef import SwiftDef
+from src.swift.tribler.SwiftProcess import DONE_STATE_EARLY_SHUTDOWN
+from src.swift.tribler.SwiftDef import SwiftDef
 
 from src.address import Address
 from src.dispersy_extends.candidate import EligibleWalkCandidate
@@ -28,8 +27,7 @@ from src.definitions import MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, M
      STATE_RESETTING, STATE_RUNNING, STATE_STOPPED,\
     REPORT_DISPERSY_INFO_TIME, MESSAGE_KEY_DISPERSY_INFO, FILE_HASH_MESSAGE_NAME,\
     MAX_CONCURRENT_DOWNLOADING_SWARMS, ALMOST_DONE_DOWNLOADING_TIME,\
-    BUFFER_DRAIN_TIME, MAX_SOCKET_INITIALIZATION_TIME, ENDPOINT_SOCKET_TIMEOUT,\
-    ENDPOINT_CONTACT_TIMEOUT
+    BUFFER_DRAIN_TIME, MAX_SOCKET_INITIALIZATION_TIME, ENDPOINT_SOCKET_TIMEOUT
 from src.dispersy_extends.payload import AddressesCarrier
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_contact import DispersyContact
@@ -495,7 +493,10 @@ class MultiEndpoint(CommonEndpoint):
         with self.lock:
             endpoint.close()
             if self._endpoint == endpoint:
-                self._endpoint = self._next_endpoint(endpoint)                    
+                if len(self.swift_endpoints) == 1:
+                    self._endpoint = None
+                else:
+                    self._endpoint = self._next_endpoint(endpoint)                    
             try:
                 self.swift_endpoints.remove(endpoint)                
                 logger.info("Removed %s", endpoint)
