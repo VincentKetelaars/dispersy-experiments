@@ -18,6 +18,7 @@ class Address(object):
     '''
     
     IFNAME_WILDCARD= "All"
+    SWIFT_UNKNOWN = "AF_UNSPEC"
 
     def __init__(self, ip="0.0.0.0", port=0, family=AF_INET, flowinfo=0, scopeid=0, interface=None):
         self._ip = ip
@@ -77,10 +78,12 @@ class Address(object):
         # ip:port
         try:
             (ip, port) = cls.parse_ipv4_string(addr_str.strip())
-            return cls(ip=ip, port=port, family=AF_INET)
+            if ip != Address.SWIFT_UNKNOWN:
+                return cls(ip=ip, port=port, family=AF_INET)
         except AttributeError:
-            logger.debug("%s is not an ipv4 format! Fall back to default", addr_str)
-            return cls()
+            pass
+        logger.debug("%s is not an ipv4 format! Fall back to default", addr_str)
+        return cls()
         
     @classmethod
     def ipv6(cls, addr_str):

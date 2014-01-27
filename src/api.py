@@ -436,8 +436,7 @@ class ReceiverAPI(PipeHandler):
     
     @_dispersy_running_decorator
     def add_socket(self, address):
-        e = self.dispersy_instance._endpoint.add_endpoint(address, api_callback=self._generic_callback)
-        e.open(self.dispersy_instance._dispersy)
+        self.dispersy_instance._endpoint.swift_add_socket(address)
     
     @_dispersy_running_decorator
     def return_progress_data(self):

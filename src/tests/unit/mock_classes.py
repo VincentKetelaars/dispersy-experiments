@@ -5,6 +5,7 @@ Created on Oct 3, 2013
 '''
 
 import os
+from src.swift.swift_process import MySwiftProcess
             
 class FakeDispersy(object):
 
@@ -15,24 +16,14 @@ class FakeDispersy(object):
     def lan_address(self):
         return self._lan_address
     
-class FakeSwift(object):
+class FakeSwift(MySwiftProcess):
     
     def __init__(self, addresses):
-        self.listenaddrs = addresses
-        self.confirmedaddrs = addresses
+        self.working_sockets = set(addresses)
         self.roothash2dl = {}
-        
-    def set_on_swift_restart_callback(self, callback):
-        pass
-    
-    def set_on_tcp_connection_callback(self, callback):
-        pass
-    
-    def set_on_sockaddr_info_callback(self, callback):
-        pass
     
     def add_socket(self, address):
-        self.listenaddrs.append(address)
+        self.working_sockets.add(address)
         
     def start_cmd_connection(self):
         pass

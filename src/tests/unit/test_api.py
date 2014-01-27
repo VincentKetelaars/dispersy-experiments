@@ -135,7 +135,6 @@ class TestAPINetworkInterface(unittest.TestCase):
             ip = "193.156.108.78"
             port = 0
             self.add_socket(ip, port)
-            self.add_peer(ip, 12346)
             event = Event()
             event.wait(2)
             if_ = "wlan0"

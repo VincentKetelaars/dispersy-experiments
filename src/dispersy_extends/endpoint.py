@@ -40,8 +40,8 @@ def _swift_runnable_decorator(func):
     """
     def dec(self, *args, **kwargs):
         with self.lock:
-            # We can't go putting stuff on swift when it isn't working, or we don't have any available sockets
-            if not self._swift.is_ready() or not self.socket_running: 
+            # We can't go putting stuff on swift when it isn't working
+            if not self._swift.is_ready(): 
                 self.enqueue_swift_queue(func, self, *args, **kwargs)
                 return
             return func(self, *args, **kwargs)
@@ -97,7 +97,7 @@ class SwiftHandler(TunnelEndpoint):
                 self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
                 self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
             # Try the sockets to see if they are in use
-            if not try_sockets(self._swift.listenaddrs, timeout=1.0):
+            if not try_sockets(self._swift.working_sockets, timeout=1.0):
                 logger.warning("Socket(s) is/are still in use")
                 self._swift.network_shutdown() # End it at all cost
             
@@ -170,6 +170,13 @@ class SwiftHandler(TunnelEndpoint):
         """
         if d is not None and d.get_def().get_roothash() in self._started_downloads:
             self._swift.set_pex(d.get_def().get_roothash_as_hex(), enable)
+            
+    @_swift_runnable_decorator
+    def swift_add_socket(self, saddr):
+        """
+        @type address: 
+        """
+        self._swift.add_socket(saddr)   
     
     def restart_swift(self, error=None):
         """
@@ -188,7 +195,7 @@ class SwiftHandler(TunnelEndpoint):
             self._started_downloads = set() # Reset the started downloads before restarting
             
             # Try the sockets to see if they are in use
-            if not try_sockets([e.address for e in self.swift_endpoints], timeout=1.0):
+            if not try_sockets(self._swift.working_sockets, timeout=1.0):
                 logger.warning("Socket(s) is/are still in use")
                 self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
                 self._swift.network_shutdown() # Ensure that swift really goes down
@@ -198,7 +205,7 @@ class SwiftHandler(TunnelEndpoint):
             # Make sure not to make the same mistake as what let to this
             # Any roothash added twice will create an error, leading to this. 
             self._swift = MySwiftProcess(self._swift.binpath, self._swift.workdir, None, 
-                                         [e.address for e in self.swift_endpoints], None, None, None)
+                                         self._swift.working_sockets, None, None, None)
             self.set_callbacks()
             self._swift.add_download(self) # Normally in open
             # First add all calls to the queue and then start the TCP connection
@@ -284,6 +291,8 @@ class SwiftHandler(TunnelEndpoint):
         It determines the number of swarms (almost) done, 
         and subsequently pops new swarms to be created of the stack if there is room
         """
+        if not self.socket_running:
+            return
         downloading_swarms = 0
         almost_done_swarms = 0
         for d in self.swift.roothash2dl.values():
@@ -420,8 +429,6 @@ class MultiEndpoint(CommonEndpoint):
         if swift_process:
             self.do_callback(MESSAGE_KEY_SWIFT_PID, swift_process.get_pid())
             self.set_callbacks()
-            for addr in self._swift.listenaddrs:
-                self.add_endpoint(addr, api_callback=api_callback)
     
     def get_address(self):
         if self._endpoint is None:
@@ -474,10 +481,14 @@ class MultiEndpoint(CommonEndpoint):
         # Note that the swift_endpoints are still available after return, although closed
         return all([x.close(timeout) for x in self.swift_endpoints])
     
-    def add_endpoint(self, addr, api_callback=None):
+    def add_endpoint(self, addr):
         logger.info("Add %s", addr)
         with self.lock:
-            new_endpoint = SwiftEndpoint(self._swift, addr, api_callback=api_callback)
+            new_endpoint = SwiftEndpoint(self._swift, addr, api_callback=self._api_callback)
+            try:
+                new_endpoint.open(self._dispersy)
+            except AttributeError:
+                pass
             self.swift_endpoints.append(new_endpoint)
             if len(self.swift_endpoints) == 1:
                 self._endpoint = new_endpoint
@@ -761,32 +772,21 @@ class MultiEndpoint(CommonEndpoint):
 #             if (e.last_contact() < datetime.utcnow() - timedelta(ENDPOINT_CONTACT_TIMEOUT) and
 #                 not e.address in [c[1] for c in self._get_channels()]):
 #                 logger.info("%s has not had any contact with anyone for at least %d seconds", e.address, ENDPOINT_CONTACT_TIMEOUT)
-                
-    
-    def dequeue_swift_queue(self):
-        if self.socket_running:
-            CommonEndpoint.dequeue_swift_queue(self)
     
     def interface_came_up(self, addr):
         logger.debug("%s came up", addr.interface)
         if addr.interface is None:
             return
         for e in self.swift_endpoints:
-            if e.address.ip == addr.ip:
+            if (e.address.ip == addr.ip or e.address.interface.name == addr.interface.name or
+                e.address.interface.device == addr.interface.device):
                 # Don't try and overwrite this endpoint if it is working or trying to work
                 if e.socket_running or e.socket_initializing(): 
                     return
-                addr.set_port(e.address.port)
-                return e.swift_add_socket(addr) # If ip already exists, try adding it to swift (only if not already working)
-        for e in self.swift_endpoints:
-            # TODO: Determine if we are going to use interface name, or just device name
-            if (e.address.interface.name == addr.interface.name or
-                e.address.interface.device == addr.interface.device):
                 e.socket_running = -1 # This new socket is not yet running, so initialize to -1
-                return e.swift_add_socket(addr) # Replace with new address                
-        e = self.add_endpoint(addr, api_callback=self._api_callback) # If it is new create endpoint
-        e.open(self._dispersy) # Don't forget to open it...
-        # Now that we have a new socket we should tell it about the files to disseminate
+                addr.set_port(e.address.port) # Use the old port
+                return e.swift_add_socket(addr) # If ip already exists, try adding it to swift (only if not already working)
+        self.swift_add_socket(addr) # If it is new send address to swift
         
     def update_dispersy_contacts(self, contacts_and_messages, recv=True):
         """
@@ -804,7 +804,9 @@ class MultiEndpoint(CommonEndpoint):
         if e is not None:
             e.sockaddr_info_callback(address, state)
         else:
-            logger.warning("This %s is not in %s", address, [e.address for e in self.swift_endpoints])
+            logger.debug("This %s is not in %s", address, [e.address for e in self.swift_endpoints])
+            if state == 0:
+                self.add_endpoint(address)
         self.dequeue_swift_queue()
         if state == 0:
             for addr, roothash, sock_addr in self._added_peers:
@@ -853,19 +855,10 @@ class SwiftEndpoint(CommonEndpoint):
         self.waiting_queue = Queue.Queue()
         self.address = address
         if self.address.resolve_interface():
-            if not address in self._swift.listenaddrs:
+            if not address in self._swift.working_sockets:
                 self.swift_add_socket()
-            elif address in self._swift.confirmedaddrs:
-                self.socket_running = 0
-            elif address.port == 0: # In case the port is zero, check for any confirmed address not in listenaddrs
-                s = set(self._swift.confirmedaddrs).difference(set(self._swift.listenaddrs))
-                for a in s:
-                    if a.ip == self.address.ip: # If any matches the ip then claim this address as your own
-                        self.address.set_port(a.port)
-                        self.socket_running = 0
-                        break 
             else:
-                logger.debug("Socket is not ready yet!")
+                self.socket_running = 0
         else:
             logger.debug("This address can not be resolved to an interface")
         
@@ -932,17 +925,9 @@ class SwiftEndpoint(CommonEndpoint):
         
     def swift_add_socket(self, addr=None):
         logger.debug("SwiftEndpoint add socket %s", addr)
-        if addr is not None:
-            try:
-                self._swift.listenaddrs.remove(self.address) # Remove old value
-            except KeyError:
-                logger.exception("Why can't we remove this address? %s", self.address)
+        if not self.socket_running:
             self.address = addr
-        if not self._swift.is_ready():
-            self.enqueue_swift_queue(self.swift_add_socket, addr)
-        else:
-            if not self.socket_running:
-                self._swift.add_socket(self.address, True)
+            SwiftHandler.swift_add_socket(self, self.address)
                 
     def sockaddr_info_callback(self, address, state):
         if self.address == address: # Should be redundant

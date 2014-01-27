@@ -36,14 +36,7 @@ class MySwiftProcess(SwiftProcess):
         self.workdir = workdir
         self.zerostatedir = zerostatedir
         self.spmgr = spmgr
-        self.listenaddrs = []
-        self.confirmedaddrs = []
-
-        # Main UDP listen socket
-        if listenaddrs is None:
-            self.listenaddrs = []
-        else:
-            self.listenaddrs = listenaddrs
+        self.working_sockets = set()
         
         # NSSA control socket
         if cmdgwport is None:
@@ -67,10 +60,10 @@ class MySwiftProcess(SwiftProcess):
         args.append("-j")
 #         args.append("-B") # Set Channel debug_file
 #         args.append("-D" + self.workdir + "/channeldebug")
-        if self.listenaddrs: # In case there is nothing to listen too, either None or []
+        if listenaddrs: # In case there is nothing to listen too, either None or []
             args.append("-l")  # listen
             addrs = ""
-            for l in self.listenaddrs:
+            for l in listenaddrs:
                 addrs += str(l) + ","
             args.append(addrs[:-1]) # Remove last comma
         
@@ -162,7 +155,7 @@ class MySwiftProcess(SwiftProcess):
             saddr = Address.unknown(addrstr)
             logger.debug("Found listen address %s", saddr)
             if saddr != Address():
-                self.confirmedaddrs.append(saddr)
+                self.working_sockets.add(saddr)
                 if self._sockaddr_info_callback:
                     self._sockaddr_info_callback(saddr, 0)
             
@@ -178,10 +171,10 @@ class MySwiftProcess(SwiftProcess):
             else:
                 logger.debug("TCP connection failed")
         
-        t = Thread(target=wait_to_start)
+        t = Thread(target=wait_to_start, name="SwiftProcess_wait_for_Swift")
         t.setDaemon(True) # This thread should die when main is quit
         t.start()
-        # TODO: Should this thread be cleaned up somewhere?
+        # Python will clean up when it is done
     
     def set_on_swift_restart_callback(self, callback):
         self._swift_restart_callback = callback
@@ -191,6 +184,8 @@ class MySwiftProcess(SwiftProcess):
         
     def set_on_sockaddr_info_callback(self, callback):
         self._sockaddr_info_callback = callback
+        for s in self.working_sockets: # In case some are already up and running
+            callback(s, 0)
     
     def i2ithread_readlinecallback(self, ic, cmd):
         logger.debug("CMD IN: %s", cmd)
@@ -232,8 +227,10 @@ class MySwiftProcess(SwiftProcess):
             except ValueError:
                 pass
             if saddr != Address():
-                if state == 0 and not saddr in self.confirmedaddrs:
-                    self.confirmedaddrs.append(saddr)
+                if state == 0:
+                    self.working_sockets.add(saddr)
+                else:
+                    self.working_sockets.discard(saddr)
                 if self._sockaddr_info_callback:
                     self._sockaddr_info_callback(saddr, state)
 
@@ -358,7 +355,7 @@ class MySwiftProcess(SwiftProcess):
         cmd += '\r\n'
         self.write(cmd)
 
-    def add_socket(self, saddr, overwrite=False):
+    def add_socket(self, saddr):
         """
         Send ADDSOCKET to Swift
         @type saddr: Address
@@ -370,18 +367,9 @@ class MySwiftProcess(SwiftProcess):
             if self.donestate != DONE_STATE_WORKING or not self.is_alive():
                 return
             
-            if saddr in self.listenaddrs:
-                logger.debug("Address already in use %s", saddr)
-                if not overwrite:
-                    return
-                else: # Remove from listenaddrs and put it back in. Remove also from confirmedaddrs if there
-                    self.listenaddrs.remove(saddr)
-                    if saddr in self.confirmedaddrs:
-                        self.confirmedaddrs.remove(saddr)
-                    self.listenaddrs.append(saddr)                    
-            else:
-                # saddr is of instance Address
-                self.listenaddrs.append(saddr)
+            if saddr in self.working_sockets:
+                logger.debug("We already have socket %s working", saddr)
+                return
 
             saddrstr = str(saddr)
             if saddr.interface is not None:
