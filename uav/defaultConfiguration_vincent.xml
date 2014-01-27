@@ -519,7 +519,7 @@
 				</p20_NetworkManager>
 				<p21_Dispersy>
 					<enabled>True</enabled>
-					<command>PYTHONPATH=.:/home/vincent/git/dispersy-experiments:/home/vincent/git/dispersy-experiments/tribler python /home/vincent/git/dispersy-experiments/src/uav_api.py</command>
+					<command>PYTHONPATH=.:/home/vincent/git/dispersy-experiments python /home/vincent/git/dispersy-experiments/src/uav_api.py</command>
 					<user>root</user>
 					<delay>0</delay>
 				</p21_Dispersy>

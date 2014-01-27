@@ -77,7 +77,7 @@ BLOOM_FILTER_UPDATE = 5.0
 REPORT_DISPERSY_INFO_TIME = 1.0
 BOOTSTRAPPERS_RESOLVE_TIME = 10.0
 
-SWIFT_BINPATH = os.getenv("PWD") + "/libswift/swift"
+SWIFT_BINPATH = os.environ.get("PWD", "") + "/libswift/swift"
 SQLITE_DATABASE = ":memory:"
 ENABLE_CANDIDATE_WALKER = False
 
