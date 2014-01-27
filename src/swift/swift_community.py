@@ -34,8 +34,9 @@ class SwiftCommunity(object):
         
         self._thread_stop_event = Event()
         self._thread_loop = Thread(target=self._loop, name="SwiftCommunity_periodic_loop")
-        self._thread_loop.daemon = True
+        self._thread_loop.setDaemon(True)
         self._thread_loop.start()
+        # TODO: Stop this thread somehow
         
     def _swift_start(self, d, moreinfo=MOREINFO, pexon=PEXON):
         self.endpoint.swift_start(d)

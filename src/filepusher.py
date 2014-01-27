@@ -18,7 +18,7 @@ from src.definitions import SLEEP_TIME, MAX_FILE_SIZE, FILENAMES_NOT_TO_SEND, FI
 
 logger = get_logger(__name__)
 
-class FilePusher(object):
+class FilePusher(Thread):
     '''
     FilePusher goes through a directory or a list of files to find either new files or updated files,
     and does a callback with the list of these files. It distinguishes between files larger and smaller than _file_size.
@@ -34,6 +34,8 @@ class FilePusher(object):
         @param file_size: The decision variable for choosing callback object
         @param hidden: List hidden downloads as well
         '''
+        Thread.__init__(self, name="Filepusher")
+        self.setDaemon(True)
         self._dir = None
         self.set_directory(directory)
         # TODO: Allow for multiple directories
@@ -47,6 +49,7 @@ class FilePusher(object):
         self.swift_path = swift_path
         self._hidden = hidden
         self._stop_event = Event()
+        self._thread_func = CallFunctionThread(timeout=1.0, name="Filepusher")
         
     def set_directory(self, directory):
         if directory and exists(directory) and isdir(directory):
@@ -57,25 +60,15 @@ class FilePusher(object):
             for f in files:
                 if exists(f) and isfile(f):
                     self._files.append(f)
-        
-    def start(self):
-        """
-        Start separate thread that calls _loop
-        Start another thread that takes functions plus arguments and calls them
-        """
-        self._thread_loop = Thread(target=self._loop)
-        self._thread_loop.daemon = True
-        self._thread_loop.start()
-        
-        self._thread_func = CallFunctionThread(timeout=1.0)
-        self._thread_func.start()
-        
-    def _loop(self):
+
+    def run(self):
         """
         Run until _stop_event is set. 
         Determine list of files that have are new or have changed since previous iteration.
         Call _callback with each of these files.
-        """
+        """        
+        self._thread_func.start()
+        
         while not self._stop_event.is_set():                            
             diff = self._list_files_to_send()
             for absfilename in diff:
@@ -108,7 +101,6 @@ class FilePusher(object):
         Stop thread
         """
         self._stop_event.set()
-        self._thread_loop.join()
         self._thread_func.stop()
             
     def _list_files_to_send(self):
