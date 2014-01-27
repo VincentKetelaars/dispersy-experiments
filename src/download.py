@@ -74,7 +74,7 @@ class Download(object):
             
         self.moreinfo = moreinfo
         self._destination = destination
-        self.cleaned = False # True when this download has been cleaned up
+        self._swift_running = False
         self._bad_swarm = False
         self._active_channels = set()
         
@@ -126,11 +126,13 @@ class Download(object):
     
     def set_bad_swarm(self, bad):
         self._bad_swarm = bad
+        self._swift_running = False # Probably not necessary
     
     def is_bad_swarm(self):
         return self._bad_swarm
     
     def got_moreinfo(self):
+        self._swift_running = True
         for c in self.downloadimpl.midict.get("channels", []):
             self._active_channels.add((Address(ip=c["socket_ip"], port=int(c["socket_port"])), 
                                        Address(ip=c["ip"], port=int(c["port"])))) # TODO: Add IPv6
@@ -203,9 +205,15 @@ class Download(object):
     def known_address(self, addr):
         assert isinstance(addr, Address)
         return addr in [a for p in self._peers for a in p.addresses]
+    
+    def running_on_swift(self):
+        return self._swift_running
+
+    def removed_from_swift(self):
+        self._swift_running = False
         
     def active(self):
-        return len(self._active_channels) > 0
+        return self._swift_running and len(self._active_channels) > 0
     
     def active_sockets(self):
         return [c[0] for c in self._active_channels]

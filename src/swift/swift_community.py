@@ -75,7 +75,7 @@ class SwiftCommunity(object):
         @param rm_state: Remove state boolean
         @param rm_download: Remove download file boolean
         """
-        if download.cleaned:
+        if not download.running_on_swift():
             return
         rm_state = not download.seeder()
         rm_download = DELETE_CONTENT
@@ -86,7 +86,7 @@ class SwiftCommunity(object):
         self.do_callback(MESSAGE_KEY_RECEIVE_FILE, download.filename)
         if not download.seeder(): # If we close the download we cannot seed
             self.endpoint.swift_remove_download(download.downloadimpl, rm_state, rm_download)
-        download.cleaned = True # Note that the swift calls might be queued
+        download.removed_from_swift() # Note that the swift calls might be queued
                 
     def do_callback(self, key, *args, **kwargs):
         if self._api_callback is not None:
@@ -292,21 +292,21 @@ class SwiftCommunity(object):
         return None
     
     def pause_download(self, download):
-        if download is not None and not download.is_bad_swarm():
-            self.endpoint.swift_checkpoint(download.downloadimpl)
+        if download is not None and download.running_on_swift():
+            if download.is_download():
+                self.endpoint.swift_checkpoint(download.downloadimpl)
             self.endpoint.swift_remove_download(download.downloadimpl, False, False)
+            download.removed_from_swift()
             
     def continue_download(self, download):
         if download is not None and not download.is_bad_swarm():
-            self.endpoint.swift_start(download.downloadimpl)
-            self.endpoint.swift_moreinfo(download.downloadimpl, MOREINFO)
-            self.endpoint.swift_pex(download.downloadimpl, PEXON)            
+            self._swift_start(download.downloadimpl)
             self.add_new_peers()
             
     def stop_download(self, download):
-        if download is not None and not download.is_bad_swarm():
+        if download is not None and download.running_on_swift():
             self.endpoint.swift_remove_download(download.downloadimpl, True, False)
-            self.cleaned = True
+            download.removed_from_swift()
                         
     def _loop(self):
         while not self._thread_stop_event.is_set():
@@ -321,7 +321,7 @@ class SwiftCommunity(object):
         raw_total_up = 0
         raw_total_down = 0
         for d in self.downloads.itervalues():
-            if not d.is_bad_swarm() and d.active():
+            if d.running_on_swift():
                 upspeed += d.downloadimpl.speed("up")
                 downspeed += d.downloadimpl.speed("down")
                 total_up += d.downloadimpl.total("up")
@@ -329,11 +329,11 @@ class SwiftCommunity(object):
                 raw_total_up += d.downloadimpl.total("up", raw=True)
                 raw_total_down += d.downloadimpl.total("down", raw=False)
         done_downloads = sum([d.is_finished() and d.is_download() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
-        num_seeding = sum([d.seeder() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
+        num_seeding = sum([d.seeder() and not d.running_on_swift() for d in self.downloads.itervalues()])
         active_sockets = len(set(s for d in self.downloads.itervalues() for s in d.active_sockets()))
         active_peers = len(set(p for d in self.downloads.itervalues() for p in d.active_peers()))
         active_channels = len([c for d in self.downloads.itervalues() for c in d._active_channels])
-        num_downloading = sum([d.seeder() and not d.is_finished() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
+        num_downloading = sum([d.seeder() and not d.is_finished() and not d.running_on_swift() for d in self.downloads.itervalues()])
         return {"up_speed" : upspeed, "down_speed" : downspeed, "total_up" : total_up, 
                 "total_down" : total_down, "raw_total_up" : raw_total_up, "raw_total_down" : raw_total_down,
                 "downloads" : len(self.downloads), "done_downloads" : done_downloads, 
