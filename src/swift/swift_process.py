@@ -165,7 +165,11 @@ class MySwiftProcess(SwiftProcess):
         def wait_to_start():
             while not self._swift_running.is_set():
                 self._swift_running.wait()
-            SwiftProcess.start_cmd_connection(self)
+            try:
+                SwiftProcess.start_cmd_connection(self)
+            except AssertionError: # If Swift fails to connect within 60 seconds
+                if self._swift_restart_callback:
+                    self._swift_restart_callback()
             if self.fastconn is not None and self._tcp_connection_open_callback is not None:
                 self._tcp_connection_open_callback()
             else:
