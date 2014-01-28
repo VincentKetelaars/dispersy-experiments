@@ -827,7 +827,7 @@ class MultiEndpoint(CommonEndpoint):
     def socket_running(self):
         return any([e.socket_running for e in self.swift_endpoints])
     
-    def restart_swift(self, error):
+    def restart_swift(self, error=None):
         SwiftHandler.restart_swift(self, error)
         for e in self.swift_endpoints: # We need to add the reference to the new swift to each endpoint
             e._swift = self._swift
