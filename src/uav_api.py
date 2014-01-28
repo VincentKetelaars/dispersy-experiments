@@ -250,4 +250,3 @@ if __name__ == "__main__":
 #     main(UAVAPI)
     uav = UAVAPI()
     uav.start()
-        

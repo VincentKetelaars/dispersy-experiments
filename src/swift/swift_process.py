@@ -94,6 +94,8 @@ class MySwiftProcess(SwiftProcess):
             args.append("180")  # seconds
         # args.append("-B")  # Enable debugging on swift
         
+        logger.debug("SWIFT ARGS: %s", args)
+        
         if sys.platform == "win32":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
