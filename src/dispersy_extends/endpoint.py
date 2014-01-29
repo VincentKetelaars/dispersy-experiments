@@ -193,7 +193,7 @@ class SwiftHandler(TunnelEndpoint):
             and not self._swift.is_running()):
             self._resetting = True # Probably not necessary because of the lock
             logger.info("Resetting swift")
-            self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RESETTING, error=error_code)
+            self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RESETTING, error_code=error_code)
             self._added_peers = set() # Reset the peers added before restarting
             self._started_downloads = set() # Reset the started downloads before restarting
             
