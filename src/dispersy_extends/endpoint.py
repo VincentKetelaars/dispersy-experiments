@@ -26,7 +26,8 @@ from src.definitions import MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, M
      STATE_RESETTING, STATE_RUNNING, STATE_STOPPED,\
     REPORT_DISPERSY_INFO_TIME, MESSAGE_KEY_DISPERSY_INFO, FILE_HASH_MESSAGE_NAME,\
     MAX_CONCURRENT_DOWNLOADING_SWARMS, ALMOST_DONE_DOWNLOADING_TIME,\
-    BUFFER_DRAIN_TIME, MAX_SOCKET_INITIALIZATION_TIME, ENDPOINT_SOCKET_TIMEOUT
+    BUFFER_DRAIN_TIME, MAX_SOCKET_INITIALIZATION_TIME, ENDPOINT_SOCKET_TIMEOUT,\
+    SWIFT_ERROR_TCP_FAILED
 from src.dispersy_extends.payload import AddressesCarrier
 from src.dispersy_extends.community import MyCommunity
 from src.dispersy_contact import DispersyContact
@@ -178,7 +179,7 @@ class SwiftHandler(TunnelEndpoint):
         """
         self._swift.add_socket(saddr)   
     
-    def restart_swift(self, error=None):
+    def restart_swift(self, error_code=-1):
         """
         Restart swift if the endpoint is still alive, generally called when an Error occurred in the swift instance
         After swift has been terminated, a new process starts and previous downloads and their peers are added.
@@ -187,10 +188,12 @@ class SwiftHandler(TunnelEndpoint):
         self.lock.acquire()
         # Don't restart on close, or if you are already resetting
         # TODO: In case a restart is necessary while restarting (e.g. can't bind to socket)
-        if not self._closing and not self._resetting and not self._waiting_on_cmd_connection and not self._swift.is_running():
+        if (not self._closing and not self._resetting and 
+            (not self._waiting_on_cmd_connection or error_code == SWIFT_ERROR_TCP_FAILED) 
+            and not self._swift.is_running()):
             self._resetting = True # Probably not necessary because of the lock
             logger.info("Resetting swift")
-            self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RESETTING, error=error)
+            self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RESETTING, error=error_code)
             self._added_peers = set() # Reset the peers added before restarting
             self._started_downloads = set() # Reset the started downloads before restarting
             
@@ -827,8 +830,8 @@ class MultiEndpoint(CommonEndpoint):
     def socket_running(self):
         return any([e.socket_running for e in self.swift_endpoints])
     
-    def restart_swift(self, error=None):
-        SwiftHandler.restart_swift(self, error)
+    def restart_swift(self, error_code=-1):
+        SwiftHandler.restart_swift(self, error_code)
         for e in self.swift_endpoints: # We need to add the reference to the new swift to each endpoint
             e._swift = self._swift
         # TODO: This wasn't always necessary, what changed??

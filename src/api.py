@@ -297,9 +297,9 @@ class API(Thread, PipeHandler):
             if self.stop_on_dispersy_stop:
                 self.on_dispersy_stopped()
             
-    def _swift_state(self, state, error=None):
+    def _swift_state(self, state, error_code=-1):
         if self._callback_swift_state is not None:
-            self._callback_swift_state(state, error)
+            self._callback_swift_state(state, error_code)
 
     def _swift_pid(self, pid):
         self._children_recur.append(pid)
@@ -498,5 +498,3 @@ if __name__ == "__main__":
     args, kwargs = main()
     a = API("API", *args, **kwargs)
     a.start()
-
-    

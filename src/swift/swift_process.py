@@ -17,7 +17,9 @@ from src.swift.tribler.simpledefs import VODEVENT_START, DLSTATUS_STOPPED_ON_ERR
 from src.swift.tribler.SwiftProcess import SwiftProcess, DONE_STATE_WORKING, DONE_STATE_SHUTDOWN
 
 from src.address import Address
-from src.definitions import LIBEVENT_LIBRARY
+from src.definitions import LIBEVENT_LIBRARY, SWIFT_ERROR_TCP_FAILED,\
+    SWIFT_ERROR_UNKNOWN_COMMAND, SWIFT_ERROR_MISSING_PARAMETER,\
+    SWIFT_ERROR_BAD_PARAMETER
 import socket
 
 try:
@@ -171,7 +173,7 @@ class MySwiftProcess(SwiftProcess):
                 SwiftProcess.start_cmd_connection(self)
             except AssertionError: # If Swift fails to connect within 60 seconds
                 if self._swift_restart_callback:
-                    self._swift_restart_callback()
+                    self._swift_restart_callback(error_code=SWIFT_ERROR_TCP_FAILED)
             if self.fastconn is not None and self._tcp_connection_open_callback is not None:
                 self._tcp_connection_open_callback()
             else:
@@ -244,7 +246,8 @@ class MySwiftProcess(SwiftProcess):
             roothash = binascii.unhexlify(words[1])
 
             if words[0] == "ERROR":
-                if words[2] == "bad" and words[3] == "swarm": # bad swarm does not lead to shutdown!!!!
+                error = "".join(words[2:])
+                if error == "bad swarm": # bad swarm does not lead to shutdown!!!!
                     logger.debug("This is a bad swarm %s", words[1])
                     d = self.roothash2dl.get(roothash, None)
                     if d is not None:
@@ -252,8 +255,15 @@ class MySwiftProcess(SwiftProcess):
                             d._bad_swarm_callback(roothash) # TODO: Callback should be directly, not via downloadimpl
                         except AttributeError:
                             pass
-                else:
-                    self.connection_lost(self.get_cmdport(), error=words[2:])
+                else:                    
+                    error_code = -1
+                    if error == "unknown command":
+                        error_code = SWIFT_ERROR_UNKNOWN_COMMAND
+                    elif error == "missing parameter":
+                        error_code = SWIFT_ERROR_MISSING_PARAMETER
+                    elif error == "bad parameter":
+                        error_code = SWIFT_ERROR_BAD_PARAMETER
+                    self.connection_lost(self.get_cmdport(), error_code=error_code)
 
             self.splock.acquire()
             try:
@@ -308,14 +318,14 @@ class MySwiftProcess(SwiftProcess):
             except (AttributeError, socket.error):
                 logger.warning("FastConnection is down")
             
-    def connection_lost(self, port, error=None, output_read=False):
+    def connection_lost(self, port, error_code=-1, output_read=False):
         if self.donestate != DONE_STATE_WORKING:
             # Only if it is still running should we consider restarting swift
             return
         logger.debug("CONNECTION LOST")
         self.donestate = DONE_STATE_SHUTDOWN # Mark as done for
         if self._swift_restart_callback is not None:
-            self._swift_restart_callback(error)
+            self._swift_restart_callback(error_code)
         
     def send_tunnel(self, session, address, data, addr=Address()):
         if addr.port == 0:

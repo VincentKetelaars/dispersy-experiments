@@ -108,7 +108,7 @@ class UAVAPI(API):
     def _state_changed(self, state):
         self.status["state"] = self.STATES[state]
         
-    def _swift_state_changed(self, state, error=None):
+    def _swift_state_changed(self, state, error_code):
         self.status["swift.state"] = self.STATES[state]
         
     def swift_info_callback(self, info):
@@ -211,7 +211,7 @@ class UAVAPI(API):
         
         di_kwargs = {}
         for p in children("parameters"):
-            if p.datatype != "folder": # []
+            if p.datatype != "folder":
                 di_kwargs[value(p.name)] = value(p.get_value())
             else:
                 di_kwargs[value(p.name)] = [value(c.get_value()) for c in children("parameters." + value(p.name))]
