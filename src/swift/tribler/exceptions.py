@@ -96,3 +96,12 @@ class TriblerLegacyException(TriblerException):
 
     def __init__(self, msg=None):
         TriblerException.__init__(self, msg)
+        
+class TCPConnectionFailedException(TriblerException):
+    
+    """
+    Raised when a TCP connection cannot be established with Libswift
+    """
+    
+    def __init__(self, msg=None):
+        TriblerException.__init__(self, msg)

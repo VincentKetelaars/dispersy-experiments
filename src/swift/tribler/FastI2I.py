@@ -9,6 +9,7 @@ import sys
 from threading import Thread, Lock, currentThread, Event
 import socket
 from traceback import print_exc
+from src.swift.tribler.exceptions import TCPConnectionFailedException
 try:
     prctlimported = True
     import prctl
@@ -18,7 +19,6 @@ except ImportError as e:
 from dispersy.decorator import attach_profiler
 
 DEBUG = False
-
 
 class FastI2IConnection(Thread):
 
@@ -39,7 +39,8 @@ class FastI2IConnection(Thread):
         self.lock = Lock()
 
         self.start()
-        assert self.sock_connected.wait(60), 'Did not connect to socket within 60s.'
+        if not self.sock_connected.wait(60): 
+            raise TCPConnectionFailedException('Did not connect to socket within 60s.')
 
     @attach_profiler
     def run(self):

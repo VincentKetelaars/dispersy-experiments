@@ -21,6 +21,7 @@ from src.definitions import LIBEVENT_LIBRARY, SWIFT_ERROR_TCP_FAILED,\
     SWIFT_ERROR_UNKNOWN_COMMAND, SWIFT_ERROR_MISSING_PARAMETER,\
     SWIFT_ERROR_BAD_PARAMETER
 import socket
+from src.swift.tribler.exceptions import TCPConnectionFailedException
 
 try:
     os.environ["LD_LIBRARY_PATH"]
@@ -171,7 +172,7 @@ class MySwiftProcess(SwiftProcess):
                 self._swift_running.wait()
             try:
                 SwiftProcess.start_cmd_connection(self)
-            except AssertionError: # If Swift fails to connect within 60 seconds
+            except TCPConnectionFailedException: # If Swift fails to connect within 60 seconds
                 if self._swift_restart_callback:
                     self._swift_restart_callback(error_code=SWIFT_ERROR_TCP_FAILED)
             if self.fastconn is not None and self._tcp_connection_open_callback is not None:
