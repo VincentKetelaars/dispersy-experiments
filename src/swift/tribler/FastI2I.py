@@ -39,7 +39,8 @@ class FastI2IConnection(Thread):
         self.lock = Lock()
 
         self.start()
-        if not self.sock_connected.wait(60): 
+        timedout = self.sock_connected.wait(60)
+        if timedout is not None and not timedout: # Previous to 2.7 wait returns None always
             raise TCPConnectionFailedException('Did not connect to socket within 60s.')
 
     @attach_profiler
