@@ -19,6 +19,7 @@ from src.api import API
 logger = get_logger(__name__)
 
 OLDDATATIME = 10 # The time in seconds that may have elapsed after which data from the database becomes to old for use
+SLEEP = 1
 
 class UAVAPI(API):
     '''
@@ -54,7 +55,6 @@ class UAVAPI(API):
         self.status["state"] = self.STATES[self.state]
 
         self.run_event = Event()
-        self.sleep = 5
         self.stop_on_dispersy_stop = True
         
         # dictionary of known interfaces that should be used and the last state and time
@@ -80,7 +80,7 @@ class UAVAPI(API):
                 ip = self._get_channel_value(cd, u"ip")
                 self.use_interfaces[cd] = (time, state, ip) # Set the newest state
                 
-            self.run_event.wait(self.sleep)
+            self.run_event.wait(SLEEP)
         self.log.debug("Stopped running") 
     
     def stop(self):

@@ -321,7 +321,7 @@ class SwiftCommunity(object):
         raw_total_up = 0
         raw_total_down = 0
         for d in self.downloads.itervalues():
-            if d.running_on_swift():
+            if d.has_started():
                 upspeed += d.downloadimpl.speed("up")
                 downspeed += d.downloadimpl.speed("down")
                 total_up += d.downloadimpl.total("up")

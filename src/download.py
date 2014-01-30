@@ -67,12 +67,9 @@ class Download(object):
         self._timestamp = timestamp
         self._priority = priority
         
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.max
         self._finished_time = datetime.max
-        if not download:
-            self._finished_time = self._start_time
             
-        self.moreinfo = moreinfo
         self._destination = destination
         self._swift_running = False
         self._bad_swarm = False
@@ -105,6 +102,16 @@ class Download(object):
     def roothash_as_hex(self):
         return None if self.roothash is None else binascii.hexlify(self.roothash)
     
+    def has_started(self):
+        return self._start_time < datetime.max
+    
+    def set_started(self):
+        if self._start_time == datetime.max:
+            self._start_time = datetime.utcnow()
+            return True
+        else:
+            return False
+    
     def is_finished(self):
         return self._finished_time < datetime.max
     
@@ -132,6 +139,7 @@ class Download(object):
         return self._bad_swarm
     
     def got_moreinfo(self):
+        self.set_started()
         self._swift_running = True
         for c in self.downloadimpl.midict.get("channels", []):
             self._active_channels.add((Address(ip=c["socket_ip"], port=int(c["socket_port"])), 

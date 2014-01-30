@@ -264,6 +264,8 @@ class MySwiftProcess(SwiftProcess):
                         error_code = SWIFT_ERROR_MISSING_PARAMETER
                     elif error == "bad parameter":
                         error_code = SWIFT_ERROR_BAD_PARAMETER
+                    else:
+                        logger.warning("Unknown Swift Error: %s", error)
                     self.connection_lost(self.get_cmdport(), error_code=error_code)
 
             self.splock.acquire()
