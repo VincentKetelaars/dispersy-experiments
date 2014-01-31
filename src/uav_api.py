@@ -72,13 +72,12 @@ class UAVAPI(API):
         while not self.run_event.is_set():                
             current_dialers = self._get_dialers()
             for cd in current_dialers:
-                t, state = self.db_reader.get_last_status_value(cd, u"state")
-                if (state == u"up" and time.time() - t < OLDDATATIME and 
-                    # Either don't know about it yet, or was down
-                    (not cd in self.use_interfaces.iterkeys() or (cd in self.use_interfaces.iterkeys() and self.use_interfaces[cd][1] != u"up"))):
-                    self._tell_dispersy_if_came_up(cd)
+                timestamp, state = self.db_reader.get_last_status_value(cd, u"state")
                 ip = self._get_channel_value(cd, u"ip")
-                self.use_interfaces[cd] = (time, state, ip) # Set the newest state
+                if (state == u"up" and (not cd in self.use_interfaces.iterkeys() or # Don't know about it yet
+                     (cd in self.use_interfaces.iterkeys() and self.use_interfaces[cd][1] != u"up"))): # We do know it, but it wasn't running
+                    self._tell_dispersy_if_came_up(cd)
+                self.use_interfaces[cd] = (timestamp, state, ip) # Set the newest state
                 
             self.run_event.wait(SLEEP)
         self.log.debug("Stopped running") 
