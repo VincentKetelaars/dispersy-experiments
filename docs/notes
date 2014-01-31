@@ -39,6 +39,10 @@ http://stackoverflow.com/questions/12371385/how-to-specify-which-interface-to-us
 
 Problem with wildcard: invalid peer address 0.0.0.0:18795!=127.0.0.1:18795
 
+ROUTING:
+
+http://kindlund.wordpress.com/2007/11/19/configuring-multiple-default-routes-in-linux/
+
 GENERAL:
 
 Tests are necessary to see if multiple channels really perform better. And if improvements can be made.

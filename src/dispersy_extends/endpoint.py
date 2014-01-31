@@ -211,6 +211,8 @@ class SwiftHandler(TunnelEndpoint):
                                          self._swift.working_sockets, None, None, None)
             self.set_callbacks()
             self._swift.add_download(self) # Normally in open
+            self.do_callback(MESSAGE_KEY_SWIFT_PID, self._swift.get_pid())
+            
             # First add all calls to the queue and then start the TCP connection
             # Be sure to put all current queued items at the back of the startup queue
             temp_queue = Queue.Queue();
