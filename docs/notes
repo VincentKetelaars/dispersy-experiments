@@ -19,8 +19,6 @@ If an introduction message does not arrive, is not read, or whatever, there are 
 Started on providing IPv6 capabilities. Swift instances should be able to handle it.. (Needs testing)
 Dispersy itself will be a problem most likely.
 
-Add MTU to parameters
-
 WALKER:
 
 you should still be able to use the associated Member to determine that multiple Candidate instances belong to a single device

@@ -136,6 +136,18 @@ class AddressesPayload(Payload):
         def addresses(self):
             return self._addresses
         
+class PunctureCarrier():
+    
+    def __init__(self):
+        pass
+    
+class PuncturePayload(Payload):
+    
+    class Implementation(Payload.Implementation):
+        
+        def __init__(self, meta):
+            super(Payload.Implementation, self).__init__(meta)
+        
 class APIMessageCarrier():
     
     def __init__(self, message, addresses=[]):

@@ -4,11 +4,12 @@ Created on Nov 21, 2013
 @author: Vincent Ketelaars
 '''
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.download import Peer
 from src.address import Address
 
 from src.logger import get_logger
+from src.definitions import ENDPOINT_CONTACT_TIMEOUT
 logger = get_logger(__name__)
 
 class DispersyContact(object):
@@ -62,6 +63,13 @@ class DispersyContact(object):
         if address is None:
             return max(self.last_send_time[self.address], self.last_recv_time[self.address])
         return max(self.last_send_time.get(address, datetime.min), self.last_recv_time.get(address, datetime.min))
+    
+    def no_contact_since(self, expiration_time=ENDPOINT_CONTACT_TIMEOUT):
+        addrs = []
+        for a in self.peer.addresses:
+            if self.last_recv_time.get(a, datetime.min) + timedelta(seconds=expiration_time) < datetime.utcnow(): # Timed out
+                addrs.append(a)
+        return addrs
     
     def set_peer(self, peer):
         """

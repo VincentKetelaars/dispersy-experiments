@@ -140,22 +140,20 @@ class SwiftCommunity(object):
         t = Thread(target=create_file, name="create_" + filename)
         t.start()
         
-    def peer_endpoints_received(self, messages):
+    def peer_endpoints_received(self, addresses):
         """
         Received addresses message. All addresses belong to a single peer.
         Each download is updated as needed.
-        @messages: list(AddressesMessage.Implementation)
+        @addresses: list(Address)
         """
-        for x in messages:
-            addresses = x.payload.addresses
-            logger.debug("Peer's addresses arrived %s", addresses)
-            for download in self.downloads.itervalues():
-                # TODO: Protect against unreachable local addresses
-                download.merge_peers(Peer(addresses))
-                for p in self.peers:
-                    if len(set(p.addresses).intersection(set(addresses))) > 0:
-                        p.merge(Peer(addresses))
-                        break # There should be no other peer in there with a address from this payload
+        logger.debug("Peer's addresses arrived %s", addresses)
+        for download in self.downloads.itervalues():
+            # TODO: Protect against unreachable local addresses
+            download.merge_peers(Peer(addresses))
+            for p in self.peers:
+                if len(set(p.addresses).intersection(set(addresses))) > 0:
+                    p.merge(Peer(addresses))
+                    break # There should be no other peer in there with a address from this payload
             
         self.add_new_peers()
     

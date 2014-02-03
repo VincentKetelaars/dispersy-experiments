@@ -18,16 +18,17 @@ from dispersy.destination import CommunityDestination, CandidateDestination
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.timeout import IntroductionRequestTimeout
 from src.dispersy_extends.conversion import SmallFileConversion, FileHashConversion,\
-    AddressesConversion, APIMessageConversion
+    AddressesConversion, APIMessageConversion, PunctureConversion
 from src.dispersy_extends.payload import SmallFilePayload, FileHashPayload, AddressesPayload,\
-    APIMessagePayload
+    APIMessagePayload, PuncturePayload
 
 from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, \
     FILE_HASH_MESSAGE_NAME, SMALL_FILE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME,\
-    MESSAGE_KEY_API_MESSAGE, API_MESSAGE_NAME
+    MESSAGE_KEY_API_MESSAGE, API_MESSAGE_NAME, PUNCTURE_MESSAGE_NAME
 from src.tools.periodic_task import Looper, PeriodicIntroductionRequest
 from src.swift.swift_community import SwiftCommunity
 from dispersy.candidate import WalkCandidate
+from src.address import Address
 
 logger = get_logger(__name__)    
     
@@ -56,7 +57,7 @@ class MyCommunity(Community):
         Overwrite
         """
         return [DefaultConversion(self), SmallFileConversion(self), FileHashConversion(self), 
-                AddressesConversion(self), APIMessageConversion(self)]
+                AddressesConversion(self), PunctureConversion(self), APIMessageConversion(self)]
     
     def initiate_meta_messages(self):
         """
@@ -65,6 +66,7 @@ class MyCommunity(Community):
         self._small_file_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
         self._file_hash_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
         self._addresses_distribution = DirectDistribution()
+        self._puncture_distribution = DirectDistribution()
         self._api_message_distribution = DirectDistribution()
         return [Message(self, SMALL_FILE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._small_file_distribution, CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), SmallFilePayload(), 
@@ -75,6 +77,9 @@ class MyCommunity(Community):
                 Message(self, ADDRESSES_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._addresses_distribution, CandidateDestination(), AddressesPayload(), 
                         self.addresses_message_check, self.addresses_message_handle),
+                Message(self, PUNCTURE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
+                        self._puncture_distribution, CandidateDestination(), PuncturePayload(), 
+                        self.puncture_check, self.puncture_handle),
                 Message(self, API_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._api_message_distribution, CandidateDestination(), APIMessagePayload(), 
                         self.api_message_check, self.api_message_handle)]
@@ -115,8 +120,18 @@ class MyCommunity(Community):
         """
         Handle Callback
         """
-        self.swift_community.peer_endpoints_received(messages)
-        self.dispersy.endpoint.peer_endpoints_received(messages)
+        for x in messages:
+            addresses = [Address.unknown(a) for a in x.payload.addresses]
+            self.swift_community.peer_endpoints_received(addresses)
+            self.dispersy.endpoint.peer_endpoints_received(self, addresses)
+            
+    def puncture_check(self, messages):
+        for x in messages:
+            yield x
+            
+    def puncture_handle(self, messages):
+        for x in messages:
+            logger.debug("Puncture message!")
         
     def api_message_check(self, messages):
         """
@@ -194,7 +209,7 @@ class MyCommunity(Community):
         @type api_message: APIMessageCarrier
         """
         meta = self.get_meta_message(API_MESSAGE_NAME)
-        candidates = [WalkCandidate(a.addr(), False, a.addr(), a.addr(), u"unknown") for a in api_message.addresses]
+        candidates = [WalkCandidate(a.addr(), True, a.addr(), a.addr(), u"unknown") for a in api_message.addresses]
         if len(candidates) == 0:
             candidates = self._candidates.values()
         messages = [meta.impl(authentication=(self.my_member,),
