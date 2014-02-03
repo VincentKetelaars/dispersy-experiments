@@ -401,7 +401,7 @@ class CommonEndpoint(SwiftHandler):
         The addresses should be reachable from the candidates point of view
         Local addresses will not benefit the candidate or us
         """
-        logger.debug("Send address to %s", addresses)
+        logger.debug("Send address to %s", [str(a) for a in addresses])
         candidates = [WalkCandidate(a.addr(), False, a.addr(), a.addr(), u"unknown") for a in addresses]
         message = AddressesCarrier([e.address for e in self.swift_endpoints])
         for c in self._dispersy.get_communities():
@@ -450,7 +450,7 @@ class MultiEndpoint(CommonEndpoint):
                 if not self._dequeueing_cmd_queue:
                     self.enqueue_swift_queue(self.send, candidates, packets)
                 return False
-            logger.debug("Send %s %d", candidates, len(packets))
+            logger.debug("Send %s %d", [c.sock_addr for c in candidates], len(packets))
             
             # If filehash message, let SwiftCommunity know the peers!
             name = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False).name
@@ -688,7 +688,7 @@ class MultiEndpoint(CommonEndpoint):
         def recur(endpoint, max_it):
             if max_it > 0 and not endpoint.is_alive or not endpoint.socket_running:
                 return recur(self._next_endpoint(endpoint), max_it - 1)
-            return (endpoint, candidate)
+            return (endpoint, candidate.sock_addr)
         
         def determine(addr):
             # Find the peer addresses

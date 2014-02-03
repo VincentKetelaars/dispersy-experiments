@@ -133,14 +133,15 @@ class Download(object):
     
     def set_bad_swarm(self, bad):
         self._bad_swarm = bad
-        self._swift_running = False # Probably not necessary
+        self._swift_running = False # Should not be necessary, because no moreinfo will get through
     
     def is_bad_swarm(self):
         return self._bad_swarm
     
     def got_moreinfo(self):
-        self.set_started()
-        self._swift_running = True
+        if self.set_started():
+            self._swift_running = True
+        # TODO: Handle paused downloads
         for c in self.downloadimpl.midict.get("channels", []):
             self._active_channels.add((Address(ip=c["socket_ip"], port=int(c["socket_port"])), 
                                        Address(ip=c["ip"], port=int(c["port"])))) # TODO: Add IPv6
