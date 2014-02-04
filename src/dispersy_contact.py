@@ -109,6 +109,11 @@ class DispersyContact(object):
         for k, v in contact.bytes_rcvd.iteritems():
             self.bytes_rcvd[k] = self.bytes_rcvd.get(k, 0) + v
             
+    def addr_info(self, address):
+        return "%d:%d rcvd at %s, %d:%d sent %s" % (self.count_rcvd.get(address, 0), self.bytes_rcvd.get(address, 0), 
+                                                    self.last_recv_time.get(address, datetime.min), self.count_sent.get(address, 0),
+                                                    self.bytes_sent.get(address, 0), self.last_send_time.get(address, datetime.min))
+            
     def __str__(self):
         return "%s, %d:%d sent, %d:%d received, at %s" % (self.address, self.num_sent(), self.total_sent(), 
                                                           self.num_rcvd(), self.total_rcvd(), self.last_contact())

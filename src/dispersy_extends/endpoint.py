@@ -740,17 +740,14 @@ class MultiEndpoint(CommonEndpoint):
         # Spoof sock_addr. Dispersy knows only about the first socket address of a peer, 
         # to keep things clean.
         self.update_dispersy_contacts([sock_addr], [data], recv=True)
-        for dc in self.dispersy_contacts:
-            if dc.has_address(Address.tuple(sock_addr)):
-                sock_addr = dc.address.addr()
         
         e = self.get_endpoint(incoming_addr)
         if e is not None:
             e.i2ithread_data_came_in(session, sock_addr, data) # Ensure that you fool the SwiftEndpoint as well
             return
+        logger.warning("This %s should be represented by an endpoint", sock_addr)
         # In case the incoming_addr does not match any of the endpoints
-        TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)
-        
+        TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)        
         
     def dispersythread_data_came_in(self, sock_addr, data, timestamp):
         self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), data)], True, timestamp)
@@ -759,7 +756,7 @@ class MultiEndpoint(CommonEndpoint):
         while not self._thread_stop_event.is_set():
             self.dequeue_swift_queue()
             self.evaluate_swift_swarms()
-            if time.time() % ENDPOINT_CHECK == 0:
+            if int(time.time()) % ENDPOINT_CHECK == 0:
                 self.check_endpoints()
             self._thread_stop_event.wait(REPORT_DISPERSY_INFO_TIME)
             data = []
@@ -946,11 +943,14 @@ class SwiftEndpoint(CommonEndpoint):
                 self._swift.splock.release()
         
     def i2ithread_data_came_in(self, session, sock_addr, data):
-        # This contact may be spoofed by MultiEndpoint, which ensures that we don't have DispersyContacts
-        # that resolve to the same peer
-        self._total_down += len(data)
-        self._dispersy.callback.register(self.dispersythread_data_came_in, (sock_addr, data, time.time()))        
         self.update_dispersy_contacts([sock_addr], [data], recv=True)
+        self._total_down += len(data)
+        
+        # Spoof the contact address for the benefit of Dispersy
+        for dc in self.dispersy_contacts:
+            if dc.has_address(Address.tuple(sock_addr)):
+                sock_addr = dc.address.addr()    
+        self._dispersy.callback.register(self.dispersythread_data_came_in, (sock_addr, data, time.time()))        
             
     def dispersythread_data_came_in(self, sock_addr, data, timestamp):
         self._dispersy.on_incoming_packets([(EligibleWalkCandidate(sock_addr, True, sock_addr, sock_addr, u"unknown"), 
