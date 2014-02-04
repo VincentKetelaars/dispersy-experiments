@@ -403,6 +403,8 @@ class CommonEndpoint(SwiftHandler):
             for i in range(1,len(same_contacts)):
                 same_contacts[0].merge(same_contacts[i]) # Merge statistics
             same_contacts[0].set_peer(Peer(addresses))
+        if not same_contacts[0].address in addresses: # Make sure the primary address is still in use!
+            same_contacts[0].address = addresses[0] # TODO: Make better choice!
         return same_contacts[0]
     
     def get_community(self, community_id):
@@ -800,8 +802,9 @@ class MultiEndpoint(CommonEndpoint):
                     return
                 e.socket_running = -1 # This new socket is not yet running, so initialize to -1
                 addr.set_port(e.address.port) # Use the old port
+                old_ip = e.address.ip
                 e.swift_add_socket(addr) # If ip already exists, try adding it to swift (only if not already working)
-                if e.address.ip != addr.ip: # New address
+                if old_ip != addr.ip: # New address
                     self._new_socket_created()
         self.swift_add_socket(addr) # If it is new send address to swift
         
