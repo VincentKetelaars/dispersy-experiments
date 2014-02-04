@@ -18,7 +18,7 @@ class DispersyContact(object):
     Each incoming and outgoing message to this address is noted.
     '''
 
-    def __init__(self, address, sent_messages=0, sent_bytes=0, rcvd_messages=0, rcvd_bytes=0):
+    def __init__(self, address, sent_messages=0, sent_bytes=0, rcvd_messages=0, rcvd_bytes=0, community_id=None):
         self.address = address # Primary address
         self.last_send_time = {address : datetime.min}
         self.last_recv_time = {address : datetime.min}
@@ -26,6 +26,7 @@ class DispersyContact(object):
         self.count_rcvd = {}
         self.bytes_sent = {}
         self.bytes_rcvd = {}
+        self.community_ids = set([community_id]) if community_id is not None else set()
         self.peer = Peer([address])
         if sent_messages > 0:
             self.sent(sent_messages, sent_bytes, address=address)
@@ -67,7 +68,8 @@ class DispersyContact(object):
     def no_contact_since(self, expiration_time=ENDPOINT_CONTACT_TIMEOUT):
         addrs = []
         for a in self.peer.addresses:
-            if self.last_recv_time.get(a, datetime.min) + timedelta(seconds=expiration_time) < datetime.utcnow(): # Timed out
+            if (self.last_recv_time.get(a, datetime.min) + timedelta(seconds=expiration_time) < datetime.utcnow() or
+                self.last_send_time.get(a, datetime.min) + timedelta(seconds=expiration_time) < datetime.utcnow()): # Timed out
                 addrs.append(a)
         return addrs
     
@@ -83,6 +85,10 @@ class DispersyContact(object):
         @type address: Address
         """
         return address == self.address or (self.peer is not None and self.peer.has_any([address]))
+    
+    def merge(self, contact):
+        self.merge_stats(contact)
+        self.community_ids.update(contact.community_ids)
     
     def merge_stats(self, contact):
         """
