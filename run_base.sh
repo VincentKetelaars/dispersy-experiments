@@ -7,7 +7,7 @@ python -m Tools.ConfigTool delete version -v default
 # ./deps.sh
 ./prepare_mysql.sh
 # ./disable_uav_processes.sh
-./start_mobile_basestation.sh #2> ~/Desktop/logs5 &
+./start_mobile_basestation.sh #2> ~/Desktop/logs5 &, cannot use this because of raw_input
 cd -
 
 wait
