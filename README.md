@@ -5,6 +5,8 @@ Dispersy - Libswift Framework with the purpose of allowing multiple sockets to b
 
 ###INSTALL
 
+Created for Python 2.7, and allows only IPv4 for now.
+
 ####Install Libevent:
 
 ``` sh
@@ -26,7 +28,13 @@ sudo make install
 
 Set LD_LIBRARY_PATH to Libevent location (*/usr/local/lib* by default). Or you could edit the LIBEVENT_LIBRARY variable in *src/definitions.py*)
 
-#####Additional necessary python packages
+The *cmdgw.cpp* in Libswift uses the following headers, limiting portability. They can be removed with care.
+``` cpp
+#include <sys/ioctl.h>
+#include <linux/sockios.h>
+```
+
+####Python Packages
 - python-netifaces
 - M2Crypto
 
