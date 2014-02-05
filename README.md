@@ -7,24 +7,28 @@ Dispersy - Libswift Framework with the purpose of allowing multiple sockets to b
 
 ####Install Libevent:
 
-'''
+``` sh
 cd libevent
-./autogen.sh (Uses aclocal which can be found in automake, and libtool is needed as well)
+./autogen.sh
 ./configure && make
 sudo make install
-'''
+```
+
+For *autogen.sh* you will need (to install) aclocal in automake, and libtool
 
 ####Install Libswift:
 
-'''
+``` sh
 cd ../libswift
 make
 sudo make install
-'''
-Set LD_LIBRARY_PATH to Libevent location (Or you could edit the LIBEVENT_LIBRARY variable in src/definitions.py)
+```
 
-Additional packages:
-python-netifaces, M2Crypto
+Set LD_LIBRARY_PATH to Libevent location (*/usr/local/lib* by default). Or you could edit the LIBEVENT_LIBRARY variable in *src/definitions.py*)
+
+#####Additional necessary python packages
+- python-netifaces
+- M2Crypto
 
 ###RUN
 
