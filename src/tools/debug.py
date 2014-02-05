@@ -33,8 +33,7 @@ def print_thread_traces(logger=None):
             if line:
                 code.append("  %s" % (line.strip()))
 
-    for line in code:
-        printer.debug(line)
+    printer.debug("\n".join(code))
         
 if __name__ == "__main__":
     print_thread_traces()

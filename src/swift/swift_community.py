@@ -183,9 +183,9 @@ class SwiftCommunity(object):
         
         @param roothash: Identifier of the download
         """
-        logger.debug("Download is ready %s", binascii.hexlify(roothash))
         download = self.downloads[roothash]
         if download.set_finished() and download.is_download() and not MOREINFO: # More info is not used so call clean up yourself
+            logger.debug("Download is ready %s", binascii.hexlify(roothash))
             self.clean_up_files(download)
                 
     def moreinfo_callback(self, roothash):
@@ -195,7 +195,6 @@ class SwiftCommunity(object):
         
         @param roothash: The roothash to which the more info is related
         """
-        logger.debug("More info %s", binascii.hexlify(roothash))
         download = self.downloads[roothash]
         download.got_moreinfo()
         self.do_callback(MESSAGE_KEY_SWIFT_INFO, {"direct" : download.package()}) # If more info is not set for the download this is never called

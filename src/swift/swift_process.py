@@ -197,7 +197,7 @@ class MySwiftProcess(SwiftProcess):
             callback(s, 0)
     
     def i2ithread_readlinecallback(self, ic, cmd):
-        logger.debug("CMD IN: %s", cmd)
+#         logger.debug("CMD IN: %s", cmd)
         if self.donestate != DONE_STATE_WORKING:
             return
 
@@ -247,7 +247,7 @@ class MySwiftProcess(SwiftProcess):
             roothash = binascii.unhexlify(words[1])
 
             if words[0] == "ERROR":
-                error = "".join(words[2:])
+                error = " ".join(words[2:])
                 if error == "bad swarm": # bad swarm does not lead to shutdown!!!!
                     logger.debug("This is a bad swarm %s", words[1])
                     d = self.roothash2dl.get(roothash, None)

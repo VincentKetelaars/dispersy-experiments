@@ -477,7 +477,7 @@ class ReceiverAPI(PipeHandler):
     """    
         
     def _generic_callback(self, key, *args, **kwargs):
-        logger.debug("Callback %s %s %s", key, args, kwargs)
+#         logger.debug("Callback %s %s %s", key, args, kwargs)
         try:
             func = self.dispersy_callbacks_map[key]
             func(*args, **kwargs)
@@ -485,7 +485,6 @@ class ReceiverAPI(PipeHandler):
             self.send_message(key, *args, **kwargs)            
 
     def _state_change(self, state):
-        logger.info("STATECHANGE: %d -> %d", self.state, state)
         self.state = state
         self.send_state()
         if state == STATE_RUNNING:

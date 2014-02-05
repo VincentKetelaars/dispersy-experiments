@@ -22,6 +22,8 @@ def get_uav_logger(name):
         pass    
 #     logger.addHandler(logging.StreamHandler(sys.stderr))
 #     logger.setLevel(logging.DEBUG)
+    if uav_logger is not None:
+        return uav_logger
     return UAVLoggerWrapper(uav_logger, name)
 
 class UAVLoggerWrapper(object):

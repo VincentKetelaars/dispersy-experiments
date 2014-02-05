@@ -18,7 +18,6 @@ from src.api import API
 
 logger = get_logger(__name__)
 
-OLDDATATIME = 10 # The time in seconds that may have elapsed after which data from the database becomes to old for use
 SLEEP = 1
 
 class UAVAPI(API):
@@ -31,18 +30,19 @@ class UAVAPI(API):
     STATES = {STATE_DONE : "done", STATE_INITIALIZED : "initialized", STATE_NOT : "none",
               STATE_RUNNING : "running", STATE_STOPPED : "stopped", STATE_RESETTING : "resetting"}
 
-    def __init__(self, *di_args, **di_kwargs):
+    def __init__(self, stop_event=Event(), name="Network.Dispersy"):
         '''
-        @param di_args: Tuple of arguments for DispersyInstance
-        @param di_kwargs: Dictionary of arguments for DispersyInstance
+        @param stop_event: Event that controls the run of this instance, but does not affect this event itself
+        @param name: Name of the instance, must reflect the location of configuration parameters
         '''
-        name = "Network.Dispersy"
+        self.stop_event = stop_event
         self.db_reader = StatusDbReader()
         
         self.cfg = get_config(name)
         self.status = get_status(name)
         self.log = get_uav_logger(name)
         
+        di_kwargs = {}
         try:
             di_kwargs = self._get_arguments_from_config()
         except:
@@ -56,6 +56,7 @@ class UAVAPI(API):
 
         self.run_event = Event()
         self.stop_on_dispersy_stop = True
+        self._stopping = False
         
         # dictionary of known interfaces that should be used and the last state and time
         self.use_interfaces = {}
@@ -69,7 +70,7 @@ class UAVAPI(API):
         
     def run(self):
         self.log.info("Running")
-        while not self.run_event.is_set():                
+        while not self.run_event.is_set():# and not self.stop_event.is_set():                
             current_dialers = self._get_dialers()
             for cd in current_dialers:
                 timestamp, state = self.db_reader.get_last_status_value(cd, u"state")
@@ -80,9 +81,13 @@ class UAVAPI(API):
                 self.use_interfaces[cd] = (timestamp, state, ip) # Set the newest state
                 
             self.run_event.wait(SLEEP)
+        if not self._stopping:
+            self.stop()
         self.log.debug("Stopped running") 
     
     def stop(self):
+        self._stopping = True
+        self.log.info("Stopping")
         API.stop(self)
         self._stop()
         
@@ -245,7 +250,5 @@ class UAVAPI(API):
         self.interface_came_up(ip, interface, device[device.rfind('.') + 1:], gateway=gateway)
         
 if __name__ == "__main__":
-#     from src.main import main
-#     main(UAVAPI)
     uav = UAVAPI()
     uav.start()

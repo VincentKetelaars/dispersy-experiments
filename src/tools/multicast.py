@@ -105,7 +105,7 @@ if __name__ == "__main__":
         quit("Not a valid action!")
         
     if args.message and multicast.ready_to_send:
-        message = "".join(args.message)
+        message = " ".join(args.message)
         multicast.send(message)
     
     if multicast_recv:
