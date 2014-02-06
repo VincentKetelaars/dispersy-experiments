@@ -67,6 +67,18 @@ class TestAddress(unittest.TestCase):
         addr = Address.unknown("127.0.0.1:1")
         addr.resolve_interface()
         self.assertEqual(addr.interface.name, "lo")
+        
+    def test_private_address(self):
+        addr = Address(ip="127.2.3.1")
+        self.assertTrue(addr.is_private_address())
+        addr = Address(ip="10.12.124.231")
+        self.assertTrue(addr.is_private_address())
+        addr = Address(ip="192.168.124.231")
+        self.assertTrue(addr.is_private_address())
+        addr = Address(ip="172.28.124.231")
+        self.assertTrue(addr.is_private_address())
+        addr = Address(ip="192.180.124.231")
+        self.assertFalse(addr.is_private_address())
 
 if __name__ == "__main__":
     unittest.main()

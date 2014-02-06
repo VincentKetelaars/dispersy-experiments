@@ -79,7 +79,7 @@ class MyCommunity(Community):
                         self.addresses_message_check, self.addresses_message_handle),
                 Message(self, PUNCTURE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._puncture_distribution, CandidateDestination(), PuncturePayload(), 
-                        self.puncture_check, self.puncture_handle),
+                        self.puncture_check, self.puncture_handle), # TODO: We don't need MemberAuthentication, right?
                 Message(self, API_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._api_message_distribution, CandidateDestination(), APIMessagePayload(), 
                         self.api_message_check, self.api_message_handle)]

@@ -18,7 +18,7 @@ class DispersyContact(object):
     Each incoming and outgoing message to this address is noted.
     '''
 
-    def __init__(self, address, sent_messages=0, sent_bytes=0, rcvd_messages=0, rcvd_bytes=0, community_id=None):
+    def __init__(self, address, sent_messages=0, sent_bytes=0, rcvd_messages=0, rcvd_bytes=0, peer=None, community_id=None):
         self.address = address # Primary address
         self.last_send_time = {address : datetime.min}
         self.last_recv_time = {address : datetime.min}
@@ -27,11 +27,37 @@ class DispersyContact(object):
         self.bytes_sent = {}
         self.bytes_rcvd = {}
         self.community_ids = set([community_id]) if community_id is not None else set()
-        self.peer = Peer([address])
+        self.peer = Peer([address]) if peer is None else peer
         if sent_messages > 0:
             self.sent(sent_messages, sent_bytes, address=address)
         if rcvd_messages > 0:
             self.rcvd(rcvd_messages, rcvd_bytes, address=address)
+        self._reachable_addresses = []
+        
+    @property
+    def reachable_addresses(self):
+        return self._reachable_addresses
+    
+    def determine_reachable_addresses(self, local_address):
+        """
+        Determine which addresses of the peer are reachable by this local_address
+        Since DispersyContact belongs to a single Endpoint, this local_address the only one we're interested in
+        @type local_address: Address
+        """
+        self._reachable_addresses = [] # Reset
+        if local_address == Address():
+            self._reachable_addresses = self.peer.addresses
+        else:
+            # Local address should have its interface defined
+            if local_address.is_private_address():
+                for a in self.peer.addresses:
+                    if local_address.same_subnet(a.ip):
+                        self._reachable_addresses.append(a)
+            else:
+                for a in self.peer.addresses:
+                    if not a.is_private_address():
+                        self._reachable_addresses.append(a)
+        # TODO: Find a better way to assure that these addresses are indeed reachable.. There are lots of private networks..
        
     def rcvd(self, num_messages, bytes_rcvd, address=Address()):
         self.count_rcvd[address] = self.count_rcvd.get(address, 0) + num_messages
@@ -39,10 +65,10 @@ class DispersyContact(object):
         self.last_recv_time[address] = datetime.utcnow()
         
     def num_rcvd(self):
-        return sum([v for k, v in self.count_rcvd.items() if k in self.peer.addresses])
+        return sum([v for _, v in self.count_rcvd.items()])
     
     def total_rcvd(self):
-        return sum([v for k, v in self.bytes_rcvd.items() if k in self.peer.addresses])
+        return sum([v for _, v in self.bytes_rcvd.items()])
         
     def sent(self, num_messages, bytes_sent, address=Address()):
         self.count_sent[address] = self.count_sent.get(address, 0) + num_messages
@@ -50,10 +76,10 @@ class DispersyContact(object):
         self.last_send_time[address] = datetime.utcnow()
         
     def num_sent(self):
-        return sum([v for k, v in self.count_sent.items() if k in self.peer.addresses])
+        return sum([v for _, v in self.count_sent.items()])
     
     def total_sent(self):
-        return sum([v for k, v in self.bytes_sent.items() if k in self.peer.addresses])
+        return sum([v for _, v in self.bytes_sent.items()])
         
     def last_contact(self, address=None):
         """
@@ -67,7 +93,7 @@ class DispersyContact(object):
     
     def no_contact_since(self, expiration_time=ENDPOINT_CONTACT_TIMEOUT):
         addrs = []
-        for a in self.peer.addresses:
+        for a in self.reachable_addresses:
             if (self.last_recv_time.get(a, datetime.min) + timedelta(seconds=expiration_time) < datetime.utcnow() or
                 self.last_send_time.get(a, datetime.min) + timedelta(seconds=expiration_time) < datetime.utcnow()): # Timed out
                 addrs.append(a)

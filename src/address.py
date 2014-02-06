@@ -10,6 +10,7 @@ from src.tools.networks import get_interface_addresses
 
 from src.logger import get_logger
 from src.tools.network_interface import Interface
+from src.definitions import PRIVATE_IPV4_ADDRESSES
 logger = get_logger(__name__)
 
 class Address(object):
@@ -27,6 +28,7 @@ class Address(object):
         self._flowinfo = flowinfo # IPv6 only
         self._scopeid = scopeid # IPv6 only
         self._if = interface
+        self._private = self._is_private_address()
         
     @property
     def ip(self):
@@ -172,7 +174,7 @@ class Address(object):
         if self.family == AF_INET:
             return (self.ip, self.port)
         elif self.family == AF_INET6:
-            return (self.ip, self.port, self._flowinfo, self._scopeid)
+            return (self.ip, self.port) # TODO: What about these.. self._flowinfo, self._scopeid
         
     def __str__(self):
         if self.family == AF_INET:
@@ -187,6 +189,8 @@ class Address(object):
         return self.port == 0
     
     def resolve_interface(self):
+        if self.family == AF_INET6:
+            return False # TODO: Handle this
         if self.interface_exists():
             return True
         if self.is_wildcard_ip():
@@ -203,6 +207,8 @@ class Address(object):
         @param ip: ip address string
         @param interface: Network interface
         """
+        if self.family == AF_INET6:
+            return False # TODO: Find some better way
         if interface is None:
             interface = self._if
         if interface is None:
@@ -219,7 +225,19 @@ class Address(object):
         return False
     
     def ipstr_to_int(self, address):
+        # TODO: will fail with IPv6
         return unpack("!L", inet_aton(address))[0]
+    
+    def is_private_address(self):
+        return self._private
+        
+    def _is_private_address(self):
+        if self.family == AF_INET:
+            for i, n in PRIVATE_IPV4_ADDRESSES:
+                if self.same_subnet(i, Interface(None, i, n, None)):
+                    return True
+        # TODO: Determine for IPv6 addresses
+        return False
     
     def __eq__(self, other):
         if not isinstance(other, Address):

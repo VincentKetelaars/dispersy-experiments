@@ -161,7 +161,7 @@ class Download(object):
     def allowed_addresses(self):
         if isinstance(self._destination, CandidateDestination.Implementation):
             return [Address.tuple(c.sock_addr) for c in self._destination._candidates]
-        return None
+        return None # We're not returning a list if this is not a candidatedestination.. Deal with it
     
     def determine_seeding(self):
         """
@@ -169,11 +169,15 @@ class Download(object):
         because of |allowed_addresses| > 1
         """      
         # We should share if either community destination or if we are not the only on in the candidate destination
-        share = self._destination is None or self.community_destination() or (self.candidate_destination() and len(self.allowed_addresses()) > 1)
+        share = self._destination is None or self.community_destination() or (self.candidate_destination() and 
+                                                                              len(self.allowed_addresses()) > 1)
         # TODO: We should use the relay distribution to figure out who's also entitled to this download
         self._seed = self._seed and share
         
     def _allow_peer(self, peer):
+        """
+        Allow peers when we're seeding and if at least one of their addresses corresponds to the candidate destination
+        """
         assert isinstance(peer, Peer)
         if len(peer.addresses) == 0 or not self._seed: # If we're not seeding, we're not allowing!
             return False

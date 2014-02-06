@@ -391,9 +391,11 @@ class CommonEndpoint(SwiftHandler):
         for dc in self.dispersy_contacts:
             if dc.peer.has_any(addresses):
                 same_contacts.append(dc)
+        # Quite possibly some of these addresses are not public, and may therefore not be reachable by each local address
+        
         if len(same_contacts) == 0: # Should not happen, contact should have already been made
-            dc = DispersyContact(addresses[0])
-            dc.set_peer(Peer(addresses))
+            dc = DispersyContact(addresses[0], peer=Peer(addresses))
+            dc.determine_reachable_addresses(self.address)
             self.dispersy_contacts.add(dc)
             return dc
         elif len(same_contacts) == 1: # The normal case
@@ -405,6 +407,7 @@ class CommonEndpoint(SwiftHandler):
             same_contacts[0].set_peer(Peer(addresses))
         if not same_contacts[0].address in addresses: # Make sure the primary address is still in use!
             same_contacts[0].address = addresses[0] # TODO: Make better choice!
+        same_contacts[0].determine_reachable_addresses(self.address)
         return same_contacts[0]
     
     def get_community(self, community_id):
@@ -789,6 +792,9 @@ class MultiEndpoint(CommonEndpoint):
                 if len(addrs) > 0:
                     logger.info("%s has not had contact with %s for at least %d seconds", str(e.address), [str(a) for a in addrs], ENDPOINT_CONTACT_TIMEOUT)
                     [self._dispersy.callback.register(send_puncture, args=(e, cid, a)) for cid in dc.community_ids for a in addrs]
+        
+        # TODO: In case one address has not heard of peer's address, we should send a AddressesMessage,
+        # which should trigger puncture message responses.. So after the addresses message, send puncture messages :)
     
     def interface_came_up(self, addr):
         logger.debug("%s came up", addr.interface)
