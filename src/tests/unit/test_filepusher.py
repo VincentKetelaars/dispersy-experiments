@@ -114,6 +114,19 @@ class TestFilePusher(unittest.TestCase):
         self._filepusher.start()
 
         self.wait_and_asses(all_files)
+        
+    def test_min_timestamp(self):
+        all_files = set(self.get_files_from_directory_recur(self._directory))
+
+        def callback(message):
+            raise AssertionError("Should be no files")
+                
+        self._filepusher = FilePusher(callback, SWIFT_BINPATH, files=all_files, min_timestamp=time.time())
+        self._filepusher.start()
+
+        time.sleep(3)
+        
+        # If something came up, it would have already
     
     @success_decorater
     def test_dir_and_files(self):

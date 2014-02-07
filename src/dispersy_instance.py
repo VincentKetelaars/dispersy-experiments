@@ -32,7 +32,7 @@ class DispersyInstance(object):
     '''
 
     def __init__(self, dest_dir, swift_binpath, dispersy_work_dir=u".", sqlite_database=":memory:", swift_work_dir=None,
-                 swift_zerostatedir=None, listen=[], peers=[], files_directory=None, files=[], run_time=-1, bloomfilter_update=-1,
+                 swift_zerostatedir=None, listen=[], peers=[], files_directory=None, files=[], file_timestamp_min=None, run_time=-1, bloomfilter_update=-1,
                  walker=False, gateways={}, mtu=MAX_MTU, callback=None):
         """
         @param dest_dir: Directory in which downloads will be placed as well as logs
@@ -45,6 +45,7 @@ class DispersyInstance(object):
         @param peers: Addresses of peers to communicate with
         @param files_directory: Directory to monitor for files that should be disseminated
         @param files: Files that should be disseminated
+        @param file_timestamp_min: Minimum file modification time
         @param run_time: Total run time in seconds
         @param bloomfilter_update: Period after which another introduction request is sent in seconds
         @param walker: If enable the Dispersy walker will be enabled
@@ -62,6 +63,7 @@ class DispersyInstance(object):
         self._peers = [Address.unknown(p) for p in peers] # Peer addresses
         self._files_directory = files_directory # Directory to monitor for new files (or changes in files)
         self._files = files # Files to monitor
+        self._file_timestamp_min = file_timestamp_min  # Minimum file modification time
         self._run_time = run_time # Time after which this process stops, -1 is infinite
         self._bloomfilter_update = bloomfilter_update # Update every # seconds the bloomfilter to peers, -1 for never
         self._walker = walker # Turn walker on
@@ -121,7 +123,8 @@ class DispersyInstance(object):
         # Start Filepusher regardless of availability of directory or files
         self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, 
                                       directory=self._files_directory, files=self._files, 
-                                      file_size=self._mtu - DISPERSY_MESSAGE_MINIMUM)
+                                      file_size=self._mtu - DISPERSY_MESSAGE_MINIMUM,
+                                      min_timestamp=self._file_timestamp_min)
         self._filepusher.start()
         
         self.state = STATE_RUNNING

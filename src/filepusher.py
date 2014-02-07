@@ -5,7 +5,7 @@ Created on Aug 30, 2013
 '''
 
 from threading import Thread, Event
-
+from datetime import datetime
 from string import find
 from os import listdir
 from os.path import exists, isfile, isdir, getmtime, join, getsize, basename
@@ -25,7 +25,7 @@ class FilePusher(Thread):
     In the former case the filename is send back, whereas in the latter case the contents of the file (string) is send back.
     '''
 
-    def __init__(self, callback, swift_path, directory=None, files=[], file_size=MAX_FILE_SIZE, hidden=False):
+    def __init__(self, callback, swift_path, directory=None, files=[], file_size=MAX_FILE_SIZE, hidden=False, min_timestamp=None):
         '''
         @param callback: The function that will be called with a FileHashCarrier or SimpleFileCarrier object
         @param swift_path: Path to swift executable
@@ -33,6 +33,7 @@ class FilePusher(Thread):
         @param files: The list of files to monitor
         @param file_size: The decision variable for choosing callback object
         @param hidden: List hidden downloads as well
+        @param min_timestamp: Oldest modification time to use for new files
         '''
         Thread.__init__(self, name="Filepusher")
         self.setDaemon(True)
@@ -48,6 +49,8 @@ class FilePusher(Thread):
         self._file_size = file_size
         self.swift_path = swift_path
         self._hidden = hidden
+        self._min_timestamp = datetime.fromtimestamp(min_timestamp) if min_timestamp is not None else datetime.min
+        
         self._stop_event = Event()
         self._thread_func = CallFunctionThread(timeout=1.0, name="Filepusher")
         
@@ -72,6 +75,8 @@ class FilePusher(Thread):
         while not self._stop_event.is_set():                            
             diff = self._list_files_to_send()
             for absfilename in diff:
+                if datetime.fromtimestamp(getmtime(absfilename)) < self._min_timestamp:
+                    continue # Only go for files that are older than self._min_timestamp
                 logger.debug("New file to be sent: %s", absfilename)
                 if getsize(absfilename) > self._file_size:
                     loc = -1
