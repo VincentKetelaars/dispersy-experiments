@@ -70,7 +70,7 @@ class UAVAPI(API):
         
     def run(self):
         self.log.info("Running")
-        while not self.run_event.is_set():# and not self.stop_event.is_set():                
+        while not self.run_event.is_set() and not self.stop_event.is_set():                
             current_dialers = self._get_dialers()
             for cd in current_dialers:
                 timestamp, state = self.db_reader.get_last_status_value(cd, u"state")
@@ -79,8 +79,8 @@ class UAVAPI(API):
                      (cd in self.use_interfaces.iterkeys() and self.use_interfaces[cd][1] != u"up"))): # We do know it, but it wasn't running
                     self._tell_dispersy_if_came_up(cd)
                 self.use_interfaces[cd] = (timestamp, state, ip) # Set the newest state
-                
-            self.run_event.wait(SLEEP)
+            
+            self.stop_event.wait(SLEEP)
         if not self._stopping:
             self.stop()
         self.log.debug("Stopped running") 
