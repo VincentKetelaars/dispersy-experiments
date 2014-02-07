@@ -7,6 +7,10 @@ Dispersy - Libswift Framework with the purpose of allowing multiple sockets to b
 
 Created for Python 2.7, and allows only IPv4 for now.
 
+First get the entire repository (includings its submodules)
+
+> git clone --recursive git://github.com/VincentKetelaars/dispersy-experiments.git
+
 ####Install Libevent:
 
 ``` sh
@@ -23,7 +27,6 @@ For *autogen.sh* you will need (to install) aclocal in automake, and libtool
 ``` sh
 cd ../libswift
 make
-sudo make install
 ```
 
 Set LD_LIBRARY_PATH to Libevent location (*/usr/local/lib* by default). Or you could edit the LIBEVENT_LIBRARY variable in *src/definitions.py*)

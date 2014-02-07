@@ -32,8 +32,8 @@ class DispersyInstance(object):
     '''
 
     def __init__(self, dest_dir, swift_binpath, dispersy_work_dir=u".", sqlite_database=":memory:", swift_work_dir=None,
-                 swift_zerostatedir=None, listen=[], peers=[], files_directory=None, files=[], file_timestamp_min=None, run_time=-1, bloomfilter_update=-1,
-                 walker=False, gateways={}, mtu=MAX_MTU, callback=None):
+                 swift_zerostatedir=None, listen=[], peers=[], files_directory=None, files=[], file_timestamp_min=None, 
+                 run_time=-1, bloomfilter_update=-1, walker=False, gateways={}, mtu=MAX_MTU, callback=None):
         """
         @param dest_dir: Directory in which downloads will be placed as well as logs
         @param swift_binpath: Path to the swift executable
@@ -64,8 +64,8 @@ class DispersyInstance(object):
         self._files_directory = files_directory # Directory to monitor for new files (or changes in files)
         self._files = files # Files to monitor
         self._file_timestamp_min = file_timestamp_min  # Minimum file modification time
-        self._run_time = run_time # Time after which this process stops, -1 is infinite
-        self._bloomfilter_update = bloomfilter_update # Update every # seconds the bloomfilter to peers, -1 for never
+        self._run_time = int(run_time) # Time after which this process stops, -1 is infinite
+        self._bloomfilter_update = float(bloomfilter_update) # Update every # seconds the bloomfilter to peers, -1 for never
         self._walker = walker # Turn walker on
         self._api_callback = callback # Subscription to various callbacks
         self._gateways = {}
@@ -131,16 +131,15 @@ class DispersyInstance(object):
         self._loop()
         
     def _loop(self):
-        # Perhaps this should be a separate thread?
-        logger.debug("Start loop")
-        for _ in range(int(self._run_time / SLEEP_TIME)):
-            if not self._loop_event.is_set():
-                self._loop_event.wait(SLEEP_TIME)
-                
-        while self._run_time == -1 and not self._loop_event.is_set():
+        if self._run_time < 0 and not self._loop_event.is_set():
             logger.debug("Start infinite loop")
             self._loop_event.wait()
-    
+        else:
+            logger.debug("Start loop")
+            for _ in range(int(self._run_time / SLEEP_TIME)):
+                if not self._loop_event.is_set():
+                    self._loop_event.wait(SLEEP_TIME)
+            
     def stop(self):
         self.state = STATE_STOPPED
         self._loop_event.set()
