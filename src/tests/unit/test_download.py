@@ -4,8 +4,6 @@ Created on Nov 13, 2013
 @author: Vincent Ketelaars
 '''
 import unittest
-from socket import AF_INET6
-
 from src.download import Download, Peer
 from src.address import Address
 from dispersy.destination import CommunityDestination, CandidateDestination
@@ -58,7 +56,6 @@ class TestDownload(unittest.TestCase):
         peer3 = Peer([self.address1, self.address2])
         candd = CandidateDestination()
         self.download._destination = candd.implement(self.candidate(self.address1.addr()))
-        logger.debug(self.download._destination.candidates)
         self.download.add_peer(peer1)
         self.assertIn(peer1, self.download.peers())
         self.assertEqual(len(self.download.peers()), 1)

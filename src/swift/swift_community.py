@@ -29,7 +29,7 @@ class SwiftCommunity(object):
         self.dcomm = dispersy_community
         self.endpoint = endpoint
         self._api_callback = api_callback
-        self.peers = set()
+        self._peers = set()
         self.downloads = {}
         
         self._thread_stop_event = Event()
@@ -37,6 +37,15 @@ class SwiftCommunity(object):
         self._thread_loop.setDaemon(True)
         self._thread_loop.start()
         # TODO: Stop this thread somehow
+        
+    def _add_to_peers(self, addresses, ids=[]):
+        already_exists = False
+        for p in self._peers:
+            if p.has_any(addrs=addresses, ids=ids):
+                p.merge(Peer(addresses))
+                already_exists = True
+        if not already_exists:
+            self._peers.add(Peer(addresses, ids))
         
     def _swift_start(self, d, moreinfo=MOREINFO, pexon=PEXON):
         self.endpoint.swift_start(d)
@@ -53,7 +62,7 @@ class SwiftCommunity(object):
             self.add_to_downloads(roothash, filename, d, size, timestamp, seed=True, destination=destination) # Sharing so setting seed to True
             self._swift_start(d)
             
-            self.add_new_peers()
+            self.add_new_swift_peers()
             
     def add_peer(self, roothash, addr, sock_addr=None):
         logger.debug("Add peer %s with roothash %s to %s", addr, binascii.hexlify(roothash), sock_addr)
@@ -118,7 +127,7 @@ class SwiftCommunity(object):
             self.endpoint.put_swift_file_stack(self._swift_start, size, timestamp, priority=0, args=(d,))
             
             # TODO: Make sure that this peer is not added since the peer has already added us!                
-            self.add_new_peers() # Notify our other peers that we have something new available!
+            self.add_new_swift_peers() # Notify our other peers that we have something new available!
             
     def file_received(self, filename, contents):
         """
@@ -140,22 +149,20 @@ class SwiftCommunity(object):
         t = Thread(target=create_file, name="create_" + filename)
         t.start()
         
-    def peer_endpoints_received(self, addresses):
+    def peer_endpoints_received(self, addresses, ids):
         """
         Received addresses message. All addresses belong to a single peer.
         Each download is updated as needed.
         @addresses: list(Address)
+        @ids: list(ints)
         """
-        logger.debug("Peer's addresses arrived %s", addresses)
+        logger.debug("Peer's addresses arrived %s with their respective ids %s", addresses, ids)
         for download in self.downloads.itervalues():
             # TODO: Protect against unreachable local addresses
-            download.merge_peers(Peer(addresses))
-            for p in self.peers:
-                if len(set(p.addresses).intersection(set(addresses))) > 0:
-                    p.merge(Peer(addresses))
-                    break # There should be no other peer in there with a address from this payload
+            download.merge_peers(Peer(addresses, ids=ids))
+            self._add_to_peers(addresses, ids)
             
-        self.add_new_peers()
+        self.add_new_swift_peers()
     
     def create_download_impl(self, roothash):
         """
@@ -236,8 +243,8 @@ class SwiftCommunity(object):
         d = Download(roothash, filename, download_impl, size, timestamp, seed=seed, download=download, moreinfo=MOREINFO, destination=destination)
         if addresses is not None: # We received this from someone else
             d.determine_seeding()
-            self.peers.add(Peer(addresses))
-        d.add_peers(self.peers)
+            self._add_to_peers(addresses)
+        d.add_peers(self._peers)
         self.downloads[roothash] = d
         logger.debug("Download %s has %s as peers", filename, [str(a) for a in [asets for asets in [p.addresses for p in d.peers()]]])
         
@@ -267,16 +274,16 @@ class SwiftCommunity(object):
         for d in self.downloads.itervalues():
             for a in addresses:
                 d.merge_peers(Peer([a]))
-                self.peers.add(Peer([a]))
+                self._add_to_peers([a])
         # This would be the time to add peers (At this point the other side needs to do that)
         
-    def add_new_peers(self, sock_addr=None):
+    def add_new_swift_peers(self, sock_addr=None):
         """
         For each download, its peers are added to Swift.
         The sock_addr option is there to allow for a single socket to disseminate this download.
         @param sock_addr: Address of local socket
         """
-        logger.debug("Add new peers!")
+        logger.debug("Add new peers to Swift!")
         for roothash in self.downloads.keys():
             if self.downloads[roothash].seeder():
                 for addr in self.downloads[roothash].inactive_addresses():
@@ -298,7 +305,7 @@ class SwiftCommunity(object):
     def continue_download(self, download):
         if download is not None and not download.is_bad_swarm():
             self._swift_start(download.downloadimpl)
-            self.add_new_peers()
+            self.add_new_swift_peers()
             
     def stop_download(self, download):
         if download is not None and download.running_on_swift():

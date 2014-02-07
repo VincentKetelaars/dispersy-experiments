@@ -11,10 +11,11 @@ from dispersy.candidate import Candidate
 from src.tests.unit.definitions import SMALL_TASK_TIMEOUT, DEST_DIR
 from src.dispersy_instance import DispersyInstance
 from src.definitions import SWIFT_BINPATH, FILE_HASH_MESSAGE_NAME, SMALL_FILE_MESSAGE_NAME,\
-    ADDRESSES_MESSAGE_NAME, API_MESSAGE_NAME
+    ADDRESSES_MESSAGE_NAME, API_MESSAGE_NAME, PUNCTURE_MESSAGE_NAME
 from src.dispersy_extends.conversion import FileHashConversion, SmallFileConversion, AddressesConversion,\
-    APIMessageConversion
+    APIMessageConversion, PunctureConversion
 from src.address import Address
+import os
 
 logger = get_logger(__name__)
 
@@ -68,15 +69,34 @@ class TestConversion(unittest.TestCase):
         for c in self._conversions:
             if isinstance(c, AddressesConversion):
                 meta = self._di._community.get_meta_message(ADDRESSES_MESSAGE_NAME)
-                addresses = [Address.ipv4("0.0.0.1:1232"), Address.ipv6("[::0]:12145"), Address(port=32532)]
+                id_addresses = [(os.urandom(16), Address.ipv4("0.0.0.1:1232")), (os.urandom(16), Address.ipv6("[::0]:12145")), 
+                                (os.urandom(16), Address(port=32532))]
                 message = meta.impl(authentication=(self._di._community.my_member,),
                                       distribution=(self._di._community.claim_global_time(),),
-                                      destination=(Candidate(addresses[0].addr(), True),), 
-                                      payload=(addresses,))
+                                      destination=(Candidate(id_addresses[0][1].addr(), True),), 
+                                      payload=(id_addresses,))
                 encoded = c.encode_payload(message)
                 placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
                 _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
-                self.assertEqual(x.addresses, addresses)
+                self.assertEqual(x.id_addresses, id_addresses)
+                
+    def test_puncture_message_conversion(self):
+        for c in self._conversions:
+            if isinstance(c, PunctureConversion):
+                meta = self._di._community.get_meta_message(PUNCTURE_MESSAGE_NAME)
+                local_address = Address.ipv4("0.0.0.1:1232")
+                vote_address =  Address.ipv6("[::0]:12145")
+                endpoint_id = os.urandom(16)
+                message = meta.impl(authentication=(self._di._community.my_member,),
+                                      distribution=(self._di._community.claim_global_time(),),
+                                      destination=(Candidate(vote_address.addr(), True),), 
+                                      payload=(local_address, vote_address, endpoint_id))
+                encoded = c.encode_payload(message)
+                placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
+                _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
+                self.assertEqual(x.local_address, local_address)
+                self.assertEqual(x.vote_address, vote_address)
+                self.assertEqual(x.endpoint_id, endpoint_id)
                 
     def test_uav_message_conversion(self):
         for c in self._conversions:

@@ -16,6 +16,8 @@ from src.address import Address
 
 logger = get_logger(__name__)
 
+ENDPOINT_ID_ENCODING = "base-64"
+
 class SmallFileConversion(BinaryConversion):
     '''
     classdocs
@@ -86,7 +88,7 @@ class FileHashConversion(BinaryConversion):
 class AddressesConversion(BinaryConversion):
     '''
     classdocs
-    '''    
+    '''
 
     def __init__(self, community):
         super(AddressesConversion, self).__init__(community, "\x14")
@@ -95,8 +97,8 @@ class AddressesConversion(BinaryConversion):
         
     def encode_payload(self, message):
         m = ""
-        for addr in message.payload.addresses:
-            m += str(addr) + SEPARATOR
+        for _id, addr in message.payload.id_addresses:
+            m += _id.encode(ENDPOINT_ID_ENCODING) + SEPARATOR + str(addr) + SEPARATOR
         m = m[:-len(SEPARATOR)]
         return struct.pack("!L", len(m)), m
 
@@ -109,11 +111,11 @@ class AddressesConversion(BinaryConversion):
         if len(data) < offset + data_length:
             raise DropPacket("Insufficient packet size")
         data_payload = data[offset:offset + data_length]
-        address_strs = data_payload.split(SEPARATOR)
-        addresses = [Address.unknown(a) for a in address_strs]
+        id_addrs = data_payload.split(SEPARATOR)
+        id_addresses = zip([i.decode(ENDPOINT_ID_ENCODING) for i in id_addrs[0::2]], [Address.unknown(a) for a in id_addrs[1::2]])
         offset += data_length
 
-        return offset, placeholder.meta.payload.implement(addresses)
+        return offset, placeholder.meta.payload.implement(id_addresses)
     
 class PunctureConversion(BinaryConversion):
     '''
@@ -126,7 +128,8 @@ class PunctureConversion(BinaryConversion):
                                  self.decode_payload)
         
     def encode_payload(self, message):
-        m = ""
+        m = str(message.payload.local_address) + SEPARATOR + str(message.payload.vote_address) + SEPARATOR + \
+            message.payload.endpoint_id.encode(ENDPOINT_ID_ENCODING)
         return struct.pack("!L", len(m)), m
 
     def decode_payload(self, placeholder, offset, data):
@@ -137,10 +140,14 @@ class PunctureConversion(BinaryConversion):
 
         if len(data) < offset + data_length:
             raise DropPacket("Insufficient packet size")
-#         data_payload = data[offset:offset + data_length]
+        data_payload = data[offset:offset + data_length]
+        splitted = data_payload.split(SEPARATOR)
+        local_address = Address.unknown(splitted[0])
+        vote_address = Address.unknown(splitted[1])
+        endpoint_id = splitted[2].decode(ENDPOINT_ID_ENCODING)
         offset += data_length
 
-        return offset, placeholder.meta.payload.implement()
+        return offset, placeholder.meta.payload.implement(local_address, vote_address, endpoint_id)
     
 class APIMessageConversion(BinaryConversion):
     '''

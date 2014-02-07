@@ -128,13 +128,21 @@ class AddressesPayload(Payload):
     
     class Implementation(Payload.Implementation):
         
-        def __init__(self, meta, addresses):
+        def __init__(self, meta, id_addresses):
             super(Payload.Implementation, self).__init__(meta)
-            self._addresses = addresses
+            self._id_addresses = id_addresses
+            
+        @property
+        def ids(self):
+            return [ia[0] for ia in self._id_addresses]
         
         @property
         def addresses(self):
-            return self._addresses
+            return [ia[1] for ia in self._id_addresses]
+        
+        @property
+        def id_addresses(self):
+            return self._id_addresses
         
 class PunctureCarrier():
     
@@ -145,8 +153,23 @@ class PuncturePayload(Payload):
     
     class Implementation(Payload.Implementation):
         
-        def __init__(self, meta):
+        def __init__(self, meta, local_address, vote_address, endpoint_id):
             super(Payload.Implementation, self).__init__(meta)
+            self._local_address = local_address
+            self._vote_address = vote_address
+            self._endpoint_id = endpoint_id
+            
+        @property
+        def local_address(self):
+            return self._local_address
+        
+        @property
+        def vote_address(self):
+            return self._vote_address
+        
+        @property
+        def endpoint_id(self):
+            return self._endpoint_id
         
 class APIMessageCarrier():
     

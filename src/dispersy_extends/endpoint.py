@@ -337,13 +337,25 @@ class SwiftHandler(TunnelEndpoint):
         
 class CommonEndpoint(SwiftHandler):
     
-    def __init__(self, swift_process, api_callback=None):
+    def __init__(self, swift_process, api_callback=None, address=Address()):
         SwiftHandler.__init__(self, swift_process, api_callback)
         self.start_time = datetime.utcnow()
         self.id = urandom(16)
         self.dispersy_contacts = set()
         self.is_alive = False # The endpoint is alive between open and close
-        self.address = Address()
+        self.address = address
+        self._wan_voters = {}
+        self._wan_address = { address : 0 } # Initialize zero vote
+        
+    @property
+    def wan_address(self):
+        return max(self._wan_address, key=self._wan_address.get) # Return the address with the highest vote
+    
+    def vote_wan_address(self, address, voter):
+        if self._wan_voters.get(voter) != address: # First vote, or new vote
+            self._wan_address[address] = self._wan_address.get(address, 0) + 1 # Increment
+            self._wan_voters[voter] = address # Update vote
+            logger.info("Got a vote for %s to %s from %s", str(self.address), str(address), str(voter))
             
     def is_bootstrap_candidate(self, addr=None, candidate=None):
         if addr is not None:
@@ -386,25 +398,25 @@ class CommonEndpoint(SwiftHandler):
                     newly_recvd.add(c)
         return community, list(newly_recvd)
         
-    def peer_endpoints_received(self, addresses):
+    def peer_endpoints_received(self, addresses, ids):
         same_contacts = []
         for dc in self.dispersy_contacts:
-            if dc.peer.has_any(addresses):
+            if dc.peer.has_any(addresses, ids=ids):
                 same_contacts.append(dc)
         # Quite possibly some of these addresses are not public, and may therefore not be reachable by each local address
-        
+        new_peer = Peer(addresses, ids)
         if len(same_contacts) == 0: # Should not happen, contact should have already been made
-            dc = DispersyContact(addresses[0], peer=Peer(addresses))
+            dc = DispersyContact(addresses[0], peer=new_peer)
             dc.determine_reachable_addresses(self.address)
             self.dispersy_contacts.add(dc)
             return dc
         elif len(same_contacts) == 1: # The normal case
-            same_contacts[0].set_peer(Peer(addresses)) # update the peer to include all addresses
+            same_contacts[0].set_peer(new_peer) # update the peer to include all addresses
         else: # Merge same_contacts into one
             self.dispersy_contacts.difference_update(set(same_contacts[1:])) # Remove all but first from set
             for i in range(1,len(same_contacts)):
                 same_contacts[0].merge(same_contacts[i]) # Merge statistics
-            same_contacts[0].set_peer(Peer(addresses))
+            same_contacts[0].set_peer(new_peer)
         if not same_contacts[0].address in addresses: # Make sure the primary address is still in use!
             same_contacts[0].address = addresses[0] # TODO: Make better choice!
         same_contacts[0].determine_reachable_addresses(self.address)
@@ -782,16 +794,18 @@ class MultiEndpoint(CommonEndpoint):
         for e in marked_remove:
             self.remove_endpoint(e)
             
-        def send_puncture(endpoint, cid, address):
-            endpoint.send_puncture_message(self.get_community(cid), a)
+        def send_puncture(endpoint, cid, address, id_):
+            endpoint.send_puncture_message(self.get_community(cid), a, id_)
         
         # In case an endpoint has not done any sending or receiving (Tunnelled or not), ensure the socket is still working
         for e in self.swift_endpoints:
             for dc in e.dispersy_contacts:
                 addrs = set(dc.no_contact_since(expiration_time=ENDPOINT_CONTACT_TIMEOUT)).difference(set([c[1] for c in self._get_channels()]))
                 if len(addrs) > 0:
-                    logger.info("%s has not had contact with %s for at least %d seconds", str(e.address), [str(a) for a in addrs], ENDPOINT_CONTACT_TIMEOUT)
-                    [self._dispersy.callback.register(send_puncture, args=(e, cid, a)) for cid in dc.community_ids for a in addrs]
+                    logger.info("%s has not had contact with %s for at least %d seconds", str(e.address), 
+                                [str(a) for a in addrs], ENDPOINT_CONTACT_TIMEOUT)
+                    [self._dispersy.callback.register(send_puncture, args=(e, cid, a, dc.peer.get_id(a))) 
+                     for cid in dc.community_ids for a in addrs]
         
         # TODO: In case one address has not heard of peer's address, we should send a AddressesMessage,
         # which should trigger puncture message responses.. So after the addresses message, send puncture messages :)
@@ -831,7 +845,7 @@ class MultiEndpoint(CommonEndpoint):
             return
         logger.debug("Send address to %s", [str(a) for a in addresses])
         candidates = [WalkCandidate(a.addr(), True, a.addr(), a.addr(), u"unknown") for a in addresses]
-        sockets = [e.address for e in self.swift_endpoints]
+        sockets = [(e.id, e.address) for e in self.swift_endpoints]
         # TODO: Note that it is kind of superfluous to send when we have only one socket
         # TODO: Note also that we should consider only using active sockets
         meta_puncture = community.get_meta_message(ADDRESSES_MESSAGE_NAME)
@@ -875,10 +889,10 @@ class MultiEndpoint(CommonEndpoint):
         for e in self.swift_endpoints: # We need to add the reference to the new swift to each endpoint
             e._swift = self._swift
         
-    def peer_endpoints_received(self, community, addresses):
-        CommonEndpoint.peer_endpoints_received(self, addresses)
+    def peer_endpoints_received(self, community, addresses, ids):
+        CommonEndpoint.peer_endpoints_received(self, addresses, ids)
         for e in self.swift_endpoints:
-            e.peer_endpoints_received(community, addresses)            
+            e.peer_endpoints_received(community, addresses, ids)            
             
     def swift_add_peer(self, d, addr, sock_addr=None):
         if not sock_addr is None:
@@ -892,13 +906,25 @@ class MultiEndpoint(CommonEndpoint):
         for dc in self.dispersy_contacts:
             for cid in dc.community_ids:
                 self.send_addresses_to_communities(self.get_community(cid), dc.address)
+                
+    def incoming_puncture_message(self, local_address, vote_address, endpoint_id):
+        """
+        @param local_address: The origin of the message
+        @param vote_address: The address the origin votes for
+        @param endpoint_id: id of the endpoint it casts it vote for
+        """
+        for e in self.swift_endpoints:
+            if e.id == endpoint_id:
+                return e.vote_wan_address(vote_address, local_address)
+        logger.warning("Unknown endpoint id %s, by voter %s voting for %s", endpoint_id.encode("base-64"), 
+                       str(local_address), str(vote_address))
+        
     
 class SwiftEndpoint(CommonEndpoint):
     
     def __init__(self, swift_process, address, api_callback=None):
-        super(SwiftEndpoint, self).__init__(swift_process, api_callback=api_callback) # Dispersy and session code 
+        super(SwiftEndpoint, self).__init__(swift_process, api_callback=api_callback, address=address) # Dispersy and session code 
         self.waiting_queue = Queue.Queue()
-        self.address = address
         if self.address.resolve_interface():
             if not address in self._swift.working_sockets:
                 self.swift_add_socket()
@@ -984,21 +1010,21 @@ class SwiftEndpoint(CommonEndpoint):
             logger.info("%s has buffer issues", self.address)
         # MultiEndpoint takes care of the downloads and peers for Swift
         
-    def peer_endpoints_received(self, community, addresses):
-        dc = CommonEndpoint.peer_endpoints_received(self, addresses)        
+    def peer_endpoints_received(self, community, addresses, ids):
+        dc = CommonEndpoint.peer_endpoints_received(self, addresses, ids)        
         # We need to establish connections. At least ensure that we can contact each address.
         # TODO: Send only to addresses that actually need it
         for addr in dc.no_contact_since(expiration_time=ENDPOINT_SOCKET_TIMEOUT):
-            self.send_puncture_message(community, addr)
+            self.send_puncture_message(community, addr, dc.peer.get_id(addr))
                 
-    def send_puncture_message(self, community, address):
+    def send_puncture_message(self, community, address, id_):
         if community is None:
             return
         candidate = WalkCandidate(address.addr(), True, address.addr(), address.addr(), u"unknown")        
         # TODO: Note also that we should consider only using active sockets
         meta_puncture = community.get_meta_message(PUNCTURE_MESSAGE_NAME)
         message = meta_puncture.impl(authentication=(community.my_member,), distribution=(community.claim_global_time(),), 
-                                     destination=(candidate,), payload=())
+                                     destination=(candidate,), payload=(self.wan_address, address, id_))
         self.send([candidate], [message.packet]) # TODO: Add to sendqueue?
                     
 def get_hash(filename, swift_path):

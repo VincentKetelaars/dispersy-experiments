@@ -121,9 +121,8 @@ class MyCommunity(Community):
         Handle Callback
         """
         for x in messages:
-            addresses = [Address.unknown(a) for a in x.payload.addresses]
-            self.swift_community.peer_endpoints_received(addresses)
-            self.dispersy.endpoint.peer_endpoints_received(self, addresses)
+            self.swift_community.peer_endpoints_received(x.payload.addresses, x.payload.ids) # Only the addresses
+            self.dispersy.endpoint.peer_endpoints_received(self, x.payload.addresses, x.payload.ids) # id, address tuples
             
     def puncture_check(self, messages):
         for x in messages:
@@ -131,7 +130,7 @@ class MyCommunity(Community):
             
     def puncture_handle(self, messages):
         for x in messages:
-            logger.debug("Puncture message!")
+            self.dispersy.endpoint.incoming_puncture_message(x.payload.local_address, x.payload.vote_address, x.payload.endpoint_id)
         
     def api_message_check(self, messages):
         """

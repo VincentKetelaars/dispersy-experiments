@@ -6,6 +6,7 @@ Created on Sep 10, 2013
 import binascii
 import os
 from datetime import datetime
+from random import randint
 
 from src.address import Address
 from src.logger import get_logger
@@ -15,14 +16,36 @@ logger = get_logger(__name__)
     
 class Peer(object):
     
-    def __init__(self, addresses):
-        self.addresses = set()
-        if addresses is not None:
-            self.addresses = set(addresses)
+    def __init__(self, addresses, ids=[]):
+        if addresses and ids:
+            self._addresses = dict(zip(ids, addresses))
+        else:
+            # Fake IDs shouldn't be a problem, because we are not going to look for fake ids either
+            # Understand that the fake ids are ints, whereas the real ones are raw bytes
+            self._addresses = dict(zip(self._random_keys(len(addresses)), addresses)) # Fake IDs
+            
+    def _random_keys(self, length):
+        return [randint(0, 1000000) for _ in range(length)]
+            
+    @property
+    def addresses(self):
+        return self._addresses.values()
+    
+    def get(self, id_):
+        return self._addresses.get(id_, None)
+    
+    def get_id(self, address):
+        for i, a in self._addresses.iteritems():
+            if a == address:
+                return i
+        return None
+    
+    def matches(self, peer):
+        assert isinstance(peer, Peer)
+        return self.has_any(peer._addresses.values(), peer._addresses.keys())
             
     def merge(self, peer):
-        for a in peer.addresses:
-            self.addresses.add(a)
+        self._addresses.update(peer._addresses)
 
     def __eq__(self, other):
         if not isinstance(other, Peer):
@@ -36,17 +59,18 @@ class Peer(object):
             h |= hash(a)
         return h
     
-    def has_any(self, addrs):
+    def has_any(self, addrs=[], ids=[]):
         """
-        Return whether any of these addresses is the same as any of this peers'
+        Return whether any of these addresses is the same as any of this _peers'
         @param addrs: List(Address)
-        """
-        return len([a for a in addrs if a in self.addresses]) > 0
+        """        
+        return (len([a for a in addrs if a in self.addresses]) > 0 or 
+                any([self.get(i) is not None for i in ids if not isinstance(i, int)])) # Make sure you're not comparing fake ids
 
 class Download(object):
     '''
     This class represents a Download object
-    Only the peers should be allowed to download this object.
+    Only the _peers should be allowed to download this object.
     Peers are only added if allowed by the destination.
     '''
 
@@ -176,7 +200,7 @@ class Download(object):
         
     def _allow_peer(self, peer):
         """
-        Allow peers when we're seeding and if at least one of their addresses corresponds to the candidate destination
+        Allow _peers when we're seeding and if at least one of their addresses corresponds to the candidate destination
         """
         assert isinstance(peer, Peer)
         if len(peer.addresses) == 0 or not self._seed: # If we're not seeding, we're not allowing!
@@ -206,10 +230,7 @@ class Download(object):
     
     def merge_peers(self, new_peer):
         if new_peer is not None and self._allow_peer(new_peer) and not new_peer in self._peers:
-            diff = set()
-            for peer in self._peers:
-                if any([a in peer.addresses for a in new_peer.addresses]):
-                    diff.add(peer)
+            diff = set([p for p in self._peers if p.matches(new_peer)]) # If any addresses or endpoints are the same
             self._peers.difference_update(diff)
             for p in diff:
                 new_peer.merge(p) # Any other addresses belong to this new peer now as well
