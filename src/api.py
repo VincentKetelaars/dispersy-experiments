@@ -350,7 +350,7 @@ class ReceiverAPI(PipeHandler):
         self.dispersy_callbacks_map = {MESSAGE_KEY_STATE : self._state_change}
         
         signal.signal(signal.SIGQUIT, self.on_quit)
-
+        signal.signal(signal.SIGINT, self.on_quit)
         self.run()
         
         
@@ -365,7 +365,8 @@ class ReceiverAPI(PipeHandler):
             self.dispersy_instance.stop()
         # If you close the pipe here, the parent process will not get the final state changes
         
-    def on_quit(self):
+    def on_quit(self, signal, frame):
+        logger.info("Signaled to quit")
         self.stop()
         
     def _connection_process_gone(self):

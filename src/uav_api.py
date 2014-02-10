@@ -80,7 +80,8 @@ class UAVAPI(API):
                     self._tell_dispersy_if_came_up(cd)
                 self.use_interfaces[cd] = (timestamp, state, ip) # Set the newest state
             
-            self.stop_event.wait(SLEEP)
+            if not self.stop_event.is_set():
+                self.run_event.wait(SLEEP)
         if not self._stopping:
             self.stop()
         self.log.debug("Stopped running") 
@@ -102,7 +103,7 @@ class UAVAPI(API):
         self.stop()
         
     def on_quit(self, signal, frame):
-        logger.debug("Asked to quit")
+        logger.debug("Signaled to quit")
         self.stop()
         
     """
