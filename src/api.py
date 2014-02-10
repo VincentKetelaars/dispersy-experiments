@@ -281,8 +281,8 @@ class API(Thread, PipeHandler):
     def monitor_directory(self, directory):
         self.send_message(MESSAGE_KEY_MONITOR_DIRECTORY, directory)
         
-    def interface_came_up(self, ip, interface_name, device_name, gateway=None):
-        self.send_message(MESSAGE_KEY_INTERFACE_UP, ip, interface_name, device_name, gateway=gateway)
+    def interface_came_up(self, ip, interface_name, device_name, gateway=None, port=0):
+        self.send_message(MESSAGE_KEY_INTERFACE_UP, ip, interface_name, device_name, gateway=gateway, port=port)
     
     """
     HANDLE MESSAGES
@@ -451,9 +451,9 @@ class ReceiverAPI(PipeHandler):
         # TODO: Find something to return
     
     @_dispersy_running_decorator
-    def interface_came_up(self, ip, if_name, device, gateway=None):
-        logger.debug("Interface came up with %s %s %s %s", ip, if_name, device, gateway)
-        addr = Address.unknown(ip)
+    def interface_came_up(self, ip, if_name, device, gateway=None, port=0):
+        logger.debug("Interface came up with %s:%d %s %s %s", ip, port, if_name, device, gateway)
+        addr = Address.unknown(ip + ":" + str(port)) # Not very elegant.. But should work for ipv6 as well
         if addr.resolve_interface():
             if addr.interface.name != if_name:
                 return # Provided the wrong interface..

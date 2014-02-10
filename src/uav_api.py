@@ -250,7 +250,14 @@ class UAVAPI(API):
         ip = self._get_channel_value(device, u"ip")
         interface = self._get_channel_value(device, u"ppp_interface")
         # Send only the device name, without any parents prepended
-        self.interface_came_up(ip, interface, device[device.rfind('.') + 1:], gateway=gateway)
+        device = device[device.rfind('.') + 1:]
+        port=0
+        if device == "RadioModem":
+            try:
+                port = self.cfg.get("radio.port").get_value()
+            except AttributeError:
+                pass
+        self.interface_came_up(ip, interface, device, gateway=gateway, port=port)
         
 if __name__ == "__main__":
     uav = UAVAPI()
