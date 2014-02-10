@@ -30,11 +30,13 @@ class UAVAPI(API):
     STATES = {STATE_DONE : "done", STATE_INITIALIZED : "initialized", STATE_NOT : "none",
               STATE_RUNNING : "running", STATE_STOPPED : "stopped", STATE_RESETTING : "resetting"}
 
-    def __init__(self, stop_event=Event(), name="Network.Dispersy"):
+    def __init__(self, stop_event=Event(), name="Network"):
         '''
         @param stop_event: Event that controls the run of this instance, but does not affect this event itself
         @param name: Name of the instance, must reflect the location of configuration parameters
         '''
+        name += ".Dispersy"
+        
         self.stop_event = stop_event
         self.db_reader = StatusDbReader()
         
