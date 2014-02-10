@@ -22,6 +22,7 @@ from src.definitions import LIBEVENT_LIBRARY, SWIFT_ERROR_TCP_FAILED,\
     SWIFT_ERROR_BAD_PARAMETER
 import socket
 from src.swift.tribler.exceptions import TCPConnectionFailedException
+import signal
 
 try:
     os.environ["LD_LIBRARY_PATH"]
@@ -122,13 +123,17 @@ class MySwiftProcess(SwiftProcess):
         
         if not os.path.exists(self.workdir):
             os.mkdir(self.workdir)
+            
+        def preexec_swift():
+            signal.signal(signal.SIGINT, signal.SIG_IGN) # KeyBoardInterrupts do not reach Swift anymore
 
         # See also SwiftDef::finalize popen
         # We would really like to get the stdout and stderr without creating a new thread for them.
         # However, windows does not support non-files in the select command, hence we cannot integrate
         # these streams into the FastI2I thread
         # A proper solution would be to switch to twisted for the communication with the swift binary
-        self.popen = subprocess.Popen(args, cwd=self.workdir, creationflags=creationflags, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.popen = subprocess.Popen(args, cwd=self.workdir, creationflags=creationflags, stdout=subprocess.PIPE, 
+                                      stderr=subprocess.PIPE, preexec_fn=preexec_swift)
         
         # This event must be set when is verified that swift is running and the cmdgw is up
         self._swift_running = Event()
