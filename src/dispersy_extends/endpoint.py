@@ -407,7 +407,6 @@ class CommonEndpoint(SwiftHandler):
         new_peer = Peer(addresses, ids)
         if len(same_contacts) == 0: # Should not happen, contact should have already been made
             dc = DispersyContact(addresses[0], peer=new_peer)
-            dc.determine_reachable_addresses(self.address)
             self.dispersy_contacts.add(dc)
             return dc
         elif len(same_contacts) == 1: # The normal case
@@ -419,7 +418,6 @@ class CommonEndpoint(SwiftHandler):
             same_contacts[0].set_peer(new_peer)
         if not same_contacts[0].address in addresses: # Make sure the primary address is still in use!
             same_contacts[0].address = addresses[0] # TODO: Make better choice!
-        same_contacts[0].determine_reachable_addresses(self.address)
         return same_contacts[0]
     
     def get_community(self, community_id):
