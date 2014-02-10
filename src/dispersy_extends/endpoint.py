@@ -902,7 +902,8 @@ class MultiEndpoint(CommonEndpoint):
                 if e.socket_running:
                     CommonEndpoint.swift_add_peer(self, d, addr, sock_addr=e.address)
                     
-    def _new_socket_created(self):        
+    def _new_socket_created(self):
+        logger.info("Preparing for addresses to be send to %s", [dc.address for dc in self.dispersy_contacts])
         for dc in self.dispersy_contacts:
             for cid in dc.community_ids:
                 self.send_addresses_to_communities(self.get_community(cid), dc.address)

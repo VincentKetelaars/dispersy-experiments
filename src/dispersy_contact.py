@@ -32,32 +32,11 @@ class DispersyContact(object):
             self.sent(sent_messages, sent_bytes, address=address)
         if rcvd_messages > 0:
             self.rcvd(rcvd_messages, rcvd_bytes, address=address)
-        self._reachable_addresses = []
+        self._reachable_addresses = self.peer.addresses
         
     @property
     def reachable_addresses(self):
         return self._reachable_addresses
-    
-    def determine_reachable_addresses(self, local_address):
-        """
-        Determine which addresses of the peer are reachable by this local_address
-        Since DispersyContact belongs to a single Endpoint, this local_address the only one we're interested in
-        @type local_address: Address
-        """
-        self._reachable_addresses = [] # Reset
-        if local_address == Address():
-            self._reachable_addresses = self.peer.addresses
-        else:
-            # Local address should have its interface defined
-            if local_address.is_private_address():
-                for a in self.peer.addresses:
-                    if local_address.same_subnet(a.ip):
-                        self._reachable_addresses.append(a)
-            else:
-                for a in self.peer.addresses:
-                    if not a.is_private_address():
-                        self._reachable_addresses.append(a)
-        # TODO: Find a better way to assure that these addresses are indeed reachable.. There are lots of private networks..
        
     def rcvd(self, num_messages, bytes_rcvd, address=Address()):
         self.count_rcvd[address] = self.count_rcvd.get(address, 0) + num_messages
@@ -104,6 +83,8 @@ class DispersyContact(object):
         @type peer: Peer
         """
         self.peer = peer
+        # TODO: Update reachability
+        self._reachable_addresses = peer.addresses
         
     def has_address(self, address):
         """

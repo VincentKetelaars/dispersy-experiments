@@ -131,11 +131,10 @@ class DispersyInstance(object):
         self._loop()
         
     def _loop(self):
+        logger.debug("Start loop")
         while self._run_time < 0 and not self._loop_event.is_set():
-            logger.debug("Start infinite loop")
-            self._loop_event.wait(10.0) # Wait some time, so that we can actually receive keyboard signals
+            self._loop_event.wait(10.0) # Wait some time, so that we can actually receive keyboard signals (need that timeout)
         else:
-            logger.debug("Start loop")
             for _ in range(int(self._run_time / SLEEP_TIME)):
                 if not self._loop_event.is_set():
                     self._loop_event.wait(SLEEP_TIME)
