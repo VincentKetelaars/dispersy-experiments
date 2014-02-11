@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 class Peer(object):
     
     def __init__(self, addresses, ids=[]):
-        if addresses and ids:
+        if len(addresses) == len(ids):
             self._addresses = dict(zip(ids, addresses))
         else:
             # Fake IDs shouldn't be a problem, because we are not going to look for fake ids either

@@ -29,7 +29,7 @@ from src.definitions import MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, M
     MAX_CONCURRENT_DOWNLOADING_SWARMS, ALMOST_DONE_DOWNLOADING_TIME,\
     BUFFER_DRAIN_TIME, MAX_SOCKET_INITIALIZATION_TIME, ENDPOINT_SOCKET_TIMEOUT,\
     SWIFT_ERROR_TCP_FAILED, PUNCTURE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME,\
-    ENDPOINT_CONTACT_TIMEOUT, ENDPOINT_CHECK
+    ENDPOINT_CONTACT_TIMEOUT, ENDPOINT_CHECK, ENDPOINT_ID_LENGTH
 from src.dispersy_contact import DispersyContact
 from src.download import Peer
 
@@ -340,7 +340,7 @@ class CommonEndpoint(SwiftHandler):
     def __init__(self, swift_process, api_callback=None, address=Address()):
         SwiftHandler.__init__(self, swift_process, api_callback)
         self.start_time = datetime.utcnow()
-        self.id = urandom(16)
+        self.id = urandom(ENDPOINT_ID_LENGTH)
         self.dispersy_contacts = set()
         self.is_alive = False # The endpoint is alive between open and close
         self.address = address
@@ -513,7 +513,7 @@ class MultiEndpoint(CommonEndpoint):
             self.swift_endpoints.append(new_endpoint)
             if len(self.swift_endpoints) == 1:
                 self._endpoint = new_endpoint
-        self._new_socket_created()
+        self._send_socket_information()
         return new_endpoint
 
     def remove_endpoint(self, endpoint):
@@ -531,7 +531,7 @@ class MultiEndpoint(CommonEndpoint):
             try:
                 self.swift_endpoints.remove(endpoint)                
                 logger.info("Removed %s", endpoint)
-                self._new_socket_created()
+                self._send_socket_information()
                 return True
             except KeyError:
                 logger.info("%s is not part of the SwiftEndpoints", endpoint)
@@ -823,7 +823,7 @@ class MultiEndpoint(CommonEndpoint):
                 old_ip = e.address.ip
                 e.swift_add_socket(addr) # If ip already exists, try adding it to swift (only if not already working)
                 if old_ip != addr.ip: # New address
-                    self._new_socket_created()
+                    self._send_socket_information()
         self.swift_add_socket(addr) # If it is new send address to swift
         
     def update_dispersy_contacts(self, sock_addrs, packets, recv=True):
@@ -839,7 +839,7 @@ class MultiEndpoint(CommonEndpoint):
         The addresses should be reachable from the candidates point of view
         Local addresses will not benefit the candidate or us
         """
-        if community is None or not addresses: # Possible if we couldn't retrieve it from the incoming packet
+        if community is None or len(addresses) == 0: # Possible if we couldn't retrieve it from the incoming packet
             return
         logger.debug("Send address to %s", [str(a) for a in addresses])
         candidates = [WalkCandidate(a.addr(), True, a.addr(), a.addr(), u"unknown") for a in addresses]
@@ -888,6 +888,7 @@ class MultiEndpoint(CommonEndpoint):
             e._swift = self._swift
         
     def peer_endpoints_received(self, community, addresses, ids):
+        logger.debug("Addresses of peer arrived %s, %s, %s", community, [str(a) for a in addresses], [str(i) for i in ids])
         CommonEndpoint.peer_endpoints_received(self, addresses, ids)
         for e in self.swift_endpoints:
             e.peer_endpoints_received(community, addresses, ids)            
@@ -900,11 +901,12 @@ class MultiEndpoint(CommonEndpoint):
                 if e.socket_running:
                     CommonEndpoint.swift_add_peer(self, d, addr, sock_addr=e.address)
                     
-    def _new_socket_created(self):
-        logger.info("Preparing for addresses to be send to %s", [dc.address for dc in self.dispersy_contacts])
+    def _send_socket_information(self):
+        logger.info("Preparing for addresses to be send to %s with communities %s", 
+                    [dc.address for dc in self.dispersy_contacts], [dc.community_ids for dc in self.dispersy_contacts])
         for dc in self.dispersy_contacts:
             for cid in dc.community_ids:
-                self.send_addresses_to_communities(self.get_community(cid), dc.address)
+                self.send_addresses_to_communities(self.get_community(cid), [dc.address])
                 
     def incoming_puncture_message(self, local_address, vote_address, endpoint_id):
         """
@@ -1017,7 +1019,8 @@ class SwiftEndpoint(CommonEndpoint):
             self.send_puncture_message(community, addr, dc.peer.get_id(addr))
                 
     def send_puncture_message(self, community, address, id_):
-        if community is None:
+        logger.debug("Creating puncture message for %s %s %s", community.cid, str(address), str(id_))
+        if community is None or isinstance(id_, int):
             return
         candidate = WalkCandidate(address.addr(), True, address.addr(), address.addr(), u"unknown")        
         # TODO: Note also that we should consider only using active sockets

@@ -28,7 +28,6 @@ from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBE
 from src.tools.periodic_task import Looper, PeriodicIntroductionRequest
 from src.swift.swift_community import SwiftCommunity
 from dispersy.candidate import WalkCandidate
-from src.address import Address
 
 logger = get_logger(__name__)    
     
