@@ -566,12 +566,12 @@ class MultiEndpoint(CommonEndpoint):
             return self.swift_endpoints[0]
         return None
     
-    def _last_endpoints(self, contact, endpoints=[]):
+    def _last_endpoints(self, address, endpoints=[]):
         """
         This function returns the endpoints that last had contact with this peer,
         sorted by time since the last contact, latest first
         
-        @type peer: DispersyContact
+        @type address: Address
         @param endpoints: List of endpoints to use (defaults to self.swift_endpoints)
         @return: List((SwiftEndpoint, peer Address, datetime)) that last had contact with peer
         """
@@ -579,8 +579,14 @@ class MultiEndpoint(CommonEndpoint):
             endpoints = self.swift_endpoints
         last_contacts = []
         for e in endpoints:
+            contact = None
+            for dc in e.dispersy_contacts:
+                if dc.address == address:
+                    contact = dc
+            if contact is None:
+                continue
             for paddr in contact.peer.addresses:
-                if contact.last_contact(paddr) > datetime.min:
+                if contact.last_rcvd(paddr) > datetime.min: # If we use received, we are sure that it is actually reachable
                     last_contacts.append((e, paddr, contact.last_contact(paddr)))
         return sorted(last_contacts, key=lambda x: x[2], reverse=True)
     
@@ -721,7 +727,7 @@ class MultiEndpoint(CommonEndpoint):
                                  e, paddr, ert * 1000)
                     return (e, paddr.addr())
             # Choose the endpoint that had contact last with the peer
-            for e, paddr, last_contact in self._last_endpoints(contact):
+            for e, paddr, last_contact in self._last_endpoints(contact.address):
                 if e is not None and e.is_alive and e.socket_running:
                     logger.debug("%d bytes will be sent with %s that had contact with %s at %s", total_size, e, paddr, 
                                  last_contact.strftime("%H:%M:%S"))
