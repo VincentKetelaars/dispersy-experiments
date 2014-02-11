@@ -376,13 +376,12 @@ class CommonEndpoint(SwiftHandler):
         @return: List of DispersyContacts from we first received something 
         """
         community = self.get_community(packets[0][2:22]) # Packet of first tuple
-        if community is None: # TODO: Sure about this? There probably is no point in having a contact without a legitamite community
-            return None, []    
+        if community is None: # TODO: Sure about this? There probably is no point in having a contact without a legitimate community
+            return None, []
         _bytes = sum([len(p) for p in packets])
         contacts = [DispersyContact(a, rcvd_messages=len(packets), rcvd_bytes=_bytes, community_id=community.cid) 
                     if recv else DispersyContact(a, sent_messages=len(packets), sent_bytes=_bytes, community_id=community.cid)
-                    for a in [Address.tuple(s) for s in sock_addrs]  
-                    if not self.is_bootstrap_candidate(addr=a) for p in packets]
+                    for a in [Address.tuple(s) for s in sock_addrs] if not self.is_bootstrap_candidate(addr=a)]
         newly_recvd = set()
         for c in contacts:
             found = False
@@ -798,10 +797,10 @@ class MultiEndpoint(CommonEndpoint):
         # In case an endpoint has not done any sending or receiving (Tunnelled or not), ensure the socket is still working
         for e in self.swift_endpoints:
             for dc in e.dispersy_contacts:
-                addrs = set(dc.no_contact_since(expiration_time=ENDPOINT_CONTACT_TIMEOUT)).difference(set([c[1] for c in self._get_channels()]))
+                addrs = set(dc.no_contact_since(expiration_time=ENDPOINT_CONTACT_TIMEOUT)).difference(set([c[1] for c in self._get_channels(dc.peer)]))
                 if len(addrs) > 0:
-                    logger.info("%s has not had contact with %s for at least %d seconds", str(e.address), 
-                                [str(a) for a in addrs], ENDPOINT_CONTACT_TIMEOUT)
+                    [logger.info("%s has %s received and %s sent from/with %s", str(e.address), dc.last_rcvd(a), 
+                                 dc.last_sent(a), str(a)) for a in addrs]
                     [self._dispersy.callback.register(send_puncture, args=(e, cid, a, dc.peer.get_id(a))) 
                      for cid in dc.community_ids for a in addrs]
         

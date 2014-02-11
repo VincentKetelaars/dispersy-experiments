@@ -78,6 +78,12 @@ class DispersyContact(object):
                 addrs.append(a)
         return addrs
     
+    def last_rcvd(self, address):
+        return self.last_recv_time.get(address, None)
+    
+    def last_sent(self, address):
+        return self.last_send_time.get(address, None)
+    
     def set_peer(self, peer):
         """
         @type peer: Peer
