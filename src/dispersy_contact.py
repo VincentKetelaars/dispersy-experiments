@@ -34,9 +34,19 @@ class DispersyContact(object):
             self.rcvd(rcvd_messages, rcvd_bytes, address=address)
         self._reachable_addresses = self.peer.addresses
         
+    @classmethod
+    def shallow_copy(cls, contact):
+        assert isinstance(contact, DispersyContact)
+        dc = DispersyContact(contact.address, peer=contact.peer) # Should these be copies?
+        dc.community_ids = contact.community_ids
+        return dc
+        
     @property
     def reachable_addresses(self):
         return self._reachable_addresses
+    
+    def add_community(self, id_):
+        self.community_ids.add(id_)
        
     def rcvd(self, num_messages, bytes_rcvd, address=Address()):
         self.count_rcvd[address] = self.count_rcvd.get(address, 0) + num_messages

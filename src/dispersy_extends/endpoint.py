@@ -397,15 +397,15 @@ class CommonEndpoint(SwiftHandler):
                     newly_recvd.add(c)
         return community, list(newly_recvd)
         
-    def peer_endpoints_received(self, addresses, ids):
+    def peer_endpoints_received(self, community, addresses, ids):
         same_contacts = []
         for dc in self.dispersy_contacts:
             if dc.peer.has_any(addresses, ids=ids):
                 same_contacts.append(dc)
         # Quite possibly some of these addresses are not public, and may therefore not be reachable by each local address
         new_peer = Peer(addresses, ids)
-        if len(same_contacts) == 0: # Should not happen, contact should have already been made
-            dc = DispersyContact(addresses[0], peer=new_peer)
+        if len(same_contacts) == 0: # Can happen with endpoints that have not had contact yet
+            dc = DispersyContact(addresses[0], peer=new_peer, community_id=community.cid)
             self.dispersy_contacts.add(dc)
             return dc
         elif len(same_contacts) == 1: # The normal case
@@ -417,6 +417,7 @@ class CommonEndpoint(SwiftHandler):
             same_contacts[0].set_peer(new_peer)
         if not same_contacts[0].address in addresses: # Make sure the primary address is still in use!
             same_contacts[0].address = addresses[0] # TODO: Make better choice!
+        same_contacts[0].add_community(community.cid) # Shouldn't be necessary, but won't hurt
         return same_contacts[0]
     
     def get_community(self, community_id):
@@ -505,6 +506,7 @@ class MultiEndpoint(CommonEndpoint):
         logger.info("Add %s", addr)
         with self.lock:
             new_endpoint = SwiftEndpoint(self._swift, addr, api_callback=self._api_callback)
+            new_endpoint.dispersy_contacts = set([DispersyContact.shallow_copy(dc) for dc in self.dispersy_contacts]) # Initialize
             try:
                 new_endpoint.open(self._dispersy)
             except AttributeError:
@@ -805,8 +807,8 @@ class MultiEndpoint(CommonEndpoint):
             for dc in e.dispersy_contacts:
                 addrs = set(dc.no_contact_since(expiration_time=ENDPOINT_CONTACT_TIMEOUT)).difference(set([c[1] for c in self._get_channels(dc.peer)]))
                 if len(addrs) > 0:
-                    [logger.info("%s has %s received and %s sent from/with %s", str(e.address), dc.last_rcvd(a), 
-                                 dc.last_sent(a), str(a)) for a in addrs]
+                    [logger.info("%s has %s received and %s sent from/to %s in communities %s", str(e.address), dc.last_rcvd(a), 
+                                 dc.last_sent(a), str(a), dc.community_ids) for a in addrs]
                     [self._dispersy.callback.register(send_puncture, args=(e, cid, a, dc.peer.get_id(a))) 
                      for cid in dc.community_ids for a in addrs]
         
@@ -894,7 +896,7 @@ class MultiEndpoint(CommonEndpoint):
         
     def peer_endpoints_received(self, community, addresses, ids):
         logger.debug("Addresses of peer arrived %s, %s, %s", community, [str(a) for a in addresses], [str(i) for i in ids])
-        CommonEndpoint.peer_endpoints_received(self, addresses, ids)
+        CommonEndpoint.peer_endpoints_received(self, community, addresses, ids)
         for e in self.swift_endpoints:
             e.peer_endpoints_received(community, addresses, ids)            
             
@@ -1019,7 +1021,7 @@ class SwiftEndpoint(CommonEndpoint):
         # MultiEndpoint takes care of the downloads and peers for Swift
         
     def peer_endpoints_received(self, community, addresses, ids):
-        dc = CommonEndpoint.peer_endpoints_received(self, addresses, ids)        
+        dc = CommonEndpoint.peer_endpoints_received(self, community, addresses, ids)        
         # We need to establish connections. At least ensure that we can contact each address.
         # TODO: Send only to addresses that actually need it
         self.determine_puncture_messages_to_send(dc)
