@@ -32,7 +32,7 @@ class DispersyContact(object):
             self.sent(sent_messages, sent_bytes, address=address)
         if rcvd_messages > 0:
             self.rcvd(rcvd_messages, rcvd_bytes, address=address)
-        self._reachable_addresses = self.peer.addresses
+        self._unreachable_addresses = set()
         
     @classmethod
     def shallow_copy(cls, contact):
@@ -43,10 +43,17 @@ class DispersyContact(object):
         
     @property
     def reachable_addresses(self):
-        return self._reachable_addresses
+        return set(self.peer.addresses).difference(self._unreachable_addresses)
+    
+    @property
+    def confirmed_addresses(self):
+        return [a for a in self.peer.addresses if self.last_rcvd(a) > datetime.min]
     
     def add_community(self, id_):
         self.community_ids.add(id_)
+        
+    def add_unreachable_address(self, address):
+        self._unreachable_addresses.add(address)
        
     def rcvd(self, num_messages, bytes_rcvd, address=Address()):
         self.count_rcvd[address] = self.count_rcvd.get(address, 0) + num_messages
@@ -99,8 +106,6 @@ class DispersyContact(object):
         @type peer: Peer
         """
         self.peer = peer
-        # TODO: Update reachability
-        self._reachable_addresses = peer.addresses
         
     def has_address(self, address):
         """
@@ -112,6 +117,7 @@ class DispersyContact(object):
     def merge(self, contact):
         self.merge_stats(contact)
         self.community_ids.update(contact.community_ids)
+        self._unreachable_addresses.update(contact._unreachable_addresses)
     
     def merge_stats(self, contact):
         """

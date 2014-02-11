@@ -812,9 +812,25 @@ class MultiEndpoint(CommonEndpoint):
                     [self._dispersy.callback.register(send_puncture, args=(e, cid, a, dc.peer.get_id(a))) 
                      for cid in dc.community_ids for a in addrs]
         
-        # TODO: In case one address has not heard of peer's address, we should send a AddressesMessage,
-        # which should trigger puncture message responses.. So after the addresses message, send puncture messages :)
-    
+        # We aim to alleviate the stress of continuously sending puncture messages to non responding hosts
+        # First determine if the address has been confirmed by any of the endpoints
+        confirmed_addrs = set([a for dc in self.dispersy_contacts for a in dc.confirmed_addresses])
+        for e in self.swift_endpoints:
+            for dc in e.dispersy_contacts:
+                # Find the confirmed addresses that have not been confirmed for this endpoint
+                addrs = set([a for a in dc.reachable_addresses if dc.last_rcvd(a) == datetime.min]).intersection(confirmed_addrs)
+                unreachable = set([a for a in addrs if dc.count_sent.get(a, 0) > 10])
+                for a in unreachable:
+                    logger.debug("%s is unreachable for %s", str(a), str(e))
+                    dc.add_unreachable_address(a) # Set address unreachable after 10 puncture message tries
+                addrs = addrs.difference(unreachable) # Update not reached (but potentially reachable) addresses
+                if len([a for a in addrs if dc.count_sent.get(a, 0) == 5]) > 0: # When 5 messages have been sent to this address
+                    def send_addresses(cid, addresses):
+                        self.send_addresses_to_communities(self.get_community(cid), addresses)
+                    # Send an addresses message to the peer's main address to retry puncture messages
+                    [self._dispersy.callback.register(send_addresses, args=(cid, [dc.address])) for cid in dc.community_ids]
+                    e.determine_puncture_messages_to_send(dc) # Make sure to send puncture messages yourself
+                         
     def interface_came_up(self, addr):
         logger.debug("%s came up", addr.interface)
         if addr.interface is None:
