@@ -798,7 +798,7 @@ class MultiEndpoint(CommonEndpoint):
             self.remove_endpoint(e)
             
         def send_puncture(endpoint, cid, address, id_):
-            endpoint.send_puncture_message(self.get_community(cid), a, id_)
+            endpoint.send_puncture_message(self.get_community(cid), address, id_)
         
         # In case an endpoint has not done any sending or receiving (Tunnelled or not), ensure the socket is still working
         for e in self.swift_endpoints:
@@ -912,6 +912,8 @@ class MultiEndpoint(CommonEndpoint):
         for dc in self.dispersy_contacts:
             for cid in dc.community_ids:
                 self.send_addresses_to_communities(self.get_community(cid), [dc.address])
+        for e in self.swift_endpoints:
+            e.determine_puncture_messages_to_send()
                 
     def incoming_puncture_message(self, local_address, vote_address, endpoint_id):
         """
@@ -1020,8 +1022,21 @@ class SwiftEndpoint(CommonEndpoint):
         dc = CommonEndpoint.peer_endpoints_received(self, addresses, ids)        
         # We need to establish connections. At least ensure that we can contact each address.
         # TODO: Send only to addresses that actually need it
-        for addr in dc.no_contact_since(expiration_time=ENDPOINT_SOCKET_TIMEOUT):
-            self.send_puncture_message(community, addr, dc.peer.get_id(addr))
+        self.determine_puncture_messages_to_send(dc)
+            
+    def determine_puncture_messages_to_send(self, contact=None):
+        if contact is None:
+            contacts = self.dispersy_contacts
+        else:
+            contacts = [contact]      
+            
+        def send_puncture(cid, address, id_):
+            self.send_puncture_message(self.get_community(cid), address, id_)
+            
+        for dc in contacts:
+            for addr in dc.no_contact_since(expiration_time=ENDPOINT_SOCKET_TIMEOUT):
+                for cid in dc.community_ids:
+                    send_puncture(cid, addr, dc.peer.get_id(addr))
                 
     def send_puncture_message(self, community, address, id_):
         logger.debug("Creating puncture message for %s %s %s", community.cid, str(address), str(id_))
