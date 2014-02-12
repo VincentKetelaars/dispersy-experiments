@@ -130,7 +130,7 @@ class AddressesPayload(Payload):
         
         def __init__(self, meta, id_addresses):
             super(Payload.Implementation, self).__init__(meta)
-            self._id_addresses = id_addresses
+            self._id_addresses = id_addresses # (id, lan, wan)
             
         @property
         def ids(self):
@@ -139,6 +139,10 @@ class AddressesPayload(Payload):
         @property
         def addresses(self):
             return [ia[1] for ia in self._id_addresses]
+        
+        @property
+        def wan_addresses(self):
+            return [ia[2] for ia in self._id_addresses]
         
         @property
         def id_addresses(self):
@@ -153,19 +157,24 @@ class PuncturePayload(Payload):
     
     class Implementation(Payload.Implementation):
         
-        def __init__(self, meta, local_address, vote_address, endpoint_id):
+        def __init__(self, meta, sender_lan, sender_wan, address_vote, endpoint_id):
             super(Payload.Implementation, self).__init__(meta)
-            self._local_address = local_address
-            self._vote_address = vote_address
+            self._sender_lan = sender_lan
+            self._sender_wan = sender_wan
+            self._address_vote = address_vote
             self._endpoint_id = endpoint_id
             
         @property
-        def local_address(self):
-            return self._local_address
+        def sender_lan(self):
+            return self._sender_lan
+                    
+        @property
+        def sender_wan(self):
+            return self._sender_wan
         
         @property
-        def vote_address(self):
-            return self._vote_address
+        def address_vote(self):
+            return self._address_vote
         
         @property
         def endpoint_id(self):

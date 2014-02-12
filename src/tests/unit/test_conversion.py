@@ -69,8 +69,9 @@ class TestConversion(unittest.TestCase):
         for c in self._conversions:
             if isinstance(c, AddressesConversion):
                 meta = self._di._community.get_meta_message(ADDRESSES_MESSAGE_NAME)
-                id_addresses = [(os.urandom(16), Address.ipv4("0.0.0.1:1232")), (os.urandom(16), Address.ipv6("[::0]:12145")), 
-                                (os.urandom(16), Address(port=32532))]
+                ids = [os.urandom(16) for _ in range(3)]
+                addresses = [Address.ipv4("0.0.0.1:1232"), Address.ipv6("[::0]:12145"), Address(port=32532)]
+                id_addresses = zip(ids, addresses, addresses)
                 message = meta.impl(authentication=(self._di._community.my_member,),
                                       distribution=(self._di._community.claim_global_time(),),
                                       destination=(Candidate(id_addresses[0][1].addr(), True),), 
@@ -84,18 +85,20 @@ class TestConversion(unittest.TestCase):
         for c in self._conversions:
             if isinstance(c, PunctureConversion):
                 meta = self._di._community.get_meta_message(PUNCTURE_MESSAGE_NAME)
-                local_address = Address.ipv4("0.0.0.1:1232")
-                vote_address =  Address.ipv6("[::0]:12145")
+                sender_lan = Address.ipv4("0.0.0.1:1232")
+                sender_wan = Address.ipv4("23.12.32.123:1232")
+                address_vote =  Address.ipv6("[::0]:12145")
                 endpoint_id = os.urandom(16)
                 message = meta.impl(authentication=(self._di._community.my_member,),
                                       distribution=(self._di._community.claim_global_time(),),
-                                      destination=(Candidate(vote_address.addr(), True),), 
-                                      payload=(local_address, vote_address, endpoint_id))
+                                      destination=(Candidate(address_vote.addr(), True),), 
+                                      payload=(sender_lan, sender_wan, address_vote, endpoint_id))
                 encoded = c.encode_payload(message)
                 placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
                 _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
-                self.assertEqual(x.local_address, local_address)
-                self.assertEqual(x.vote_address, vote_address)
+                self.assertEqual(x.sender_lan, sender_lan)
+                self.assertEqual(x.sender_wan, sender_wan)
+                self.assertEqual(x.address_vote, address_vote)
                 self.assertEqual(x.endpoint_id, endpoint_id)
                 
     def test_uav_message_conversion(self):

@@ -97,8 +97,8 @@ class AddressesConversion(BinaryConversion):
         
     def encode_payload(self, message):
         m = ""
-        for _id, addr in message.payload.id_addresses:
-            m += _id.encode(ENDPOINT_ID_ENCODING) + SEPARATOR + str(addr) + SEPARATOR
+        for _id, addr, wan in message.payload.id_addresses:
+            m += _id.encode(ENDPOINT_ID_ENCODING) + SEPARATOR + str(addr) + SEPARATOR + str(wan) + SEPARATOR
         m = m[:-len(SEPARATOR)]
         return struct.pack("!L", len(m)), m
 
@@ -112,7 +112,9 @@ class AddressesConversion(BinaryConversion):
             raise DropPacket("Insufficient packet size")
         data_payload = data[offset:offset + data_length]
         id_addrs = data_payload.split(SEPARATOR)
-        id_addresses = zip([i.decode(ENDPOINT_ID_ENCODING) for i in id_addrs[0::2]], [Address.unknown(a) for a in id_addrs[1::2]])
+        id_addresses = zip([i.decode(ENDPOINT_ID_ENCODING) for i in id_addrs[0::3]], # id 
+                           [Address.unknown(a) for a in id_addrs[1::3]], # lan
+                           [Address.unknown(a) for a in id_addrs[2::3]]) # wan
         offset += data_length
 
         return offset, placeholder.meta.payload.implement(id_addresses)
@@ -128,8 +130,8 @@ class PunctureConversion(BinaryConversion):
                                  self.decode_payload)
         
     def encode_payload(self, message):
-        m = str(message.payload.local_address) + SEPARATOR + str(message.payload.vote_address) + SEPARATOR + \
-            message.payload.endpoint_id.encode(ENDPOINT_ID_ENCODING)
+        m = str(message.payload.sender_lan) + SEPARATOR + str(message.payload.sender_wan) + SEPARATOR + \
+            str(message.payload.address_vote) + SEPARATOR + message.payload.endpoint_id.encode(ENDPOINT_ID_ENCODING)
         return struct.pack("!L", len(m)), m
 
     def decode_payload(self, placeholder, offset, data):
@@ -142,12 +144,13 @@ class PunctureConversion(BinaryConversion):
             raise DropPacket("Insufficient packet size")
         data_payload = data[offset:offset + data_length]
         splitted = data_payload.split(SEPARATOR)
-        local_address = Address.unknown(splitted[0])
-        vote_address = Address.unknown(splitted[1])
-        endpoint_id = splitted[2].decode(ENDPOINT_ID_ENCODING)
+        sender_lan = Address.unknown(splitted[0])
+        sender_wan = Address.unknown(splitted[1])
+        address_vote = Address.unknown(splitted[2])
+        endpoint_id = splitted[3].decode(ENDPOINT_ID_ENCODING)
         offset += data_length
 
-        return offset, placeholder.meta.payload.implement(local_address, vote_address, endpoint_id)
+        return offset, placeholder.meta.payload.implement(sender_lan, sender_wan, address_vote, endpoint_id)
     
 class APIMessageConversion(BinaryConversion):
     '''
