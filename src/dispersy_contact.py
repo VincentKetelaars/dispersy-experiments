@@ -49,6 +49,9 @@ class DispersyContact(object):
     def confirmed_addresses(self):
         return [a for a in self.peer.addresses if self.last_rcvd(a) > datetime.min]
     
+    def get_peer_addresses(self, lan, wan):
+        return [l if wan.ip == w.ip else w for l, w in self.peer._addresses.itervalues()]
+    
     def add_community(self, id_):
         self.community_ids.add(id_)
         

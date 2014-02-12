@@ -596,23 +596,20 @@ class MultiEndpoint(CommonEndpoint):
             endpoints = self.swift_endpoints
         last_contacts = []
         for e in endpoints:
-            contact = None
-            for dc in e.dispersy_contacts:
-                if dc.address == address:
-                    contact = dc
+            contact = e.get_contact(address)
             if contact is None:
                 continue
-            for paddr in contact.peer.addresses:
+            for paddr in contact.get_peer_addresses(self.address, self.wan_address):
                 if contact.last_rcvd(paddr) > datetime.min: # If we use received, we are sure that it is actually reachable
                     last_contacts.append((e, paddr, contact.last_contact(paddr)))
         return sorted(last_contacts, key=lambda x: x[2], reverse=True)
     
-    def _subnet_endpoints(self, peer, endpoints=[]):
+    def _subnet_endpoints(self, address, endpoints=[]):
         """
         This function returns the endpoints that reside in the same subnet.
         These are either point to point or local connections, which will likely be fastest(?).
         
-        @type peer: Peer 
+        @type address: Address 
         @param endpoints: List of endpoints to use (defaults to self.swift_endpoints)
         @return: List((SwiftEndpoint, peer Address))
         """
@@ -620,15 +617,19 @@ class MultiEndpoint(CommonEndpoint):
             endpoints = self.swift_endpoints
         same_subnet = []
         for e in endpoints:
-            for paddr in peer.addresses:
+            contact = e.get_contact(address)
+            if contact is None:
+                continue
+            for paddr in contact.get_peer_addresses(self.address, self.wan_address):
                 if e.address.same_subnet(paddr.ip):
                     same_subnet.append((e, paddr))
         return same_subnet
     
-    def _get_channels(self, peer=None):
+    def _get_channels(self, contact):
         """
         Retrieve channels from DownloadImpls
         Include the socket and peer address as well
+        @type contact: DispersyContact
         @rtype List((Dict, Address, Address))
         """
         channels = []
@@ -637,65 +638,66 @@ class MultiEndpoint(CommonEndpoint):
                 for c in d.midict.get("channels", []):
                     saddr = Address.unknown(c["socket_ip"].encode("ascii", "ignore") + ":" + str(c["socket_port"]))
                     paddr = Address.unknown(c["ip"].encode("ascii", "ignore") + ":" + str(c["port"]))
-                    if peer is None or paddr in peer.addresses:
+                    if contact.has_address(paddr):
                         channels.append((c, saddr, paddr))
         return channels
     
-    def _get_channel_speeds(self, peer=None):
+    def _get_channel_speeds(self, contact):
         """
         Returns the list of (sock_addr, peer_addr, upspeed, downspeed), where speeds are in bytes/s
-        
+        @type contact: DispersyContact
         @rtype: List((Address, Address, float, float))
         """
         r = []
-        for c, saddr, paddr in self._get_channels(peer):
+        for c, saddr, paddr in self._get_channels(contact):
             r.append((saddr, paddr, c.get("cur_speed_up", 0.0), c.get("cur_speed_down", 0.0)))
         return r
     
-    def _maximum_speed_endpoints(self, peer, endpoints=[]):
+    def _maximum_speed_endpoints(self, contact, endpoints=[]):
         """
         Determine which endpoints have a channel with this peer (or if None, all channels of this socket), 
         and sort them by combined up/download speed, returning only those with positive speeds
         
-        @type peer: Peer
+        @type contact: DispersyContact
         @param endpoints: List of endpoints to use (defaults to self.swift_endpoints)
         @rtype: List((SwiftEndpoint, Address, float))
         """
         if not endpoints: # []
             endpoints = self.swift_endpoints
-        speeds = self._get_channel_speeds(peer)
+        speeds = self._get_channel_speeds(contact)
         r = []
         for e in endpoints:
             for saddr, paddr, up, down in speeds:
-                if e.address == saddr and paddr in peer.addresses and up + down > 0:
+                if e.address == saddr and up + down > 0:
                     r.append((e, paddr, up + down))
         return sorted(r, key=lambda x: x[2], reverse=True) # Largest speed first
     
-    def _minimum_send_queue_endpoints(self, peer, endpoints=[]):
+    def _minimum_send_queue_endpoints(self, contact, endpoints=[]):
         """
         Determine the size of the send queue for each endpoint with a connection with peer
         and return the list of these sorted from low to high.
+        @type contact: DispersyContact
         @rtype: List((SwiftEndpoint, int))
         """
         if not endpoints: # []
             endpoints = self.swift_endpoints
-        channels = self._get_channels(peer)
+        channels = self._get_channels(contact)
         r = [(e, c["send_queue"]) for e in endpoints for c, saddr, _ in channels if e.address == saddr]
         return sorted(r, key=lambda x: x[1]) # Lowest sendqueue first
     
-    def _sort_endpoints_by_estimated_response_time(self, peer, packet_size, endpoints=[]):
+    def _sort_endpoints_by_estimated_response_time(self, contact, packet_size, endpoints=[]):
         """
         The endpoints will be sorted by: 
         estimated send time = send_queue / upload_speed (socket total) + packet_size / upload_speed(channel) 
         or if channel upspeed is 0                                     + round trip time / 2
         Only nonzero total upspeeds will be added to the list.
-        @type peer: Peer
+        @type contact: DispersyContact
         @param packet_size = Total amount of bytes that need to be sent
         @rtype: List((SwiftEndpoint, Address, float))
         """
         if not endpoints:
             endpoints = self.swift_endpoints
-        channels = self._get_channels(peer)
+        channels = self._get_channels(contact)
         upspeeds ={}
         for c, saddr, _ in channels:
             upspeeds[saddr] = upspeeds.get(saddr, 0) + c["cur_speed_up"]
@@ -736,9 +738,9 @@ class MultiEndpoint(CommonEndpoint):
                 if dc.address == addr:
                     contact = dc
                     break
-            # TODO: Check for interfaces that have send messages, but not received anything.. (Network migh be unreachable)
+            # TODO: Check for interfaces that have send messages, but not received anything.. (Network might be unreachable)
             # Choose the endpoint that currently has the highest transfer speed with this peer
-            for e, paddr, ert in self._sort_endpoints_by_estimated_response_time(contact.peer, total_size):
+            for e, paddr, ert in self._sort_endpoints_by_estimated_response_time(contact, total_size):
                 if e is not None and e.is_alive and e.socket_running:
                     logger.debug("%d bytes will be sent %s to %s with estimated response time of %f ms", total_size, 
                                  e, paddr, ert * 1000)
@@ -750,7 +752,7 @@ class MultiEndpoint(CommonEndpoint):
                                  last_contact.strftime("%H:%M:%S"))
                     return (e, paddr.addr())
             # In case no contact has been made with this peer (or those endpoint are not available)
-            for e, paddr in self._subnet_endpoints(contact.peer):
+            for e, paddr in self._subnet_endpoints(contact.address):
                 if e is not None and e.is_alive and e.socket_running:
                     logger.debug("%d bytes will be sent with %s in the same subnet as %s", total_size, e, paddr)
                     return (e, paddr.addr())          
@@ -820,7 +822,7 @@ class MultiEndpoint(CommonEndpoint):
         # In case an endpoint has not done any sending or receiving (Tunnelled or not), ensure the socket is still working
         for e in self.swift_endpoints:
             for dc in e.dispersy_contacts:
-                addrs = set(dc.no_contact_since(expiration_time=ENDPOINT_CONTACT_TIMEOUT)).difference(set([c[1] for c in self._get_channels(dc.peer)]))
+                addrs = set(dc.no_contact_since(expiration_time=ENDPOINT_CONTACT_TIMEOUT)).difference(set([c[1] for c in self._get_channels(dc)]))
                 if len(addrs) > 0:
                     [logger.info("%s has %s received and %s sent from/to %s in communities %s", str(e.address), dc.last_rcvd(a), 
                                  dc.last_sent(a), str(a), dc.community_ids) for a in addrs]

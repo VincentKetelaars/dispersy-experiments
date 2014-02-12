@@ -18,40 +18,50 @@ class Peer(object):
     
     def __init__(self, lan_addresses, wan_addresses=[], ids=[]):
         if len(lan_addresses) == len(ids): # This should ensure that wan_addresses is also equal
-            self._lan_addresses = dict(zip(ids, lan_addresses))
-            self._wan_addresses = dict(zip(ids, wan_addresses))
+            self._addresses = dict(zip(ids, zip(lan_addresses, wan_addresses)))
         else: # Assume no wan_addresses and no ids
             # Fake IDs shouldn't be a problem, because we are not going to look for fake ids either
             # Understand that the fake ids are ints, whereas the real ones are raw bytes
-            self._lan_addresses = dict(zip(self._random_keys(len(lan_addresses)), lan_addresses))
-            self._wan_addresses = self._lan_addresses
+            self._addresses = dict(zip(self._random_keys(len(lan_addresses)), zip(lan_addresses, lan_addresses)))
             
     def _random_keys(self, length):
         return [randint(0, 1000000) for _ in range(length)]
             
     @property
     def addresses(self):
-        return self._wan_addresses.values()
+        return [w for _, w in self._addresses.values()] # wan
+    
+    @property
+    def lan_addresses(self):
+        return [l for l, _ in self._addresses.values()]
+    
+    @property
+    def wan_addresses(self):
+        return [w for _, w in self._addresses.values()]
     
     def get(self, id_):
-        return (self._lan_addresses.get(id_, None), self._wan_addresses.get(id_, None))
-    
+        return self._addresses.get(id_, None)
+
     def get_id(self, address):
-        for i, a in self._lan_addresses.iteritems():
-            if a == address:
-                return i
-        for i, a in self._wan_addresses.iteritems():
-            if a == address:
+        for i, a in self._addresses.iteritems():
+            if a[0] == address or a[1] == address: # lan or wan
                 return i
         return None
     
     def matches(self, peer):
         assert isinstance(peer, Peer)
-        return self.has_any(peer._lan_addresses.values(), peer._lan_addresses.keys())
+        return self.has_any([l for l, _ in peer._addresses.values()], peer._addresses.keys())
             
     def merge(self, peer):
-        self._lan_addresses.update(peer._lan_addresses)
-        self._wan_addresses.update(peer._wan_addresses)
+        self._addresses.update(peer._addresses)
+        
+    def update_wan(self, lan, wan):
+        i = None
+        for i, a in self._addresses.iteritems():
+            if a[0] == lan:
+                break
+        if i is not None:
+            self._addresses[i] = wan
 
     def __eq__(self, other):
         if not isinstance(other, Peer):
@@ -70,11 +80,8 @@ class Peer(object):
         Return whether any of these addresses is the same as any of this _peers'
         @param addrs: List(Address)
         """
-        for i, a in self._lan_addresses.iteritems():
-            if i in ids or a in addrs:
-                return True
-        for i, a, in self._wan_addresses.iteritems():
-            if i in ids or a in addrs:
+        for i, a in self._addresses.iteritems():
+            if i in ids or a[0] in addrs or a[1] in addrs:
                 return True
         return False
 
