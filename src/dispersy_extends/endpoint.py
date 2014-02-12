@@ -819,7 +819,7 @@ class MultiEndpoint(CommonEndpoint):
             for dc in e.dispersy_contacts:
                 # Find the confirmed addresses that have not been confirmed for this endpoint
                 addrs = set([a for a in dc.reachable_addresses if dc.last_rcvd(a) == datetime.min]).intersection(confirmed_addrs)
-                unreachable = set([a for a in addrs if dc.count_sent.get(a, 0) > 10])
+                unreachable = set([a for a in addrs if dc.count_sent.get(a, 0) >= 10])
                 for a in unreachable:
                     logger.debug("%s is unreachable for %s", str(a), str(e))
                     dc.add_unreachable_address(a) # Set address unreachable after 10 puncture message tries
@@ -869,6 +869,7 @@ class MultiEndpoint(CommonEndpoint):
         sockets = [(e.id, e.address) for e in self.swift_endpoints]
         # TODO: Note that it is kind of superfluous to send when we have only one socket
         # TODO: Note also that we should consider only using active sockets
+        # TODO: Send lan and wan address
         meta_puncture = community.get_meta_message(ADDRESSES_MESSAGE_NAME)
         message = meta_puncture.impl(authentication=(community.my_member,), distribution=(community.claim_global_time(),), 
                                      destination=tuple(candidates), payload=(sockets,))
