@@ -7,11 +7,14 @@ Created on Sep 3, 2013
 import os
 import binascii
 import pickle
+from datetime import datetime, timedelta
 
 from src.logger import get_logger
 from src.swift.tribler.DownloadConfig import DownloadStartupConfig, DownloadConfigInterface
 from src.swift.tribler.SwiftDownloadImpl import SwiftDownloadImpl
-from src.swift.tribler.simpledefs import DLSTATUS_STOPPED, DLSTATUS_SEEDING
+from src.swift.tribler.simpledefs import DLSTATUS_STOPPED, DLSTATUS_SEEDING,\
+    DLSTATUS_DOWNLOADING, DLSTATUS_WAITING4HASHCHECK
+from src.definitions import MAX_SWARM_LIFE_WITHOUT_LEECHERS
 
 logger = get_logger(__name__)
 
@@ -110,6 +113,12 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         self._channel_closed_callback = None
         SwiftDownloadImpl.__init__(self, session, sdef)
         self.sp = sp
+        self._last_leecher_time = datetime.utcnow()
+        self._bad_swarm = False
+        
+    @property
+    def bad_swarm(self):
+        return self._bad_swarm
         
     def set_def(self, sdef):
         self.sdef = sdef
@@ -139,6 +148,7 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         
     def i2ithread_info_callback(self, dlstatus, progress, dynasize, dlspeed, ulspeed, numleech, numseeds, contentdl, contentul):
         SwiftDownloadImpl.i2ithread_info_callback(self, dlstatus, progress, dynasize, dlspeed, ulspeed, numleech, numseeds, contentdl, contentul)
+        self._update_leeching(numleech)
         if dlstatus == DLSTATUS_SEEDING and self._download_ready_callback is not None:
             self._download_ready_callback(self.get_def().get_roothash())
     
@@ -154,6 +164,15 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         # If this is used, most likely self.sp will be None. 
         # self.sp.start_download(self)
         
+    def set_bad_swarm(self):
+        self._bad_swarm = True
+        if self._bad_swarm_callback is not None:
+            self._bad_swarm_callback(self.get_def().get_roothash_as_hex())
+        
+    def _update_leeching(self, numleech):
+        if numleech > 0:
+            self._last_leecher_time = datetime.utcnow()
+        
     def speed(self, direction):
         try:
             return self.get_current_speed(direction)
@@ -168,12 +187,21 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
             logger.debug("Could not fetch total %s %s", direction, raw)
             return 0
         
+    def initialized(self):
+        return self.get_status() == DLSTATUS_WAITING4HASHCHECK
+        
+    def downloading(self):
+        return self.get_status() == DLSTATUS_DOWNLOADING
+        
     def seeding(self):
-        return self.dlstatus == DLSTATUS_SEEDING
+        return self.get_status() == DLSTATUS_SEEDING
     
     def dropped_packets_rate(self):
         # TODO: Implement this!!!
         return 0.0
+    
+    def is_usefull(self):
+        return self._last_leecher_time + timedelta(seconds=MAX_SWARM_LIFE_WITHOUT_LEECHERS) > datetime.utcnow()
         
     def network_create_spew_from_channels(self):
         if not 'channels' in self.midict:

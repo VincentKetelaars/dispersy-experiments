@@ -136,7 +136,7 @@ class MySwiftProcess(SwiftProcess):
                                       stderr=subprocess.PIPE, preexec_fn=preexec_swift)
         
         # This event must be set when is verified that swift is running and the cmdgw is up
-        self._swift_running = Event()
+        self._last_moreinfo = Event()
 
         def read_and_print(socket):
             prefix = currentThread().getName() + ":"
@@ -159,7 +159,7 @@ class MySwiftProcess(SwiftProcess):
         line.strip()
         listenstr = "swift::Listen addr" 
         if line.find("Creating new TCP listener") != -1:
-            self._swift_running.set()
+            self._last_moreinfo.set()
         elif line.find(listenstr) != -1:
             addrstr = line[len(listenstr):]
             saddr = Address.unknown(addrstr)
@@ -173,8 +173,8 @@ class MySwiftProcess(SwiftProcess):
         # Wait till Libswift is actually ready to create a TCP connection
         # TODO: Set timeout so that endpoint can make a new attempt at starting Swift
         def wait_to_start():
-            while not self._swift_running.is_set():
-                self._swift_running.wait()
+            while not self._last_moreinfo.is_set():
+                self._last_moreinfo.wait()
             try:
                 SwiftProcess.start_cmd_connection(self)
             except TCPConnectionFailedException: # If Swift fails to connect within 60 seconds
@@ -202,7 +202,7 @@ class MySwiftProcess(SwiftProcess):
             callback(s, 0)
     
     def i2ithread_readlinecallback(self, ic, cmd):
-#         logger.debug("CMD IN: %s", cmd)
+        logger.debug("CMD IN: %s", cmd)
         if self.donestate != DONE_STATE_WORKING:
             return
 
@@ -257,10 +257,7 @@ class MySwiftProcess(SwiftProcess):
                     logger.debug("This is a bad swarm %s", words[1])
                     d = self.roothash2dl.get(roothash, None)
                     if d is not None:
-                        try:
-                            d._bad_swarm_callback(roothash) # TODO: Callback should be directly, not via downloadimpl
-                        except AttributeError:
-                            pass
+                        d.set_bad_swarm()
                 else:                    
                     error_code = -1
                     if error == "unknown command":
@@ -344,7 +341,7 @@ class MySwiftProcess(SwiftProcess):
             
     def is_running(self):
         return (self.fastconn is not None and self.donestate != DONE_STATE_SHUTDOWN
-                and self._swift_running.is_set() and self.is_alive())
+                and self._last_moreinfo.is_set() and self.is_alive())
 
     def is_ready(self):
         # TODO: Make sure that fastconn is not busy writing

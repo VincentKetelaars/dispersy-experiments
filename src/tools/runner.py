@@ -20,24 +20,27 @@ class CallFunctionThread(Thread):
         Thread.__init__(self, name="CallFunctionThread_" + name)
         self.timeout = timeout
         self._run_event = Event() # Set when it is time to stop
-        self.queue = Queue.Queue()        
+        self.queue = Queue.PriorityQueue()        
         self.setDaemon(daemon)
         self.count = 0 # Number of Empty exceptions in a row
         self._task_available = Event() # Set if tasks are available
         self._done_event = Event() # Set when run is done
         self._wait_for_tasks = True # Allow new tasks and looping
+        self._pause_event = Event()
+        self._pause_event.set() # Default is not pausing
   
     def run(self):
         while not self._run_event.is_set() or (self._wait_for_tasks and not self.empty()):
             if self._task_available.is_set():
                 try:
-                    f, a, d = self.queue.get()
+                    self._pause_event.wait()
+                    _, (f, a, d) = self.queue.get()
                     f(*a, **d)
                     self.queue.task_done()                
                 except Queue.Empty:
                     self._task_available.clear()
                 except Exception:
-                    logger.exception("Failed to run %s with %s %s", f, a, d)
+                    logger.exception("")
             else:
                 self._task_available.wait(self.timeout)
         self._done_event.set()
@@ -45,9 +48,15 @@ class CallFunctionThread(Thread):
     def put(self, func, *args, **kargs):
         if not self._wait_for_tasks:
             return False
-        self.queue.put((func, args, kargs))
+        self.queue.put((kargs.pop("queue_priority", None), (func, args, kargs)))
         self._task_available.set()
         return True
+    
+    def pause(self):
+        self._pause_event.clear()
+        
+    def unpause(self):
+        self._pause_event.set()
         
     def empty(self):
         return self.queue.empty()

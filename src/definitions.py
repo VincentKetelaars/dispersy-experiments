@@ -26,6 +26,7 @@ MESSAGE_KEY_SWIFT_PID = 12
 MESSAGE_KEY_SWIFT_INFO = 13
 MESSAGE_KEY_DISPERSY_INFO = 14
 MESSAGE_KEY_BAD_SWARM = 15
+MESSAGE_KEY_UPLOAD_STACK = 16
 
 """
 STATE
@@ -122,9 +123,14 @@ MOREINFO = True # Don't change this to False because it might affect things
 DELETE_CONTENT = False # If True it will be deleted immediately when finished, after callback
 PEXON = False # If True Swift might disseminate data to unauthorized peers
 MAX_CONCURRENT_DOWNLOADING_SWARMS = 5
+MAX_CONCURRENT_SEEDING_SWARMS = 10
 ALMOST_DONE_DOWNLOADING_TIME = 5.0 # Seconds
 BUFFER_DRAIN_TIME = 2.0 # Seconds
 MAX_SOCKET_INITIALIZATION_TIME = 0.9 # Seconds
+MAX_SWARM_LIFE_WITHOUT_LEECHERS = 30.0 # Seconds
+DOWNLOAD_MOREINFO_UPDATE = 1.0 # Seconds
+UPLOAD_STACK_PAUSE = 10
+UPLOAD_STACK_UNPAUSE = 5
 
 # Error codes
 SWIFT_ERROR_TCP_FAILED = 0

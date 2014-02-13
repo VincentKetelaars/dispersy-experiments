@@ -75,7 +75,10 @@ class DispersyInstance(object):
                 self._gateways[a[0]] = a[1]
         self._mtu = mtu
         
-        self._filepusher = None # In case of premature stops it should be initialized
+        self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, 
+                                      directory=self._files_directory, files=self._files, 
+                                      file_size=self._mtu - DISPERSY_MESSAGE_MINIMUM,
+                                      min_timestamp=self._file_timestamp_min)
         
         self._loop_event = Event() # Loop
         
@@ -119,12 +122,7 @@ class DispersyInstance(object):
         
         for a in addrs:
             self.send_introduction_request(a.addr())
-            
-        # Start Filepusher regardless of availability of directory or files
-        self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, 
-                                      directory=self._files_directory, files=self._files, 
-                                      file_size=self._mtu - DISPERSY_MESSAGE_MINIMUM,
-                                      min_timestamp=self._file_timestamp_min)
+        
         self._filepusher.start()
         
         self.state = STATE_RUNNING

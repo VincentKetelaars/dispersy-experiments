@@ -1,7 +1,7 @@
-python -O -m src.api -d /home/vincent/Desktop/test_large -D /home/vincent/Desktop/tests_dest -t 5 \
--l 127.0.0.1:12346 -p 127.0.0.1:12345 &> ~/Desktop/logs1 &
-# python -O -m src.api -d /home/vincent/Desktop/tests -D /home/vincent/Desktop/tests_dest_2 -t 5 \
-# -l 127.0.0.1:12345 -p 127.0.0.1:12346 &> ~/Desktop/logs2 &
+python -O -m src.api -d /home/vincent/Desktop/test_large -D /home/vincent/Desktop/tests_dest -t 60 \
+-l 193.156.108.78:12344 193.156.108.78:12345 -p 193.156.108.78:12346 -b 5 &> ~/Desktop/logs1 &
+python -O -m src.api -d /home/vincent/Desktop/tests -D /home/vincent/Desktop/tests_dest_2 -t 60 \
+-l 193.156.108.78:12346 193.156.108.78:12347 -b 5  &> ~/Desktop/logs2 &
 
 #sleep 10
 

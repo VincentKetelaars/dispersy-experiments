@@ -60,22 +60,19 @@ class SwiftCommunity(object):
             d.set_dest_dir(filename)
 
             self.add_to_downloads(roothash, filename, d, size, timestamp, seed=True, destination=destination) # Sharing so setting seed to True
-            self._swift_start(d)
+            self.endpoint.put_swift_upload_stack(self._swift_start, size, timestamp, priority=0, args=(d,))
             
             self.add_new_swift_peers()
             
     def add_peer(self, roothash, addr, sock_addr=None):
-        logger.debug("Add peer %s with roothash %s to %s", addr, binascii.hexlify(roothash), sock_addr)
-        if self.endpoint.is_bootstrap_candidate(addr=addr):
-            logger.debug("Add bootstrap candidate rejected")
-            return
         d = self.downloads[roothash].downloadimpl
         self.downloads[roothash].add_address(addr)
         # Only add this peer if it is one of the addresses allowed by the download
         if self.downloads[roothash].known_address(addr) and not self.downloads[roothash].is_bad_swarm():
+            logger.debug("Add peer %s with roothash %s to %s", addr, binascii.hexlify(roothash), sock_addr)
             self.endpoint.swift_add_peer(d, addr, sock_addr)
             
-    def clean_up_files(self, download):
+    def clean_up_download(self, download):
         """
         Remove download from swift if it is not seeding. This method is only used once per download.
         Do checkpoint if not removing content or state. Notification via general callback.
@@ -88,14 +85,13 @@ class SwiftCommunity(object):
             return
         rm_state = not download.seeder()
         rm_download = DELETE_CONTENT
-        logger.debug("Clean up files, %s, %s, %s", download.roothash_as_hex(), rm_state, rm_download)        
+        logger.debug("Clean up download, %s, %s, %s", download.roothash_as_hex(), rm_state, rm_download)        
         if not rm_state and not rm_download: # No point in doing checkpoint if not both false
             self.endpoint.swift_checkpoint(download.downloadimpl)
         # Do callback before removing, in case DELETE_CONTENT is True and someone wants to use it first
         self.do_callback(MESSAGE_KEY_RECEIVE_FILE, download.filename)
         if not download.seeder(): # If we close the download we cannot seed
             self.endpoint.swift_remove_download(download.downloadimpl, rm_state, rm_download)
-        download.removed_from_swift() # Note that the swift calls might be queued
                 
     def do_callback(self, key, *args, **kwargs):
         if self._api_callback is not None:
@@ -124,7 +120,7 @@ class SwiftCommunity(object):
             self.add_to_downloads(roothash, d.get_dest_dir(), d, size, timestamp, addresses=addresses, 
                                   seed=seed, download=True, destination=destination)
                 
-            self.endpoint.put_swift_file_stack(self._swift_start, size, timestamp, priority=0, args=(d,))
+            self.endpoint.put_swift_download_stack(self._swift_start, size, timestamp, priority=0, args=(d,))
             
             # TODO: Make sure that this peer is not added since the peer has already added us!                
             self.add_new_swift_peers() # Notify our other peers that we have something new available!
@@ -158,7 +154,6 @@ class SwiftCommunity(object):
         """
         logger.debug("Peer's addresses arrived %s with their respective ids %s", addresses, ids)
         for download in self.downloads.itervalues():
-            # TODO: Protect against unreachable local addresses
             download.merge_peers(Peer(addresses, ids=ids))
             self._add_to_peers(addresses, ids)
             
@@ -193,7 +188,7 @@ class SwiftCommunity(object):
         download = self.downloads[roothash]
         if download.set_finished() and download.is_download() and not MOREINFO: # More info is not used so call clean up yourself
             logger.debug("Download is ready %s", binascii.hexlify(roothash))
-            self.clean_up_files(download)
+            self.clean_up_download(download)
                 
     def moreinfo_callback(self, roothash):
         """
@@ -206,13 +201,12 @@ class SwiftCommunity(object):
         download.got_moreinfo()
         self.do_callback(MESSAGE_KEY_SWIFT_INFO, {"direct" : download.package()}) # If more info is not set for the download this is never called
         if download.is_finished() and download.is_download():
-            self.clean_up_files(download)
+            self.clean_up_download(download)
             
     def bad_swarm_callback(self, roothash):
         logger.debug("We have a bad swarm %s", roothash)
         download = self.downloads.get(roothash, None)
         if download is not None:
-            download.set_bad_swarm(True)
             self.do_callback(MESSAGE_KEY_BAD_SWARM, download.filename)
         else:
             logger.warning("We don't know this swarm %s", binascii.hexlify(roothash))
@@ -223,7 +217,7 @@ class SwiftCommunity(object):
         if download is not None:
             download.channel_closed(socket_addr, peer_addr)
             if not download.active():
-                self.clean_up_files(download)
+                self.clean_up_download(download)
         else:
             logger.debug("Unknown swarm %s", binascii.hexlify(roothash))
 
@@ -255,9 +249,9 @@ class SwiftCommunity(object):
         @param q: Queue
         """
         for h, d in self.downloads.iteritems():
-            if not d.is_bad_swarm() and (not d.is_finished() or d.seeder()): # No sense in adding a download that is finished, and not seeding
+            if not d.is_bad_swarm() and d.is_usefull() and (not d.is_finished() or d.seeder()): # No sense in adding a download that is finished, and not seeding
                 logger.debug("Enqueue start download %s", h)
-                q.put((self.endpoint.put_swift_file_stack, (self._swift_start, d.size, d.timestamp), 
+                q.put((self.endpoint.put_swift_download_stack, (self._swift_start, d.size, d.timestamp), 
                        {"priority" : d.priority, "args" : (d.downloadimpl,)}))
                 for peer in self.downloads[h].peers():
                     for addr in peer.addresses:
@@ -285,7 +279,7 @@ class SwiftCommunity(object):
         """
         logger.debug("Add new peers to Swift!")
         for roothash in self.downloads.keys():
-            if self.downloads[roothash].seeder():
+            if self.downloads[roothash].seeder(): # TODO: Only seeders?
                 for addr in self.downloads[roothash].inactive_addresses():
                     self.add_peer(roothash, addr, sock_addr)
                         
@@ -300,7 +294,6 @@ class SwiftCommunity(object):
             if download.is_download():
                 self.endpoint.swift_checkpoint(download.downloadimpl)
             self.endpoint.swift_remove_download(download.downloadimpl, False, False)
-            download.removed_from_swift()
             
     def continue_download(self, download):
         if download is not None and not download.is_bad_swarm():
@@ -310,7 +303,6 @@ class SwiftCommunity(object):
     def stop_download(self, download):
         if download is not None and download.running_on_swift():
             self.endpoint.swift_remove_download(download.downloadimpl, True, False)
-            download.removed_from_swift()
                         
     def _loop(self):
         while not self._thread_stop_event.is_set():

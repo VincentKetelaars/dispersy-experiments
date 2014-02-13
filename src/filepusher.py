@@ -53,6 +53,7 @@ class FilePusher(Thread):
         
         self._stop_event = Event()
         self._thread_func = CallFunctionThread(timeout=1.0, name="Filepusher")
+        self._paused = False
         
     def set_directory(self, directory):
         if directory and exists(directory) and isdir(directory):
@@ -85,7 +86,9 @@ class FilePusher(Thread):
                     dirs = None
                     if loc != -1:
                         dirs = absfilename[len(self._dir) + 1:-len(basename(absfilename))]
-                    self._thread_func.put(self.send_file_hash_message, absfilename, dirs=dirs)
+                    # TODO: Put a limit to this (If it is not being sent), because it costs considerable resources
+                    self._thread_func.put(self.send_file_hash_message, absfilename, dirs=dirs, 
+                                          queue_priority=getmtime(absfilename))
                 else:
                     with file(absfilename) as f:
                         s = f.read()
@@ -100,6 +103,22 @@ class FilePusher(Thread):
         logger.debug("Determined roothash %s, for %s, with dirs %s of size %d at time %f", 
                      roothash, absfilename, dirs, size, modified)
         self._callback(message=FileHashCarrier(absfilename, dirs, roothash, size, modified, None))
+        
+    def pause(self):
+        if not self._paused:
+            self._thread_func.pause()
+            self._paused = True
+            logger.info("Paused")
+        
+    def unpause(self):
+        if self._paused:
+            self._thread_func.unpause()
+            self._paused = False
+            logger.info("Unpaused")
+    
+    @property        
+    def paused(self):
+        return self._paused
             
     def stop(self):
         """
@@ -141,9 +160,9 @@ class FilePusher(Thread):
         file_updates = [ (f, getmtime(f)) for f in all_files] # create tuple of file and last modified timestamp
 
         # Each file in the directory should be send at least once
-        # If renewed they should be sent again  
+        # If renewed they should be sent again
         diff = [_ft[0] for _ft in file_updates if _ft not in self._recent_files]
-                    
+        
         self._recent_files = file_updates
         return diff
     

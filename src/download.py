@@ -5,12 +5,13 @@ Created on Sep 10, 2013
 '''
 import binascii
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from random import randint
 
 from src.address import Address
 from src.logger import get_logger
 from dispersy.destination import CommunityDestination, CandidateDestination
+from src.definitions import DOWNLOAD_MOREINFO_UPDATE
 
 logger = get_logger(__name__)
     
@@ -19,17 +20,19 @@ class Peer(object):
     def __init__(self, lan_addresses, wan_addresses=[], ids=[]):
         if len(lan_addresses) == len(ids): # This should ensure that wan_addresses is also equal
             self._addresses = dict(zip(ids, zip(lan_addresses, wan_addresses)))
+            self._fake_keys = False
         else: # Assume no wan_addresses and no ids
             # Fake IDs shouldn't be a problem, because we are not going to look for fake ids either
             # Understand that the fake ids are ints, whereas the real ones are raw bytes
             self._addresses = dict(zip(self._random_keys(len(lan_addresses)), zip(lan_addresses, lan_addresses)))
+            self._fake_keys = True
             
     def _random_keys(self, length):
         return [randint(0, 1000000) for _ in range(length)]
             
     @property
     def addresses(self):
-        return [w for _, w in self._addresses.values()] # wan
+        return set(self.lan_addresses + self.wan_addresses)
     
     @property
     def lan_addresses(self):
@@ -53,7 +56,12 @@ class Peer(object):
         return self.has_any([l for l, _ in peer._addresses.values()], peer._addresses.keys())
             
     def merge(self, peer):
-        self._addresses.update(peer._addresses)
+        if self._fake_keys:
+            for i, a in peer._addresses.iteritems():
+                if a[0] not in self.lan_addresses:
+                    self._addresses[i] = a
+        else: # Actual endpoint ids as keys
+            self._addresses.update(peer._addresses)
         
     def update_wan(self, lan, wan):
         i = None
@@ -61,7 +69,7 @@ class Peer(object):
             if a[0] == lan:
                 break
         if i is not None:
-            self._addresses[i] = wan
+            self._addresses[i] = (lan, wan)
 
     def __eq__(self, other):
         if not isinstance(other, Peer):
@@ -113,8 +121,7 @@ class Download(object):
         self._finished_time = datetime.max
             
         self._destination = destination
-        self._swift_running = False
-        self._bad_swarm = False
+        self._last_moreinfo = datetime.min
         self._active_channels = set()
         
     @property
@@ -167,22 +174,20 @@ class Download(object):
     def is_download(self):
         return self._download
     
+    def is_usefull(self):
+        return self.downloadimpl.is_usefull()
+    
     def seeder(self):
         return self._seed
     
     def path(self):
         return os.path.join(self._directories, self._filename)
     
-    def set_bad_swarm(self, bad):
-        self._bad_swarm = bad
-        self._swift_running = False # Should not be necessary, because no moreinfo will get through
-    
     def is_bad_swarm(self):
-        return self._bad_swarm
+        return self.downloadimpl.bad_swarm
     
     def got_moreinfo(self):
-        if self.set_started():
-            self._swift_running = True
+        self._last_moreinfo = datetime.utcnow()
         # TODO: Handle paused downloads
         for c in self.downloadimpl.midict.get("channels", []):
             self._active_channels.add((Address(ip=c["socket_ip"], port=int(c["socket_port"])), 
@@ -259,13 +264,10 @@ class Download(object):
         return addr in [a for p in self._peers for a in p.addresses]
     
     def running_on_swift(self):
-        return self._swift_running
-
-    def removed_from_swift(self):
-        self._swift_running = False
+        return self._last_moreinfo + timedelta(seconds=DOWNLOAD_MOREINFO_UPDATE * 2) > datetime.utcnow()
         
     def active(self):
-        return self._swift_running and len(self._active_channels) > 0
+        return self.running_on_swift() and len(self._active_channels) > 0
     
     def active_sockets(self):
         return [c[0] for c in self._active_channels]

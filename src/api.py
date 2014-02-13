@@ -17,7 +17,8 @@ from src.definitions import STATE_NOT, STATE_RUNNING, MESSAGE_KEY_ADD_FILE, MESS
 MESSAGE_KEY_ADD_SOCKET, MESSAGE_KEY_INTERFACE_UP, MESSAGE_KEY_MONITOR_DIRECTORY, MESSAGE_KEY_RECEIVE_FILE, \
 MESSAGE_KEY_API_MESSAGE, MESSAGE_KEY_STATE, MESSAGE_KEY_STOP, STATE_DONE,\
     MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, MESSAGE_KEY_SWIFT_PID,\
-    MESSAGE_KEY_SWIFT_INFO, MESSAGE_KEY_DISPERSY_INFO, MESSAGE_KEY_BAD_SWARM
+    MESSAGE_KEY_SWIFT_INFO, MESSAGE_KEY_DISPERSY_INFO, MESSAGE_KEY_BAD_SWARM,\
+    MESSAGE_KEY_UPLOAD_STACK, UPLOAD_STACK_PAUSE, UPLOAD_STACK_UNPAUSE
 
 from src.tools.runner import CallFunctionThread
 from src.dispersy_extends.payload import APIMessageCarrier
@@ -347,7 +348,8 @@ class ReceiverAPI(PipeHandler):
             return
         self.waiting_queue = Queue.Queue() # Hold on to calls that are made prematurely
         
-        self.dispersy_callbacks_map = {MESSAGE_KEY_STATE : self._state_change}
+        self.dispersy_callbacks_map = {MESSAGE_KEY_STATE : self._state_change,
+                                       MESSAGE_KEY_UPLOAD_STACK : self._upload_stack}
         
         signal.signal(signal.SIGQUIT, self.on_quit)
         signal.signal(signal.SIGINT, self.on_quit)
@@ -483,7 +485,7 @@ class ReceiverAPI(PipeHandler):
     """    
         
     def _generic_callback(self, key, *args, **kwargs):
-#         logger.debug("Callback %s %s %s", key, args, kwargs)
+        logger.debug("Callback %s %s %s", key, args, kwargs)
         try:
             func = self.dispersy_callbacks_map[key]
             func(*args, **kwargs)
@@ -497,6 +499,12 @@ class ReceiverAPI(PipeHandler):
             self._dequeue()
         if state == STATE_DONE:            
             self.close_connection() # Cleaning up pipe
+            
+    def _upload_stack(self, num, size):
+        if num >= UPLOAD_STACK_PAUSE:
+            self.dispersy_instance._filepusher.pause()
+        if num <= UPLOAD_STACK_UNPAUSE:
+            self.dispersy_instance._filepusher.unpause()
         
 if __name__ == "__main__":
     from src.main import main

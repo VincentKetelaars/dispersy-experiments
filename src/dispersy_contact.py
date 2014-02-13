@@ -57,6 +57,9 @@ class DispersyContact(object):
         
     def add_unreachable_address(self, address):
         self._unreachable_addresses.add(address)
+        
+    def reset_unreachable_addresses(self):
+        self._unreachable_addresses = set()
        
     def rcvd(self, num_messages, bytes_rcvd, address=Address()):
         self.count_rcvd[address] = self.count_rcvd.get(address, 0) + num_messages
@@ -127,7 +130,7 @@ class DispersyContact(object):
         Merge statistics of this contact with that of another DispersyContact
         @type contact: DispersyContact
         """
-        assert (contact, DispersyContact)
+        assert isinstance(contact, DispersyContact)
         for k, v in contact.last_send_time.iteritems():
             self.last_send_time[k] = max(self.last_send_time.get(k, datetime.min), v)
         for k, v in contact.last_recv_time.iteritems():
