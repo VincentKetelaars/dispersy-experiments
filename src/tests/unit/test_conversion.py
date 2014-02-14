@@ -11,9 +11,10 @@ from dispersy.candidate import Candidate
 from src.tests.unit.definitions import SMALL_TASK_TIMEOUT, DEST_DIR
 from src.dispersy_instance import DispersyInstance
 from src.definitions import SWIFT_BINPATH, FILE_HASH_MESSAGE_NAME, SMALL_FILE_MESSAGE_NAME,\
-    ADDRESSES_MESSAGE_NAME, API_MESSAGE_NAME, PUNCTURE_MESSAGE_NAME
+    ADDRESSES_MESSAGE_NAME, API_MESSAGE_NAME, PUNCTURE_MESSAGE_NAME,\
+    ADDRESSES_REQUEST_MESSAGE_NAME
 from src.dispersy_extends.conversion import FileHashConversion, SmallFileConversion, AddressesConversion,\
-    APIMessageConversion, PunctureConversion
+    APIMessageConversion, PunctureConversion, AddressesRequestConversion
 from src.address import Address
 import os
 
@@ -80,6 +81,24 @@ class TestConversion(unittest.TestCase):
                 placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
                 _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
                 self.assertEqual(x.id_addresses, id_addresses)
+                
+    def test_addresses_request_message_conversion(self):
+        for c in self._conversions:
+            if isinstance(c, AddressesRequestConversion):
+                meta = self._di._community.get_meta_message(ADDRESSES_REQUEST_MESSAGE_NAME)
+                sender_lan = Address.ipv4("0.0.0.1:1232")
+                sender_wan = Address.ipv4("23.12.32.123:1232")
+                endpoint_id = os.urandom(16)
+                message = meta.impl(authentication=(self._di._community.my_member,),
+                                      distribution=(self._di._community.claim_global_time(),),
+                                      destination=(Candidate(sender_lan.addr(), True),), 
+                                      payload=(sender_lan, sender_wan, endpoint_id))
+                encoded = c.encode_payload(message)
+                placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
+                _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
+                self.assertEqual(x.sender_lan, sender_lan)
+                self.assertEqual(x.sender_wan, sender_wan)
+                self.assertEqual(x.endpoint_id, endpoint_id)
                 
     def test_puncture_message_conversion(self):
         for c in self._conversions:

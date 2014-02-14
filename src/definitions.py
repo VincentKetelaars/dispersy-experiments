@@ -94,6 +94,7 @@ ENDPOINT_ID_LENGTH = 16 # Number of bytes
 SMALL_FILE_MESSAGE_NAME = u"small_file_message"
 FILE_HASH_MESSAGE_NAME = u"file_hash_message"
 ADDRESSES_MESSAGE_NAME = u"addresses_message"
+ADDRESSES_REQUEST_MESSAGE_NAME = u"addresses_request_message"
 PUNCTURE_MESSAGE_NAME = u"puncture_message"
 API_MESSAGE_NAME = u"api_message"
 
@@ -104,6 +105,7 @@ MAX_FILE_SIZE = MAX_MTU - DISPERSY_MESSAGE_MINIMUM
 ENDPOINT_SOCKET_TIMEOUT = 180.0 # Seconds
 ENDPOINT_CONTACT_TIMEOUT = 25.0 # Seconds
 ENDPOINT_CHECK = 5 # int seconds
+MIN_TIME_BETWEEN_PUNCTURE_REQUESTS = 4.0 # Seconds
 
 # Filepusher
 FILETYPES_NOT_TO_SEND = [".mhash",".mbinmap"]

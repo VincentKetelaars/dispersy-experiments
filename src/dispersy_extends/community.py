@@ -18,13 +18,15 @@ from dispersy.destination import CommunityDestination, CandidateDestination
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.timeout import IntroductionRequestTimeout
 from src.dispersy_extends.conversion import SmallFileConversion, FileHashConversion,\
-    AddressesConversion, APIMessageConversion, PunctureConversion
+    AddressesConversion, APIMessageConversion, PunctureConversion,\
+    AddressesRequestConversion
 from src.dispersy_extends.payload import SmallFilePayload, FileHashPayload, AddressesPayload,\
-    APIMessagePayload, PuncturePayload
+    APIMessagePayload, PuncturePayload, AddressesRequestPayload
 
 from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, \
     FILE_HASH_MESSAGE_NAME, SMALL_FILE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME,\
-    MESSAGE_KEY_API_MESSAGE, API_MESSAGE_NAME, PUNCTURE_MESSAGE_NAME
+    MESSAGE_KEY_API_MESSAGE, API_MESSAGE_NAME, PUNCTURE_MESSAGE_NAME,\
+    ADDRESSES_REQUEST_MESSAGE_NAME
 from src.tools.periodic_task import Looper, PeriodicIntroductionRequest
 from src.swift.swift_community import SwiftCommunity
 from dispersy.candidate import WalkCandidate
@@ -56,7 +58,8 @@ class MyCommunity(Community):
         Overwrite
         """
         return [DefaultConversion(self), SmallFileConversion(self), FileHashConversion(self), 
-                AddressesConversion(self), PunctureConversion(self), APIMessageConversion(self)]
+                AddressesConversion(self), AddressesRequestConversion(self), PunctureConversion(self), 
+                APIMessageConversion(self)]
     
     def initiate_meta_messages(self):
         """
@@ -65,6 +68,7 @@ class MyCommunity(Community):
         self._small_file_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
         self._file_hash_distribution = FullSyncDistribution(DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, True)
         self._addresses_distribution = DirectDistribution()
+        self._addresses_request_distribution = DirectDistribution()
         self._puncture_distribution = DirectDistribution()
         self._api_message_distribution = DirectDistribution()
         return [Message(self, SMALL_FILE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
@@ -76,6 +80,9 @@ class MyCommunity(Community):
                 Message(self, ADDRESSES_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._addresses_distribution, CandidateDestination(), AddressesPayload(), 
                         self.addresses_message_check, self.addresses_message_handle),
+                Message(self, ADDRESSES_REQUEST_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
+                        self._addresses_request_distribution, CandidateDestination(), AddressesRequestPayload(), 
+                        self.addresses_request_message_check, self.addresses_request_message_handle),
                 Message(self, PUNCTURE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._puncture_distribution, CandidateDestination(), PuncturePayload(), 
                         self.puncture_check, self.puncture_handle), # TODO: We don't need MemberAuthentication, right?
@@ -84,16 +91,10 @@ class MyCommunity(Community):
                         self.api_message_check, self.api_message_handle)]
         
     def small_file_message_check(self, messages):
-        """
-        Check Callback
-        """
         for x in messages:
             yield x
     
     def small_file_message_handle(self, messages):
-        """
-        Handle Callback
-        """
         for x in messages:
             self.swift_community.file_received(x.payload.filename, x.payload.data)
             
@@ -109,19 +110,21 @@ class MyCommunity(Community):
                                                        x.payload.addresses, x.destination)
     
     def addresses_message_check(self, messages):
-        """
-        Check Callback
-        """
         for x in messages:
             yield x
     
     def addresses_message_handle(self, messages):
-        """
-        Handle Callback
-        """
         for x in messages:
             self.swift_community.peer_endpoints_received(x.payload.addresses, x.payload.ids)
             self.dispersy.endpoint.peer_endpoints_received(self, x.payload.addresses, x.payload.wan_addresses, x.payload.ids)
+            
+    def addresses_request_message_check(self, messages):
+        for x in messages:
+            yield x
+            
+    def addresses_request_message_handle(self, messages):
+        for x in messages:
+            self.dispersy.endpoint.addresses_requested(self, x.payload.sender_lan, x.payload.sender_wan, x.payload.endpoint_id)
             
     def puncture_check(self, messages):
         for x in messages:
@@ -133,16 +136,10 @@ class MyCommunity(Community):
                                                              x.payload.address_vote, x.payload.endpoint_id)
         
     def api_message_check(self, messages):
-        """
-        Check Callback
-        """
         for x in messages:
             yield x
     
     def api_message_handle(self, messages):
-        """
-        Handle Callback
-        """
         for x in messages:
             if self._api_callback:
                 self._api_callback(MESSAGE_KEY_API_MESSAGE, x.payload.message)

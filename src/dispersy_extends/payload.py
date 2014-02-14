@@ -148,6 +148,33 @@ class AddressesPayload(Payload):
         def id_addresses(self):
             return self._id_addresses
         
+class AddressesRequestCarrier():
+    
+    def __init__(self):
+        pass
+    
+class AddressesRequestPayload(Payload):
+    
+    class Implementation(Payload.Implementation):
+        
+        def __init__(self, meta, sender_lan, sender_wan, endpoint_id):
+            super(Payload.Implementation, self).__init__(meta)
+            self._sender_lan = sender_lan
+            self._sender_wan = sender_wan
+            self._endpoint_id = endpoint_id
+            
+        @property
+        def sender_lan(self):
+            return self._sender_lan
+                    
+        @property
+        def sender_wan(self):
+            return self._sender_wan
+        
+        @property
+        def endpoint_id(self):
+            return self._endpoint_id
+        
 class PunctureCarrier():
     
     def __init__(self):

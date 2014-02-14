@@ -18,7 +18,7 @@ class DispersyContact(object):
     Each incoming and outgoing message to this address is noted.
     '''
 
-    def __init__(self, address, sent_messages=0, sent_bytes=0, rcvd_messages=0, rcvd_bytes=0, peer=None, community_id=None):
+    def __init__(self, address, sent_messages=0, sent_bytes=0, rcvd_messages=0, rcvd_bytes=0, peer=None, community_id=None, addresses_received=False):
         self.address = address # Primary address
         self.last_send_time = {address : datetime.min}
         self.last_recv_time = {address : datetime.min}
@@ -26,13 +26,14 @@ class DispersyContact(object):
         self.count_rcvd = {}
         self.bytes_sent = {}
         self.bytes_rcvd = {}
-        self.community_ids = set([community_id]) if community_id is not None else set()
+        self.community_ids = [community_id] if community_id is not None else []
         self.peer = Peer([address]) if peer is None else peer
         if sent_messages > 0:
             self.sent(sent_messages, sent_bytes, address=address)
         if rcvd_messages > 0:
             self.rcvd(rcvd_messages, rcvd_bytes, address=address)
         self._unreachable_addresses = set()
+        self._addresses_received = datetime.utcnow() if addresses_received else datetime.min
         
     @classmethod
     def shallow_copy(cls, contact):
@@ -49,11 +50,16 @@ class DispersyContact(object):
     def confirmed_addresses(self):
         return [a for a in self.peer.addresses if self.last_rcvd(a) > datetime.min]
     
+    @property
+    def addresses_received(self):
+        return self._addresses_received != datetime.min
+    
     def get_peer_addresses(self, lan, wan):
         return [l if wan.ip == w.ip else w for l, w in self.peer._addresses.itervalues()]
     
     def add_community(self, id_):
-        self.community_ids.add(id_)
+        if not id_ in self.community_ids:
+            self.community_ids.append(id_)
         
     def add_unreachable_address(self, address):
         self._unreachable_addresses.add(address)
@@ -107,11 +113,13 @@ class DispersyContact(object):
     def last_sent(self, address):
         return self.last_send_time.get(address, datetime.min)
     
-    def set_peer(self, peer):
+    def set_peer(self, peer, addresses_received=False):
         """
         @type peer: Peer
         """
         self.peer = peer
+        if addresses_received:
+            self._addresses_received = datetime.utcnow()
         
     def has_address(self, address):
         """
@@ -122,7 +130,9 @@ class DispersyContact(object):
     
     def merge(self, contact):
         self.merge_stats(contact)
-        self.community_ids.update(contact.community_ids)
+        for id_ in contact.community_ids:
+            if not id_ in self.community_ids:
+                self.community_ids.append(id_)
         self._unreachable_addresses.update(contact._unreachable_addresses)
     
     def merge_stats(self, contact):

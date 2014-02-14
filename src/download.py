@@ -61,15 +61,30 @@ class Peer(object):
                 if a[0] not in self.lan_addresses:
                     self._addresses[i] = a
         else: # Actual endpoint ids as keys
-            self._addresses.update(peer._addresses)
+            for i, a in peer._addresses.iteritems():
+                self.update_address(a[0], a[1], i)
         
+    def update_address(self, lan, wan, endpoint_id):
+        if endpoint_id in self._addresses.keys():
+            # lan has changed, or lan != wan, so probably an actual wan estimate. So update!
+            if lan != self._addresses[endpoint_id][0] or lan != wan: 
+                self._addresses[endpoint_id] = (lan, wan)
+            # Else, what is there to update?                        
+        else:
+            self._addresses[endpoint_id] = (lan, wan)
+            
     def update_wan(self, lan, wan):
+        # Assuming lan is already in there (otherwise how find this peer?)
+        if lan == wan: # No point in setting wan to the same as lan, perhaps even overwriting actual wan address
+            return False
         i = None
         for i, a in self._addresses.iteritems():
             if a[0] == lan:
                 break
         if i is not None:
             self._addresses[i] = (lan, wan)
+            return True
+        return False
 
     def __eq__(self, other):
         if not isinstance(other, Peer):
