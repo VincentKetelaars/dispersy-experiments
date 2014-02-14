@@ -12,7 +12,7 @@ from src.tests.unit.definitions import SMALL_TASK_TIMEOUT, DEST_DIR
 from src.dispersy_instance import DispersyInstance
 from src.definitions import SWIFT_BINPATH, FILE_HASH_MESSAGE_NAME, SMALL_FILE_MESSAGE_NAME,\
     ADDRESSES_MESSAGE_NAME, API_MESSAGE_NAME, PUNCTURE_MESSAGE_NAME,\
-    ADDRESSES_REQUEST_MESSAGE_NAME
+    ADDRESSES_REQUEST_MESSAGE_NAME, PUNCTURE_RESPONSE_MESSAGE_NAME
 from src.dispersy_extends.conversion import FileHashConversion, SmallFileConversion, AddressesConversion,\
     APIMessageConversion, PunctureConversion, AddressesRequestConversion
 from src.address import Address
@@ -104,6 +104,28 @@ class TestConversion(unittest.TestCase):
         for c in self._conversions:
             if isinstance(c, PunctureConversion):
                 meta = self._di._community.get_meta_message(PUNCTURE_MESSAGE_NAME)
+                sender_lan = Address.ipv4("0.0.0.1:1232")
+                sender_wan = Address.ipv4("23.12.32.123:1232")
+                sender_id = os.urandom(16)
+                address_vote =  Address.ipv6("[::0]:12145")
+                endpoint_id = os.urandom(16)
+                message = meta.impl(authentication=(self._di._community.my_member,),
+                                      distribution=(self._di._community.claim_global_time(),),
+                                      destination=(Candidate(address_vote.addr(), True),), 
+                                      payload=(sender_lan, sender_wan, sender_id, address_vote, endpoint_id))
+                encoded = c.encode_payload(message)
+                placeholder = c.Placeholder(None, meta, 0, encoded, False, True)
+                _, x = c.decode_payload(placeholder, 0, str(encoded[0])+encoded[1])
+                self.assertEqual(x.sender_lan, sender_lan)
+                self.assertEqual(x.sender_wan, sender_wan)
+                self.assertEqual(x.sender_id, sender_id)
+                self.assertEqual(x.address_vote, address_vote)
+                self.assertEqual(x.endpoint_id, endpoint_id)
+                
+    def test_puncture_response_message_conversion(self):
+        for c in self._conversions:
+            if isinstance(c, PunctureConversion):
+                meta = self._di._community.get_meta_message(PUNCTURE_RESPONSE_MESSAGE_NAME)
                 sender_lan = Address.ipv4("0.0.0.1:1232")
                 sender_wan = Address.ipv4("23.12.32.123:1232")
                 address_vote =  Address.ipv6("[::0]:12145")

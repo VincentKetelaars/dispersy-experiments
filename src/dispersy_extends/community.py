@@ -19,14 +19,15 @@ from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.timeout import IntroductionRequestTimeout
 from src.dispersy_extends.conversion import SmallFileConversion, FileHashConversion,\
     AddressesConversion, APIMessageConversion, PunctureConversion,\
-    AddressesRequestConversion
+    AddressesRequestConversion, PunctureResponseConversion
 from src.dispersy_extends.payload import SmallFilePayload, FileHashPayload, AddressesPayload,\
-    APIMessagePayload, PuncturePayload, AddressesRequestPayload
+    APIMessagePayload, PuncturePayload, AddressesRequestPayload,\
+    PunctureResponsePayload
 
 from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, \
     FILE_HASH_MESSAGE_NAME, SMALL_FILE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME,\
     MESSAGE_KEY_API_MESSAGE, API_MESSAGE_NAME, PUNCTURE_MESSAGE_NAME,\
-    ADDRESSES_REQUEST_MESSAGE_NAME
+    ADDRESSES_REQUEST_MESSAGE_NAME, PUNCTURE_RESPONSE_MESSAGE_NAME
 from src.tools.periodic_task import Looper, PeriodicIntroductionRequest
 from src.swift.swift_community import SwiftCommunity
 from dispersy.candidate import WalkCandidate
@@ -59,7 +60,7 @@ class MyCommunity(Community):
         """
         return [DefaultConversion(self), SmallFileConversion(self), FileHashConversion(self), 
                 AddressesConversion(self), AddressesRequestConversion(self), PunctureConversion(self), 
-                APIMessageConversion(self)]
+                PunctureResponseConversion(self), APIMessageConversion(self)]
     
     def initiate_meta_messages(self):
         """
@@ -70,6 +71,7 @@ class MyCommunity(Community):
         self._addresses_distribution = DirectDistribution()
         self._addresses_request_distribution = DirectDistribution()
         self._puncture_distribution = DirectDistribution()
+        self._puncture_response_distribution = DirectDistribution()
         self._api_message_distribution = DirectDistribution()
         return [Message(self, SMALL_FILE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._small_file_distribution, CommunityDestination(NUMBER_OF_PEERS_TO_SYNC), SmallFilePayload(), 
@@ -86,6 +88,9 @@ class MyCommunity(Community):
                 Message(self, PUNCTURE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._puncture_distribution, CandidateDestination(), PuncturePayload(), 
                         self.puncture_check, self.puncture_handle), # TODO: We don't need MemberAuthentication, right?
+                Message(self, PUNCTURE_RESPONSE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
+                        self._puncture_response_distribution, CandidateDestination(), PunctureResponsePayload(), 
+                        self.puncture_response_check, self.puncture_response_handle), # TODO: We don't need MemberAuthentication, right?
                 Message(self, API_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._api_message_distribution, CandidateDestination(), APIMessagePayload(), 
                         self.api_message_check, self.api_message_handle)]
@@ -134,8 +139,19 @@ class MyCommunity(Community):
             
     def puncture_handle(self, messages):
         for x in messages:
-            self.dispersy.endpoint.incoming_puncture_message(x.authentication.member, x.payload.sender_lan, x.payload.sender_wan,
+            self.dispersy.endpoint.incoming_puncture_message(self, x.authentication.member, x.payload.sender_lan, 
+                                                             x.payload.sender_wan, x.payload.sender_id, 
                                                              x.payload.address_vote, x.payload.endpoint_id)
+            
+    def puncture_response_check(self, messages):
+        for x in messages:
+            yield x
+            
+    def puncture_response_handle(self, messages):
+        for x in messages:
+            self.dispersy.endpoint.incoming_puncture_response_message(x.authentication.member, x.payload.sender_lan, 
+                                                                      x.payload.sender_wan,
+                                                                      x.payload.address_vote, x.payload.endpoint_id)
         
     def api_message_check(self, messages):
         for x in messages:

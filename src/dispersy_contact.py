@@ -30,6 +30,7 @@ class DispersyContact(object):
         self.peer = Peer([address]) if peer is None else peer
         self._unreachable_addresses = set()
         self._addresses_received = datetime.utcnow() if addresses_received else datetime.min
+        self._addresses_sent = datetime.min
         self._member_id = member_id
         
     @classmethod
@@ -52,12 +53,19 @@ class DispersyContact(object):
         return self._addresses_received != datetime.min
     
     @property
+    def addresses_sent(self):
+        return self._addresses_sent
+    
+    @property
     def member_id(self):
         return self._member_id
     
     @member_id.setter
     def member_id(self, member_id):
         self._member_id = member_id
+        
+    def sent_addresses(self):
+        self._addresses_sent = datetime.utcnow()
     
     def get_peer_addresses(self, lan, wan):
         return [l if wan.ip == w.ip else w for l, w in self.peer._addresses.itervalues()]

@@ -12,7 +12,7 @@ from dispersy.conversion import DropPacket
 
 from src.definitions import SEPARATOR, SMALL_FILE_MESSAGE_NAME, FILE_HASH_MESSAGE_NAME,\
     ADDRESSES_MESSAGE_NAME, API_MESSAGE_NAME, PUNCTURE_MESSAGE_NAME,\
-    ADDRESSES_REQUEST_MESSAGE_NAME
+    ADDRESSES_REQUEST_MESSAGE_NAME, PUNCTURE_RESPONSE_MESSAGE_NAME
 from src.address import Address
 
 logger = get_logger(__name__)
@@ -160,6 +160,41 @@ class PunctureConversion(BinaryConversion):
     def __init__(self, community):
         super(PunctureConversion, self).__init__(community, "\x15")
         self.define_meta_message(chr(15), community.get_meta_message(PUNCTURE_MESSAGE_NAME), self.encode_payload, 
+                                 self.decode_payload)
+        
+    def encode_payload(self, message):
+        m = str(message.payload.sender_lan) + SEPARATOR + str(message.payload.sender_wan) + SEPARATOR + \
+            message.payload.sender_id.encode(ENDPOINT_ID_ENCODING) + SEPARATOR + str(message.payload.address_vote) + SEPARATOR + \
+            message.payload.endpoint_id.encode(ENDPOINT_ID_ENCODING)
+        return struct.pack("!L", len(m)), m
+
+    def decode_payload(self, placeholder, offset, data):
+        if len(data) < offset + 4:
+            raise DropPacket("Insufficient packet size")
+        data_length, = struct.unpack_from("!L", data, offset)
+        offset += 4
+
+        if len(data) < offset + data_length:
+            raise DropPacket("Insufficient packet size")
+        data_payload = data[offset:offset + data_length]
+        splitted = data_payload.split(SEPARATOR)
+        sender_lan = Address.unknown(splitted[0])
+        sender_wan = Address.unknown(splitted[1])
+        sender_id = splitted[2].decode(ENDPOINT_ID_ENCODING)
+        address_vote = Address.unknown(splitted[3])
+        endpoint_id = splitted[4].decode(ENDPOINT_ID_ENCODING)
+        offset += data_length
+
+        return offset, placeholder.meta.payload.implement(sender_lan, sender_wan, sender_id, address_vote, endpoint_id)
+    
+class PunctureResponseConversion(BinaryConversion):
+    '''
+    classdocs
+    '''    
+
+    def __init__(self, community):
+        super(PunctureResponseConversion, self).__init__(community, "\x18")
+        self.define_meta_message(chr(18), community.get_meta_message(PUNCTURE_RESPONSE_MESSAGE_NAME), self.encode_payload, 
                                  self.decode_payload)
         
     def encode_payload(self, message):

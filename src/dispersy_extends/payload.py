@@ -184,6 +184,43 @@ class PuncturePayload(Payload):
     
     class Implementation(Payload.Implementation):
         
+        def __init__(self, meta, sender_lan, sender_wan, sender_id, address_vote, endpoint_id):
+            super(Payload.Implementation, self).__init__(meta)
+            self._sender_lan = sender_lan
+            self._sender_wan = sender_wan
+            self._sender_id = sender_id
+            self._address_vote = address_vote
+            self._endpoint_id = endpoint_id
+            
+        @property
+        def sender_lan(self):
+            return self._sender_lan
+                    
+        @property
+        def sender_wan(self):
+            return self._sender_wan
+        
+        @property
+        def sender_id(self):
+            return self._sender_id
+        
+        @property
+        def address_vote(self):
+            return self._address_vote
+        
+        @property
+        def endpoint_id(self):
+            return self._endpoint_id
+        
+class PunctureResponseCarrier():
+    
+    def __init__(self):
+        pass
+    
+class PunctureResponsePayload(Payload):
+    
+    class Implementation(Payload.Implementation):
+        
         def __init__(self, meta, sender_lan, sender_wan, address_vote, endpoint_id):
             super(Payload.Implementation, self).__init__(meta)
             self._sender_lan = sender_lan

@@ -96,6 +96,7 @@ FILE_HASH_MESSAGE_NAME = u"file_hash_message"
 ADDRESSES_MESSAGE_NAME = u"addresses_message"
 ADDRESSES_REQUEST_MESSAGE_NAME = u"addresses_request_message"
 PUNCTURE_MESSAGE_NAME = u"puncture_message"
+PUNCTURE_RESPONSE_MESSAGE_NAME = u"puncture_response_message"
 API_MESSAGE_NAME = u"api_message"
 
 MIN_MTU = 1500 # Bytes. Bloomfilters will be this big unless we change that as well
@@ -105,7 +106,10 @@ MAX_FILE_SIZE = MAX_MTU - DISPERSY_MESSAGE_MINIMUM
 ENDPOINT_SOCKET_TIMEOUT = 180.0 # Seconds
 ENDPOINT_CONTACT_TIMEOUT = 25.0 # Seconds
 ENDPOINT_CHECK = 5 # int seconds
+REACHABLE_ENDPOINT_MAX_MESSAGES = 10
+REACHABLE_ENDPOINT_RETRY_ADDRESSES = 5
 MIN_TIME_BETWEEN_PUNCTURE_REQUESTS = 4.0 # Seconds
+MIN_TIME_BETWEEN_ADDRESSES_MESSAGE = 10.0 # Seconds
 
 # Filepusher
 FILETYPES_NOT_TO_SEND = [".mhash",".mbinmap"]
