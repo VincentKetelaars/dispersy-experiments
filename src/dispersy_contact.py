@@ -18,7 +18,7 @@ class DispersyContact(object):
     Each incoming and outgoing message to this address is noted.
     '''
 
-    def __init__(self, address, sent_messages=0, sent_bytes=0, rcvd_messages=0, rcvd_bytes=0, peer=None, community_id=None, addresses_received=False):
+    def __init__(self, address, peer=None, community_id=None, addresses_received=False):
         self.address = address # Primary address
         self.last_send_time = {address : datetime.min}
         self.last_recv_time = {address : datetime.min}
@@ -28,10 +28,6 @@ class DispersyContact(object):
         self.bytes_rcvd = {}
         self.community_ids = [community_id] if community_id is not None else []
         self.peer = Peer([address]) if peer is None else peer
-        if sent_messages > 0:
-            self.sent(sent_messages, sent_bytes, address=address)
-        if rcvd_messages > 0:
-            self.rcvd(rcvd_messages, rcvd_bytes, address=address)
         self._unreachable_addresses = set()
         self._addresses_received = datetime.utcnow() if addresses_received else datetime.min
         
