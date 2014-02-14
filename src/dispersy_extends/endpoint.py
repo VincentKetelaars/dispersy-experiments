@@ -1018,7 +1018,7 @@ class MultiEndpoint(CommonEndpoint):
         for e in self.swift_endpoints:
             if e.id == endpoint_id:
                 e.vote_wan_address(vote_address, sender_lan, sender_wan)
-                e.send_puncture_response_message(community, sender_wan, sender_id) # TODO send actual wan
+#                 e.send_puncture_response_message(community, sender_wan, sender_id) # TODO send actual wan
                 valid_endpoint_id = True
         if not valid_endpoint_id:
             return logger.warning("Unknown endpoint id %s, by voter %s,%s voting for %s", endpoint_id.encode("base-64"), 
@@ -1027,7 +1027,7 @@ class MultiEndpoint(CommonEndpoint):
         for e in self.swift_endpoints + [self]:
             dc = e.get_contact(sender_lan, mid=member.mid)
             if dc is not None:
-                dc.peer.update_wan(sender_lan, sender_wan)
+                dc.peer.update_address(sender_lan, sender_wan, sender_id)
                 
     def incoming_puncture_response_message(self, member, sender_lan, sender_wan, vote_address, endpoint_id):
         pass
