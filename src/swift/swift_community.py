@@ -8,10 +8,10 @@ from os import makedirs
 from os.path import exists, basename, join
 from threading import Thread, Event
 
-
 from src.swift.tribler.SwiftDef import SwiftDef
 from src.swift.swift_download_config import FakeSession, FakeSessionSwiftDownloadImpl
-from src.download import Download, Peer
+from src.download import Download
+from src.peer import Peer
 from src.definitions import MESSAGE_KEY_RECEIVE_FILE, MESSAGE_KEY_SWIFT_INFO, HASH_LENGTH,\
     MOREINFO, DELETE_CONTENT, PEXON, REPORT_DISPERSY_INFO_TIME, PATH_SEPARATOR,\
     MESSAGE_KEY_BAD_SWARM

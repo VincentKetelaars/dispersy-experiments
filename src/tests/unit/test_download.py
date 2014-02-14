@@ -4,7 +4,8 @@ Created on Nov 13, 2013
 @author: Vincent Ketelaars
 '''
 import unittest
-from src.download import Download, Peer
+from src.download import Download
+from src.peer import Peer
 from src.address import Address
 from dispersy.destination import CommunityDestination, CandidateDestination
 from dispersy.candidate import WalkCandidate

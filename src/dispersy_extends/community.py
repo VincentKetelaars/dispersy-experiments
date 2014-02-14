@@ -116,7 +116,8 @@ class MyCommunity(Community):
     def addresses_message_handle(self, messages):
         for x in messages:
             self.swift_community.peer_endpoints_received(x.payload.addresses, x.payload.ids)
-            self.dispersy.endpoint.peer_endpoints_received(self, x.payload.addresses, x.payload.wan_addresses, x.payload.ids)
+            self.dispersy.endpoint.peer_endpoints_received(self, x.authentication.member, x.payload.addresses, 
+                                                           x.payload.wan_addresses, x.payload.ids)
             
     def addresses_request_message_check(self, messages):
         for x in messages:
@@ -124,7 +125,8 @@ class MyCommunity(Community):
             
     def addresses_request_message_handle(self, messages):
         for x in messages:
-            self.dispersy.endpoint.addresses_requested(self, x.payload.sender_lan, x.payload.sender_wan, x.payload.endpoint_id)
+            self.dispersy.endpoint.addresses_requested(self, x.authentication.member, x.payload.sender_lan, 
+                                                       x.payload.sender_wan, x.payload.endpoint_id)
             
     def puncture_check(self, messages):
         for x in messages:
@@ -132,7 +134,7 @@ class MyCommunity(Community):
             
     def puncture_handle(self, messages):
         for x in messages:
-            self.dispersy.endpoint.incoming_puncture_message(x.payload.sender_lan, x.payload.sender_wan, 
+            self.dispersy.endpoint.incoming_puncture_message(x.authentication.member, x.payload.sender_lan, x.payload.sender_wan,
                                                              x.payload.address_vote, x.payload.endpoint_id)
         
     def api_message_check(self, messages):

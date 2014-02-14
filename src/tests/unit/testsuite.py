@@ -16,6 +16,7 @@ import test_dispersy_instance
 import test_periodic_task
 import test_swift_community
 import test_dispersy_contact
+import test_peer
 
 def suite():
     suite = unittest.TestSuite()
@@ -33,6 +34,7 @@ def suite():
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_periodic_task))
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_swift_community))
     suite.addTest(unittest.TestLoader().loadTestsFromModule(test_dispersy_contact))
+    suite.addTest(unittest.TestLoader().loadTestsFromModule(test_peer))
     # For testing of tests
 #     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(test_endpoint.TestEndpointNoConnection))
     return suite

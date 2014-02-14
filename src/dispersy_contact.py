@@ -18,7 +18,7 @@ class DispersyContact(object):
     Each incoming and outgoing message to this address is noted.
     '''
 
-    def __init__(self, address, peer=None, community_id=None, addresses_received=False):
+    def __init__(self, address, peer=None, community_id=None, addresses_received=False, member_id=None):
         self.address = address # Primary address
         self.last_send_time = {address : datetime.min}
         self.last_recv_time = {address : datetime.min}
@@ -30,6 +30,7 @@ class DispersyContact(object):
         self.peer = Peer([address]) if peer is None else peer
         self._unreachable_addresses = set()
         self._addresses_received = datetime.utcnow() if addresses_received else datetime.min
+        self._member_id = member_id
         
     @classmethod
     def shallow_copy(cls, contact):
@@ -49,6 +50,14 @@ class DispersyContact(object):
     @property
     def addresses_received(self):
         return self._addresses_received != datetime.min
+    
+    @property
+    def member_id(self):
+        return self._member_id
+    
+    @member_id.setter
+    def member_id(self, member_id):
+        self._member_id = member_id
     
     def get_peer_addresses(self, lan, wan):
         return [l if wan.ip == w.ip else w for l, w in self.peer._addresses.itervalues()]
