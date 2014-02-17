@@ -391,11 +391,14 @@ class CommonEndpoint(SwiftHandler):
         # Wan addresses can change over time for an endpoint
         # We assume the lan address to be unique
         # TODO: Perhaps allow for private wan as well, when private lan is not same subnet
-        if self._wan_voters.get(sender_lan) != address: # First vote, or new vote
-            if not sender_wan.is_private_address():
-                self._wan_address[address] = self._wan_address.get(address, 0) + 1 # Increment
-                self._wan_voters[sender_lan] = address # Update vote
-                logger.info("Got a vote for %s to %s from %s", str(self.address), str(address), str(sender_lan))
+        if self._wan_voters.get(sender_lan) == address:
+            return  # Same vote as last time
+        if self._wan_voters.get(sender_lan) is not None: # So we have a new vote
+            self._wan_address[address] = self._wan_address.get(self._wan_voters.get(sender_lan), 0) - 1 # Get rid of the old vote
+        if not sender_wan.is_private_address(): # We're not going to give the private addresses more votes
+            self._wan_address[address] = self._wan_address.get(address, 0) + 1 # Increment
+            self._wan_voters[sender_lan] = address # Update vote
+            logger.info("Got a vote for %s to %s from %s", str(self.address), str(address), str(sender_lan))
             
     def is_bootstrap_candidate(self, addr=None, candidate=None):
         if addr is not None:
@@ -441,7 +444,7 @@ class CommonEndpoint(SwiftHandler):
     def peer_endpoints_received(self, community, mid, lan_addresses, wan_addresses, ids):
         same_contacts = []
         for dc in self.dispersy_contacts:
-            if dc.peer.has_any(lan_addresses + wan_addresses, ids=ids): # Both lan and wan can have arrived
+            if dc.member_id == mid or dc.peer.has_any(lan_addresses + wan_addresses, ids=ids): # Both lan and wan can have arrived
                 same_contacts.append(dc)
         # Quite possibly some of these addresses are not public, and may therefore not be reachable by each local address
         new_peer = Peer(lan_addresses, wan_addresses, ids, member_id=mid)
@@ -1040,6 +1043,7 @@ class MultiEndpoint(CommonEndpoint):
                 dc.peer.update_address(sender_lan, sender_wan, endpoint_id)
         if dc.addresses_sent + timedelta(seconds=MIN_TIME_BETWEEN_ADDRESSES_MESSAGE) < datetime.utcnow():
             self.send_addresses_to_communities(community, dc)
+                
     
 class SwiftEndpoint(CommonEndpoint):
     
