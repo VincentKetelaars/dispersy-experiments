@@ -157,11 +157,12 @@ class AddressesRequestPayload(Payload):
     
     class Implementation(Payload.Implementation):
         
-        def __init__(self, meta, sender_lan, sender_wan, endpoint_id):
+        def __init__(self, meta, sender_lan, sender_wan, endpoint_id, wan_address):
             super(Payload.Implementation, self).__init__(meta)
             self._sender_lan = sender_lan
             self._sender_wan = sender_wan
             self._endpoint_id = endpoint_id
+            self._wan_address = wan_address
             
         @property
         def sender_lan(self):
@@ -174,6 +175,10 @@ class AddressesRequestPayload(Payload):
         @property
         def endpoint_id(self):
             return self._endpoint_id
+        
+        @property
+        def wan_address(self):
+            return self._wan_address
         
 class PunctureCarrier():
     

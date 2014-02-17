@@ -804,13 +804,12 @@ class MultiEndpoint(CommonEndpoint):
         return candidate
         
     def i2ithread_data_came_in(self, session, sock_addr, data, incoming_addr=Address()):
-        if logger.isEnabledFor(logging.DEBUG):
-            try:
-                name = self._dispersy.convert_packet_to_meta_message(data, load=False, auto_load=False).name
-            except:
-                name = "???"
-            logger.debug("%20s <- %15s:%-5d %30s %4d bytes", str(incoming_addr), sock_addr[0], sock_addr[1], name, len(data))
-            self._dispersy.statistics.dict_inc(self._dispersy.statistics.endpoint_recv, name)
+        try:
+            name = self._dispersy.convert_packet_to_meta_message(data, load=False, auto_load=False).name
+        except:
+            name = "???"
+        logger.debug("%20s <- %15s:%-5d %30s %4d bytes", str(incoming_addr), sock_addr[0], sock_addr[1], name, len(data))
+        self._dispersy.statistics.dict_inc(self._dispersy.statistics.endpoint_recv, name)
         
         # Spoof sock_addr. Dispersy knows only about the first socket address of a peer, 
         # to keep things clean.
@@ -819,6 +818,9 @@ class MultiEndpoint(CommonEndpoint):
         e = self.get_endpoint(incoming_addr)
         if e is not None:
             e.i2ithread_data_came_in(session, sock_addr, data) # Ensure that you fool the SwiftEndpoint as well
+            if name == ADDRESSES_REQUEST_MESSAGE_NAME: # Apparently someone does not know us yet (Perhaps my wan is not what I think it is)
+                message = self._dispersy.convert_packet_to_message(data, load=False, auto_load=False)
+                e.vote_wan_address(message.payload.wan_address, message.payload.sender_lan, message.payload.sender_wan)
             return
         logger.warning("This %s should be represented by an endpoint", sock_addr)
         # In case the incoming_addr does not match any of the endpoints
@@ -953,7 +955,7 @@ class MultiEndpoint(CommonEndpoint):
         meta_puncture = community.get_meta_message(ADDRESSES_REQUEST_MESSAGE_NAME)
         message = meta_puncture.impl(authentication=(community.my_member,), distribution=(community.claim_global_time(),), 
                                      destination=(candidate,), payload=(self._endpoint.address, self._endpoint.wan_address, 
-                                                                        self._endpoint.id))
+                                                                        self._endpoint.id, address))
         self.send([candidate], [message.packet]) # TODO: Add to sendqueue?
                 
     def sockaddr_info_callback(self, address, state):
@@ -1035,7 +1037,7 @@ class MultiEndpoint(CommonEndpoint):
     def incoming_puncture_response_message(self, member, sender_lan, sender_wan, vote_address, endpoint_id):
         pass
         
-    def addresses_requested(self, community, member, sender_lan, sender_wan, endpoint_id):
+    def addresses_requested(self, community, member, sender_lan, sender_wan, endpoint_id, wan_address):
         dc = DispersyContact(sender_wan)
         for e in self.swift_endpoints + [self]:
             dc = e.get_contact(sender_lan, mid=member.mid)

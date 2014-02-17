@@ -131,7 +131,7 @@ class MyCommunity(Community):
     def addresses_request_message_handle(self, messages):
         for x in messages:
             self.dispersy.endpoint.addresses_requested(self, x.authentication.member, x.payload.sender_lan, 
-                                                       x.payload.sender_wan, x.payload.endpoint_id)
+                                                       x.payload.sender_wan, x.payload.endpoint_id, x.payload.wan_address)
             
     def puncture_check(self, messages):
         for x in messages:
