@@ -893,13 +893,15 @@ class MultiEndpoint(CommonEndpoint):
         if need_addresses_message:
             self._dispersy.callback.register(send_addresses, args=(dc.community_ids[0], dc))         
         
-        def send_request(cid, address):
-            self.request_addresses(self.get_community(cid), address)
+        def send_request(cid, contact):
+            self.request_addresses(self.get_community(cid), contact)
         
         for dc in self.dispersy_contacts:
-            if not dc.addresses_received and dc.num_rcvd() > 1: # Let's wait till we receive more than one message
+            if (not dc.addresses_received and dc.num_rcvd() > 1 and # Let's wait till we receive more than one message
+                dc.address_requested + timedelta(seconds=MIN_TIME_BETWEEN_ADDRESSES_MESSAGE) < datetime.utcnow()): 
                 logger.debug("We have not received an addresses message from %s yet, so we request it", str(dc.address))
-                self._dispersy.callback.register(send_request, args=(dc.community_ids[0], dc.address))
+                self._dispersy.callback.register(send_request, args=(dc.community_ids[0], dc))
+                dc.requested_addresses()
                          
     def interface_came_up(self, addr):
         logger.debug("%s came up", addr.interface)
@@ -948,14 +950,14 @@ class MultiEndpoint(CommonEndpoint):
         for e in self.swift_endpoints:
             e.determine_puncture_messages_to_send() # TODO: Only send to address' peer
             
-    def request_addresses(self, community, address):
-        if community is None or address is None:
+    def request_addresses(self, community, contact):
+        if community is None or contact is None:
             return
-        candidate = WalkCandidate(address.addr(), True, address.addr(), address.addr(), u"unknown")
+        candidate = WalkCandidate(contact.address.addr(), True, contact.address.addr(), contact.address.addr(), u"unknown")
         meta_puncture = community.get_meta_message(ADDRESSES_REQUEST_MESSAGE_NAME)
         message = meta_puncture.impl(authentication=(community.my_member,), distribution=(community.claim_global_time(),), 
                                      destination=(candidate,), payload=(self._endpoint.address, self._endpoint.wan_address, 
-                                                                        self._endpoint.id, address))
+                                                                        self._endpoint.id, contact.address))
         self.send([candidate], [message.packet]) # TODO: Add to sendqueue?
                 
     def sockaddr_info_callback(self, address, state):
