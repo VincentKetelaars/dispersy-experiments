@@ -133,6 +133,7 @@ class SwiftHandler(TunnelEndpoint):
         """
         if d is not None and d.get_def().get_roothash() in self._started_downloads and not d.bad_swarm:
             self._swift.checkpoint_download(d)
+            d.checkpointing()
     
     @_swift_runnable_decorator  
     def swift_start(self, d):
@@ -467,7 +468,7 @@ class CommonEndpoint(SwiftHandler):
     
     def get_community(self, community_id):
         try:
-            return self._dispersy.get_community(community_id)
+            return self._dispersy.get_community(community_id, load=False, auto_load=False)
         except (KeyError, ProgrammingError):
             logger.warning("Unknown community %s", community_id)
         return None
@@ -544,6 +545,7 @@ class MultiEndpoint(CommonEndpoint):
         return ret
     
     def close(self, timeout=0.0):
+        self._thread_stop_event.wait(timeout)
         logger.info("CLOSE: address %s: down %d, send %d, up %d", self.get_address(), self.total_down, self.total_send, self.total_up)
         self.is_alive = False # Must be set before swift is shut down
         self._thread_stop_event.set()
@@ -898,7 +900,7 @@ class MultiEndpoint(CommonEndpoint):
         
         for dc in self.dispersy_contacts:
             if (not dc.addresses_received and dc.num_rcvd() > 1 and # Let's wait till we receive more than one message
-                dc.address_requested + timedelta(seconds=MIN_TIME_BETWEEN_ADDRESSES_MESSAGE) < datetime.utcnow()): 
+                dc.addresses_requested + timedelta(seconds=MIN_TIME_BETWEEN_ADDRESSES_MESSAGE) < datetime.utcnow()): 
                 logger.debug("We have not received an addresses message from %s yet, so we request it", str(dc.address))
                 self._dispersy.callback.register(send_request, args=(dc.community_ids[0], dc))
                 dc.requested_addresses()
@@ -927,8 +929,8 @@ class MultiEndpoint(CommonEndpoint):
         Note that if we have received a message from a new contact, the new addresses will be send a list of local sockets        
         """
         community, new_recv = CommonEndpoint.update_dispersy_contacts(self, sock_addr, packets, recv=recv)
-        if new_recv is not None:
-            self.send_addresses_to_communities(community, new_recv)
+#         if new_recv is not None:
+#             self.send_addresses_to_communities(community, new_recv)
         return community, new_recv
             
     def send_addresses_to_communities(self, community, contact):

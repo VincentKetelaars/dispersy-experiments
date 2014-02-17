@@ -354,3 +354,7 @@ class MyCommunity(Community):
     def update_bloomfilter(self, update_bloomfilter):
         self._update_bloomfilter = update_bloomfilter    
     
+    def unload_community(self):
+        self._looper.stop()
+        Community.unload_community(self)
+        return self.swift_community.unload_community()

@@ -36,7 +36,6 @@ class SwiftCommunity(object):
         self._thread_loop = Thread(target=self._loop, name="SwiftCommunity_periodic_loop")
         self._thread_loop.setDaemon(True)
         self._thread_loop.start()
-        # TODO: Stop this thread somehow
         
     def _add_to_peers(self, addresses, ids=[]):
         already_exists = False
@@ -85,8 +84,9 @@ class SwiftCommunity(object):
             return
         rm_state = not download.seeder()
         rm_download = DELETE_CONTENT
-        logger.debug("Clean up download, %s, %s, %s", download.roothash_as_hex(), rm_state, rm_download)        
-        if not rm_state and not rm_download: # No point in doing checkpoint if not both false
+        logger.debug("Clean up download, %s, %s, %s", download.roothash_as_hex(), rm_state, rm_download)
+        # No point in doing checkpoint if not both false, and if we've already done it for the entire thing   
+        if not rm_state and not rm_download and not download.downloadimpl.checkpoint_done(): 
             self.endpoint.swift_checkpoint(download.downloadimpl)
         # Do callback before removing, in case DELETE_CONTENT is True and someone wants to use it first
         self.do_callback(MESSAGE_KEY_RECEIVE_FILE, download.filename)
@@ -308,6 +308,11 @@ class SwiftCommunity(object):
         while not self._thread_stop_event.is_set():
             self.do_callback(MESSAGE_KEY_SWIFT_INFO, {"regular" : self._overal_data()})
             self._thread_stop_event.wait(REPORT_DISPERSY_INFO_TIME)
+            
+    def unload_community(self):
+        self._thread_stop_event.set()
+        self._thread_loop.join()
+        return True
         
     def _overal_data(self):
         upspeed = 0

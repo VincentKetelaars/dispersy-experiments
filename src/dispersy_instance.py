@@ -146,7 +146,7 @@ class DispersyInstance(object):
         try:
             if self._filepusher is not None:
                 self._filepusher.stop()
-            return self._dispersy.stop()
+            return self._dispersy.stop(timeout=0.0)
         except AttributeError:
             logger.error("Could not stop Dispersy")
         finally:
