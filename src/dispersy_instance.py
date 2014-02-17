@@ -174,12 +174,17 @@ class DispersyInstance(object):
         kwargs = {"enable" : self._walker, "api_callback" : self._api_callback}
         return MyCommunity.join_community(self._dispersy, master_member, my_member, *args, **kwargs)
         
-    def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
+    def _register_some_message(self, message, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
+        """
+        Send certain messages
+        Update is False, otherwise the message will be handled locally as well
+        @type message: SmallFileCarrier, FileHashCarrier, APIMessageCarrier
+        """
         logger.info("Registered %d messages: %s with delay %f", count, message, delay)
         if isinstance(message, SmallFileCarrier):
             self._callback.register(self._community.create_small_file_messages, (count, message), kargs={"update":False}, delay=delay)
         elif isinstance(message, FileHashCarrier):
-            self._callback.register(self._community.create_file_hash_messages, (count, message), kargs={"update":False}, delay=delay)
+            self._community.create_file_hash_messages(count, message, delay, update=False)
         elif isinstance(message, APIMessageCarrier):
             self._callback.register(self._community.create_api_messages, (count, message), kargs={"update":False}, delay=delay)
         else:

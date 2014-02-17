@@ -182,7 +182,7 @@ class MyCommunity(Community):
                               payload=(simple_message.filename, simple_message.data)) for _ in xrange(count)]
         self.dispersy.store_update_forward(messages, store, update, forward)
         
-    def create_file_hash_messages(self, count, file_hash_message, store=True, update=True, forward=True):
+    def create_file_hash_messages(self, count, file_hash_message, delay, store=True, update=True, forward=True):
         """
         @param count: Number of messages
         @type file_hash_message: FileHashCarrier
@@ -198,11 +198,13 @@ class MyCommunity(Community):
                                            file_hash_message.timestamp, self._addresses()))
                         # TODO: Perhaps only send active sockets?
                         for _ in xrange(count)]
-            self.dispersy.store_update_forward(messages, store, update, forward)
+            
+            def send_messages():
+                self.dispersy.callback.register(self.dispersy.store_update_forward, args=(messages, store, update, forward), delay=delay)
                 
             # Let Swift know that it should seed this file
             self.swift_community.add_file(file_hash_message.filename, file_hash_message.roothash, messages[0].destination,
-                                          file_hash_message.size, file_hash_message.timestamp)
+                                          file_hash_message.size, file_hash_message.timestamp, send_messages)
                 
     def create_addresses_messages(self, count, addresses_message, candidates, store=True, update=True, forward=True):
         """

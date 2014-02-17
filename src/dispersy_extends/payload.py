@@ -78,6 +78,10 @@ class FileHashCarrier():
     def addresses(self):
         return self._addresses
     
+    @addresses.setter
+    def addresses(self, addresses):
+        self._addresses = addresses
+    
 class FileHashPayload(Payload):
     
     class Implementation(Payload.Implementation):

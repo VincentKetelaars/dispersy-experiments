@@ -46,12 +46,14 @@ class SwiftCommunity(object):
         if not already_exists:
             self._peers.add(Peer(addresses, ids))
         
-    def _swift_start(self, d, moreinfo=MOREINFO, pexon=PEXON):
+    def _swift_start(self, d, moreinfo=MOREINFO, pexon=PEXON, func=None):
+        if func is not None:
+            func()
         self.endpoint.swift_start(d)
         self.endpoint.swift_moreinfo(d, moreinfo)
         self.endpoint.swift_pex(d, pexon)
         
-    def add_file(self, filename, roothash, destination, size, timestamp):
+    def add_file(self, filename, roothash, destination, size, timestamp, send_message):
         roothash = binascii.unhexlify(roothash) # Return the actual roothash, not the hexlified one. Depends on the return value of add_file
         if not roothash in self.downloads.keys() and len(roothash) == HASH_LENGTH / 2: # Check if not already added, and if the unhexlified roothash has the proper length
             logger.info("Add file %s with roothash %s of size %d with timestamp %f", filename, binascii.hexlify(roothash), size, timestamp)
@@ -59,7 +61,7 @@ class SwiftCommunity(object):
             d.set_dest_dir(filename)
 
             self.add_to_downloads(roothash, filename, d, size, timestamp, seed=True, destination=destination) # Sharing so setting seed to True
-            self.endpoint.put_swift_upload_stack(self._swift_start, size, timestamp, priority=0, args=(d,))
+            self.endpoint.put_swift_upload_stack(self._swift_start, size, timestamp, priority=0, args=(d,), kwargs={"func" : send_message})
             
             self.add_new_swift_peers()
             
