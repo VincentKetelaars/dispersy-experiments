@@ -103,6 +103,7 @@ class SwiftHandler(TunnelEndpoint):
                 self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
                 self._swift.network_shutdown() # Kind of harsh, so make sure downloads are handled
             # Try the sockets to see if they are in use
+            # TODO: IPv6 addresses in working_sockets will have not have the appropriate scopeid!
             if not try_sockets(self._swift.working_sockets, timeout=1.0):
                 logger.warning("Socket(s) is/are still in use")
                 self._swift.network_shutdown() # End it at all cost
@@ -1243,7 +1244,7 @@ def try_socket(addr, log=True):
     """
     try:
         s = socket.socket(addr.family, socket.SOCK_DGRAM)
-        s.bind(addr.addr())
+        s.bind(addr.socket())
         return True
     except socket.error, ex:
         (error_number, error_message) = ex
@@ -1256,7 +1257,7 @@ def try_socket(addr, log=True):
                 logger.debug("Shit, %s can't be bound! Interface gone?", str(addr))
             return False
         if log:
-            logger.debug("He, we haven't taken into account this error yet!!\n%s", error_message)
+            logger.debug("He, we haven't taken into account '%s', which happens on %s", error_message, str(addr.socket()))
         return False
     finally:
         s.close()

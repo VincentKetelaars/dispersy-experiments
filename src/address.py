@@ -4,7 +4,8 @@ Created on Oct 14, 2013
 @author: Vincent Ketelaars
 '''
 from struct import unpack
-from socket import AF_INET, AF_INET6, inet_aton
+from socket import AF_INET, AF_INET6, inet_aton, inet_pton
+from binascii import hexlify
 
 from src.tools.networks import get_interface_addresses
 
@@ -174,7 +175,13 @@ class Address(object):
         if self.family == AF_INET:
             return (self.ip, self.port)
         elif self.family == AF_INET6:
-            return (self.ip, self.port) # TODO: What about these.. self._flowinfo, self._scopeid
+            return (self.ip, self.port)
+        
+    def socket(self):
+        if self.family == AF_INET:
+            return (self.ip, self.port)
+        elif self.family == AF_INET6:
+            return (self.ip, self.port, self._flowinfo, self._scopeid)
         
     def __str__(self):
         if self.family == AF_INET:
@@ -189,16 +196,16 @@ class Address(object):
         return self.port == 0
     
     def resolve_interface(self):
-        if self.family == AF_INET6:
-            return False # TODO: Handle this
+#         if self.family == AF_INET6:
+#             return False # TODO: Handle this
         if self.interface_exists():
             return True
         if self.is_wildcard_ip():
             self._if = Interface(self.IFNAME_WILDCARD, self._ip, self._ip, self._ip)
             return True
-        for if_ in get_interface_addresses():            
+        for if_ in get_interface_addresses(version=self.family):
             if self.same_subnet(if_.address, interface=if_): # Same subnet
-                self._if = Interface(if_.name, if_.address, if_.netmask, if_.broadcast)
+                self._if = if_
                 return True
         return False
     
@@ -207,14 +214,15 @@ class Address(object):
         @param ip: ip address string
         @param interface: Network interface
         """
-        if self.family == AF_INET6:
-            return False # TODO: Find some better way
         if interface is None:
             interface = self._if
         if interface is None:
             return False # TODO: Not false, but unknown, raise exception?
-        return (self.ipstr_to_int(ip) & self.ipstr_to_int(interface.netmask) == 
-                    self.ipstr_to_int(self.ip) & self.ipstr_to_int(interface.netmask))
+        if self.family == AF_INET6:
+            return (self.ipv6_str_to_int(ip) & self.ipv6_str_to_int(interface.netmask) ==
+                    self.ipv6_str_to_int(self.ip) & self.ipv6_str_to_int(interface.netmask))
+        return (self.ipv4_str_to_int(ip) & self.ipv4_str_to_int(interface.netmask) == 
+                self.ipv4_str_to_int(self.ip) & self.ipv4_str_to_int(interface.netmask))
     
     def interface_exists(self):
         if self._if is None:
@@ -224,9 +232,11 @@ class Address(object):
                 return True
         return False
     
-    def ipstr_to_int(self, address):
-        # TODO: will fail with IPv6
-        return unpack("!L", inet_aton(address))[0]
+    def ipv4_str_to_int(self, ipv4_addr):
+        return unpack("!L", inet_aton(ipv4_addr))[0]
+    
+    def ipv6_str_to_int(self, ipv6_addr):
+        return int(hexlify(inet_pton(AF_INET6, ipv6_addr)), 16)
     
     def is_private_address(self):
         return self._private
