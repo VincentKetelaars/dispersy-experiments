@@ -3,7 +3,7 @@ Created on Aug 7, 2013
 
 @author: Vincent Ketelaars
 '''
-from threading import Event
+from threading import Event, Lock
 from os.path import isfile
 
 from src.logger import get_logger
@@ -52,6 +52,7 @@ class MyCommunity(Community):
         self._api_callback = api_callback
         self._looper = Looper(sleep=0.1, name="MyCommunity_looper")
         self._looper.start()
+        self._lock = Lock()
         self.swift_community = SwiftCommunity(self, self.dispersy.endpoint, api_callback=api_callback)
         
     def initiate_conversions(self):
@@ -360,3 +361,7 @@ class MyCommunity(Community):
         self._looper.stop()
         Community.unload_community(self)
         return self.swift_community.unload_community()
+    
+    def claim_global_time(self):
+        with self._lock:
+            return Community.claim_global_time(self)
