@@ -209,14 +209,15 @@ class UAVAPI(API):
     
     def _parse_iproute(self):
         output = os.popen('ip route').read()
-        ip = self._regex_find(output, "src (\d+\.\d+\.\d+\.\d+)", None)
-        if_name = self._regex_find(output, "dev ([a-zA-Z]{3,4}\d)", None)
-        gateway = self._regex_find(output, "default via (\d+\.\d+\.\d+\.\d+)", None)
-        if ip is not None and if_name is not None:
-            device = if_name[0:-1]
-            if not self._interface_running(device):
-                self.interface_came_up(ip, if_name, device, gateway=gateway)
-                self.use_interfaces[device] = (time.time(), u"up", ip) # Set the newest state
+        for line in output.splitlines(False): # There might be multiple lines that correspond
+            ip = self._regex_find(line, "src (\d+\.\d+\.\d+\.\d+)", None)
+            if_name = self._regex_find(line, "dev ([a-zA-Z]{3,4}\d)", None)
+            gateway = self._regex_find(line, "default via (\d+\.\d+\.\d+\.\d+)", None)
+            if ip is not None and if_name is not None:
+                device = if_name[0:-1]
+                if not self._interface_running(device):
+                    self.interface_came_up(ip, if_name, device, gateway=gateway)
+                    self.use_interfaces[device] = (time.time(), u"up", ip) # Set the newest state
                 
     def _interface_running(self, device):
         return device in self.use_interfaces.iterkeys() and self.use_interfaces[device][1] == u"up"
