@@ -6,13 +6,13 @@ Created on Jan 13, 2014
 from socket import AF_INET, AF_INET6
 
 class Interface(object):
-    def __init__(self, name, address, netmask, broadcast, version=AF_INET):
+    def __init__(self, name, address, netmask, broadcast, version=AF_INET, device=None):
         self.name = name
         self.address = address # ip string
         self.netmask = netmask # ip string
         self.broadcast = broadcast # ip string
         self.gateway = None # ip string
-        self.device = name[:-1] if name is not None else None # Initialize to the interface name
+        self.device = device if device is not None else (name[:-1] if name is not None else None) # Initialize to the interface name
         self._version = version
         
     def ipv4(self):

@@ -17,12 +17,6 @@ class MainInterfaceAPI(API):
         API.__init__(self, name, *di_args, **di_kwargs)
         self._need_socket_event = Event()
         self._running = Event()
-        
-    def _find(self, _input, _format, default):
-        m = re.search(_format, _input, re.IGNORECASE)
-        if m:
-            return m.groups()[0]
-        return default
     
     def run(self):
         

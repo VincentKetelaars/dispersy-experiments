@@ -5,7 +5,10 @@ Created on Nov 28, 2013
 '''
 import time
 import signal
+import os
+import re
 from threading import Event
+from errno import EWOULDBLOCK
 
 from Common.Status.StatusDbReader import StatusDbReader
 from Common.API import get_config, get_status
@@ -61,7 +64,8 @@ class UAVAPI(API):
         self._stopping = False
         
         # dictionary of known interfaces that should be used and the last state and time
-        self.use_interfaces = {}
+        self.use_interfaces = {} # (timestamp, status, ip)
+        self._listen_args = [Address.unknown(l) for l in di_kwargs.get("listen", [])]
         
         # Set callbacks
         self.state_change_callback(self._state_changed)
@@ -73,15 +77,8 @@ class UAVAPI(API):
     def run(self):
         self.log.info("Running")
         while not self.run_event.is_set() and not self.stop_event.is_set():                
-            current_dialers = self._get_dialers()
-            for cd in current_dialers:
-                timestamp, state = self.db_reader.get_last_status_value(cd, u"state")
-                ip = self._get_channel_value(cd, u"ip")
-                if (state == u"up" and (not cd in self.use_interfaces.iterkeys() or # Don't know about it yet
-                     (cd in self.use_interfaces.iterkeys() and self.use_interfaces[cd][1] != u"up"))): # We do know it, but it wasn't running
-                    self._tell_dispersy_if_came_up(cd)
-                self.use_interfaces[cd] = (timestamp, state, ip) # Set the newest state
-            
+            self._monitor_uav_interfaces()
+            self._parse_iproute()
             if not self.stop_event.is_set():
                 self.run_event.wait(SLEEP)
         if not self._stopping:
@@ -107,6 +104,18 @@ class UAVAPI(API):
     def on_quit(self, signal, frame):
         logger.debug("Signaled to quit")
         self.stop()
+        
+    """
+    OVERWRITE
+    """
+    def interface_came_up(self, ip, interface_name, device_name, gateway=None, port=0):
+        """
+        If the initial configuration has explicitly mentioned this ip address, then use this port
+        """
+        for l in self._listen_args:
+            if l.ip == ip:
+                port = l.port
+        API.interface_came_up(self, ip, interface_name, device_name, gateway=gateway, port=port)
         
     """
     CALLBACKS
@@ -168,15 +177,16 @@ class UAVAPI(API):
             
     def socket_state_callback(self, address, state):
         base = "swift.sockets."
-        name = self._get_device_by_address(address)
+        device = self._get_device_by_address(address)
         
-        if name is None:
-            name = "unknown"
-        # TODO: Perhaps update self.use_interfaces
+        if device is None:
+            device = "unknown"
+        status = u"up" if state in [-1, 0, EWOULDBLOCK] else u"down"
+        self.use_interfaces[device] = (time.time(), status, address.ip)
             
-        self.status[base + name + ".ip"] = address.ip
-        self.status[base + name + ".port"] = address.port
-        self.status[base + name + ".state"] = state
+        self.status[base + device + ".ip"] = address.ip
+        self.status[base + device + ".port"] = address.port
+        self.status[base + device + ".state"] = state
         
     def message_received_callback(self, message):
         self.log.info("Received message: %s", message)
@@ -187,6 +197,35 @@ class UAVAPI(API):
     """
     PRIVATE FUNCTIONS
     """
+    
+    def _monitor_uav_interfaces(self):
+        current_dialers = self._get_dialers()
+        for cd in current_dialers:
+            timestamp, state = self.db_reader.get_last_status_value(cd, u"state")
+            ip = self._get_channel_value(cd, u"ip")
+            if state == u"up" and not self._interface_running(cd):
+                self._tell_dispersy_if_came_up(cd)
+            self.use_interfaces[cd] = (timestamp, state, ip) # Set the newest state
+    
+    def _parse_iproute(self):
+        output = os.popen('ip route').read()
+        ip = self._regex_find(output, "src (\d+\.\d+\.\d+\.\d+)", None)
+        if_name = self._regex_find(output, "dev ([a-zA-Z]{3,4}\d)", None)
+        gateway = self._regex_find(output, "default via (\d+\.\d+\.\d+\.\d+)", None)
+        if ip is not None and if_name is not None:
+            device = if_name[0:-1]
+            if not self._interface_running(device):
+                self.interface_came_up(ip, if_name, device, gateway=gateway)
+                self.use_interfaces[device] = (time.time(), u"up", ip) # Set the newest state
+                
+    def _interface_running(self, device):
+        return device in self.use_interfaces.iterkeys() and self.use_interfaces[device][1] == u"up"
+        
+    def _regex_find(self, _input, _format, default):
+        m = re.search(_format, _input, re.IGNORECASE)
+        if m:
+            return m.groups()[0]
+        return default
     
     def _get_device_by_address(self, address):
         if address.interface is not None and address.interface.device is not None:
@@ -250,14 +289,8 @@ class UAVAPI(API):
         ip = self._get_channel_value(device, u"ip")
         interface = self._get_channel_value(device, u"ppp_interface")
         # Send only the device name, without any parents prepended
-        device = device[device.rfind('.') + 1:]
-        port=0
-        if device == "RadioModem":
-            try:
-                port = self.cfg.get("radio.port").get_value()
-            except AttributeError:
-                pass
-        self.interface_came_up(ip, interface, device, gateway=gateway, port=port)
+        device = device[device.rfind('.') + 1:]       
+        self.interface_came_up(ip, interface, device, gateway=gateway)
         
 if __name__ == "__main__":
     uav = UAVAPI()

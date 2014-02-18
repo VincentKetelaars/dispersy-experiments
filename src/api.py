@@ -458,13 +458,15 @@ class ReceiverAPI(PipeHandler):
         addr = Address.unknown(ip + ":" + str(port)) # Not very elegant.. But should work for ipv6 as well
         if addr.resolve_interface():
             if addr.interface.name != if_name:
-                return # Provided the wrong interface..
+                logger.warning("Interfaces do not match %s %s", addr.interface.name, if_name)
             addr.interface.device = device
             addr.interface.gateway = gateway
             if addr.interface.address is None: # In case netifaces does not recognize interface such as ppp
                 addr.interface.address = ip         
-            self.dispersy_instance._endpoint.interface_came_up(addr)               
+            self.dispersy_instance._endpoint.interface_came_up(addr)
         else:
+            addr.set_interface(if_name, ip, None, None, device=device)
+            self.send_message(MESSAGE_KEY_SOCKET_STATE, addr, -2)
             logger.debug("Bogus interface, cannot locate it")
             
     def set_API_logger(self, logger):

@@ -249,6 +249,12 @@ class Address(object):
         # TODO: Determine for IPv6 addresses
         return False
     
+    def set_interface(self, name, ip, netmask, broadcast):
+        if ip is not None and ip.count(":"):
+            self._if = Interface(name, ip, netmask, broadcast, version=AF_INET6)
+        else:
+            self._if = Interface(name, ip, netmask, broadcast, version=AF_INET)
+    
     def __eq__(self, other):
         if not isinstance(other, Address):
             return False
