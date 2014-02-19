@@ -73,8 +73,8 @@ class TestSwiftCommunity(unittest.TestCase):
         self._roothash2 = get_hash(self._filename2, SWIFT_BINPATH)
 
     def tearDown(self):
-        self._dispersy.stop()
-        self._dispersy2.stop()
+        self._dispersy.stop(timeout=0.0)
+        self._dispersy2.stop(timeout=0.0)
         for f in FILES:
             remove_files(f) # Remove hashmap and bin files
         dir_ = os.path.join(self._dest_dir, self._directories)
@@ -121,7 +121,6 @@ class TestSwiftCommunity(unittest.TestCase):
         self.add_file(self._callback, self._community, 
                       FileHashCarrier(file2, self._directories, roothash2, os.path.getsize(file2), 
                                       os.path.getmtime(file2), None))
-        # TODO: Make sure that we're not doing too many things twice
         self._wait(self._swiftcomm2)
          
         absfilename1 = os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))

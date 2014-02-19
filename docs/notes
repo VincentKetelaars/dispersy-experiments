@@ -13,6 +13,8 @@ you should still be able to use the associated Member to determine that multiple
 perhaps you should override the 'who to introduce' method, to take into account your multi-interface thing (this code should also ensure you don't introduce A(interface1) to A(interface2)
 or you will introduce a device to one of its other interfaces, so you may want to filter out those introductions (to prevent a device to talk to itself)
 
+How can we use the multifile capabilities to our benefit?
+
 LIBSWIFT:
 
 Set LD_LIBRARY_PATH for swift to work

@@ -115,10 +115,9 @@ MIN_TIME_BETWEEN_ADDRESSES_MESSAGE = 10.0 # Seconds
 FILETYPES_NOT_TO_SEND = [".mhash",".mbinmap"]
 FILENAMES_NOT_TO_SEND = ["swifturl-"]
 
-# Private addresses
+# Private addresses, including loopback
 PRIVATE_IPV4_ADDRESSES = [("127.0.0.0", "255.0.0.0"), ("10.0.0.0", "255.0.0.0"), ("172.16.0.0", "255.240.0.0"), 
                      ("192.168.0.0", "255.255.0.0")]
-# TODO: Should the Loopback address range be kept in here?
 
 """
 Swift

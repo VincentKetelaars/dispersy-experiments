@@ -36,6 +36,7 @@ from src.definitions import MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, M
     REACHABLE_ENDPOINT_RETRY_ADDRESSES, PUNCTURE_RESPONSE_MESSAGE_NAME
 from src.dispersy_contact import DispersyContact
 from src.peer import Peer
+from src.tools.priority_stack import PriorityStack
 
 logger = get_logger(__name__)
 
@@ -63,8 +64,8 @@ class SwiftHandler(TunnelEndpoint):
         self._swift_cmd_queue = Queue.Queue()
         self._dequeueing_cmd_queue = False
         self._started_downloads = set()
-        self._swift_download_stack = []
-        self._swift_upload_stack = []
+        self._swift_download_stack = PriorityStack()
+        self._swift_upload_stack = PriorityStack()
         self._added_peers = set()
         self._peers_to_add = set()
         self._closing = False
@@ -123,7 +124,8 @@ class SwiftHandler(TunnelEndpoint):
         if not d.get_def().get_roothash() in self._started_downloads:
             return self._peers_to_add.add((d, addr, sock_addr))
         if not any([addr == a and d.get_def().get_roothash() == h and sock_addr == s for a, h, s in self._added_peers]):
-            # TODO: Determine of the endpoint can actually reach this endpoint
+            # It could very well be that this endpoint has no way of reaching this peer's endpoint
+            # We open the channel up regardless and rely on swift and regularly checking to kill this channel if it doesn't work out
             self._swift.add_peer(d, addr, sock_addr)
             self._added_peers.add((addr, d.get_def().get_roothash(), sock_addr))
     
@@ -195,7 +197,6 @@ class SwiftHandler(TunnelEndpoint):
         logger.debug("Restart swift called")
         self.lock.acquire()
         # Don't restart on close, or if you are already resetting
-        # TODO: In case a restart is necessary while restarting (e.g. can't bind to socket)
         if (not self._closing and not self._resetting and 
             (not self._waiting_on_cmd_connection or error_code == SWIFT_ERROR_TCP_FAILED) 
             and not self._swift.is_running()):
@@ -211,10 +212,11 @@ class SwiftHandler(TunnelEndpoint):
                 self._swift.donestate = DONE_STATE_EARLY_SHUTDOWN
                 self._swift.network_shutdown() # Ensure that swift really goes down
                 
-            # TODO: Don't allow sockets that are in use to be tried by Libswift
+            # We now assume that all sockets have been killed
             
             # Make sure not to make the same mistake as what let to this
-            # Any roothash added twice will create an error, leading to this. 
+            # Only add the addresses of sockets that have proven to be working
+            # FIXME: In case the first of multiple sockets cannot be bound, the others won't be added either
             self._swift = MySwiftProcess(self._swift.binpath, self._swift.workdir, None, 
                                          self._swift.working_sockets, None, None, None)
             self.set_callbacks()
@@ -264,16 +266,8 @@ class SwiftHandler(TunnelEndpoint):
         self.socket_running = state
         
     def put_swift_upload_stack(self, func, size, timestamp, priority=0, args=(), kwargs={}):
-        self.put_swift_stack(self._swift_upload_stack, func, size, timestamp, priority, args, kwargs)
-        self.evaluate_swift_swarms()
-                
-    def put_swift_download_stack(self, func, size, timestamp, priority=0, args=(), kwargs={}):
-        self.put_swift_stack(self._swift_download_stack, func, size, timestamp, priority, args, kwargs)        
-        self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
-        
-    def put_swift_stack(self, stack, func, size, timestamp, priority=0, args=(), kwargs={}):
         """
-        Put (func, size, timestamp) on stack
+        Put (func, size, timestamp, args, kwargs) on upload stack
         Sort by increasing priority first then increasing timestamp
         @param func: Function that will be executed when popped of the stack
         @param size: Size of the file
@@ -282,37 +276,42 @@ class SwiftHandler(TunnelEndpoint):
         @param priority: priority of the file
         @type priority: int
         """
-        i = len(stack)
-        for i in range(len(stack) - 1, -1, -1): # Starting at the end
-            if stack[i][3] < priority or (stack[i][3] == priority and stack[i][2] < timestamp):
-                i += 1
-                break
-        # TODO: Implement binary search two increase insert speed
-        stack[i:i] = [(func, size, timestamp, priority, args, kwargs)]
-        logger.debug("Put file of size %d, timestamp %f, with priority %d at position %d", 
-                     size, timestamp, priority, i)
+        self._swift_upload_stack.put((priority, timestamp), (func, size, timestamp, args, kwargs))
+        self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
+                
+    def put_swift_download_stack(self, func, size, timestamp, priority=0, args=(), kwargs={}):
+        """
+        Put (func, size, timestamp, args, kwargs) on download stack
+        Sort by increasing priority first then increasing timestamp
+        @param func: Function that will be executed when popped of the stack
+        @param size: Size of the file
+        @param timestamp: Modification / creation time of file
+        @type timestamp: float (Important that it is comparable)
+        @param priority: priority of the file
+        @type priority: int
+        """
+        self._swift_download_stack.put((priority, timestamp), (func, size, timestamp, args, kwargs))
+        self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
         
     def pop_swift_upload_stack(self):
-        item = self.pop_swift_stack(self._swift_upload_stack)
+        """
+        Pop (func, size, timestamp, args, kwargs) from upload stack
+        """
+        item = self._swift_upload_stack.pop()
         if item is not None:
-            item[0](*item[4], **item[5]) # Call function
+            logger.debug("Pop file of size %d with timestamp %f and function arguments %s %s of upload stack", 
+                         item[1], item[2], item[3], item[4])
+            item[0](*item[3], **item[4]) # Call function
         
-    def pop_swift_download_stack(self):        
-        item = self.pop_swift_stack(self._swift_download_stack)
+    def pop_swift_download_stack(self):
+        """
+        Pop (func, size, timestamp, args, kwargs) from download stack
+        """
+        item = self._swift_download_stack.pop()
         if item is not None:
-            item[0](*item[4], **item[5]) # Call function
-    
-    def pop_swift_stack(self, stack):
-        """
-        Pop (func, size, timestamp, priority) from stack
-        @return: None if empty, (func, size, timestamp, priority) otherwise
-        """
-        if len(stack) == 0:
-            return None
-        item = stack.pop()
-        logger.debug("Pop file of size %d, timestamp %f, with priority %d and function arguments %s %s", 
-                     item[1], item[2], item[3], item[4], item[5])
-        return item
+            logger.debug("Pop file of size %d with timestamp %f and function arguments %s %s of download stack", 
+                         item[1], item[2], item[3], item[4])
+            item[0](*item[3], **item[4]) # Call function
     
     def evaluate_swift_swarms(self):
         """
@@ -392,12 +391,12 @@ class CommonEndpoint(SwiftHandler):
         """
         # Wan addresses can change over time for an endpoint
         # We assume the lan address to be unique
-        # TODO: Perhaps allow for private wan as well, when private lan is not same subnet
         if self._wan_voters.get(sender_lan) == address:
             return  # Same vote as last time
         if self._wan_voters.get(sender_lan) is not None: # So we have a new vote
             self._wan_address[address] = self._wan_address.get(self._wan_voters.get(sender_lan), 0) - 1 # Get rid of the old vote
-        if not sender_wan.is_private_address(): # We're not going to give the private addresses more votes
+        # We're not going to give the private or wildcard addresses more votes
+        if not (address.is_private_address() or address.is_wildcard_ip()): 
             self._wan_address[address] = self._wan_address.get(address, 0) + 1 # Increment
             self._wan_voters[sender_lan] = address # Update vote
             logger.info("Got a vote for %s to %s from %s", str(self.address), str(address), str(sender_lan))
@@ -436,7 +435,7 @@ class CommonEndpoint(SwiftHandler):
             if dc.has_address(contact.address):
                 dc.merge(contact)
                 if recv and dc.total_rcvd() == contact.total_rcvd(): # First time receiving anything
-                    return community, contact
+                    return community, dc
                 return community, None
         self.dispersy_contacts.add(contact)
         if recv:
@@ -449,23 +448,24 @@ class CommonEndpoint(SwiftHandler):
             if dc.member_id == mid or dc.peer.has_any(lan_addresses + wan_addresses, ids=ids): # Both lan and wan can have arrived
                 same_contacts.append(dc)
         # Quite possibly some of these addresses are not public, and may therefore not be reachable by each local address
-        new_peer = Peer(lan_addresses, wan_addresses, ids, member_id=mid)
         if len(same_contacts) == 0: # Can happen with endpoints that have not had contact yet
-            dc = DispersyContact(lan_addresses[0], peer=new_peer, community_id=community.cid, 
+            dc = DispersyContact(lan_addresses[0], community_id=community.cid, 
                                  addresses_received=True, member_id=mid)
             self.dispersy_contacts.add(dc)
-            return dc
         elif len(same_contacts) == 1: # The normal case
-            same_contacts[0].set_peer(new_peer, True) # update the peer to include all addresses
+            dc = same_contacts[0]
         else: # Merge same_contacts into one
-            self.dispersy_contacts.difference_update(set(same_contacts[1:])) # Remove all but first from set
-            for i in range(1,len(same_contacts)):
-                same_contacts[0].merge(same_contacts[i]) # Merge statistics
-            same_contacts[0].set_peer(new_peer, True)
-        if not same_contacts[0].address in lan_addresses: # Make sure the primary address is still in use!
-            same_contacts[0].address = lan_addresses[0] # TODO: Make better choice!
-        same_contacts[0].member_id = mid
-        return same_contacts[0]
+            self.dispersy_contacts.difference_update(set(same_contacts)) # Remove all but first from set
+            for c in same_contacts:
+                if c.address in lan_addresses + wan_addresses: # At least one of them matches the description
+                    dc = c
+            for c in same_contacts:
+                if c != dc: # Merge with the others
+                    dc.merge(c) # Merge
+            self.dispersy_contacts.add(dc)
+        dc.member_id = mid # Set member id
+        dc.set_peer(Peer(lan_addresses, wan_addresses, ids, member_id=mid), True) # update the peer to include all addresses
+        return dc
     
     def get_community(self, community_id):
         try:

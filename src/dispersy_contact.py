@@ -188,7 +188,8 @@ class DispersyContact(object):
     def __eq__(self, other):
         if not isinstance(other, DispersyContact):
             return False
-        if self.address == other.address:
+        # TODO: Do we need a better comparison?
+        if self.address == other.address and self.bytes_rcvd == other.bytes_rcvd and self.bytes_sent == other.bytes_sent: 
             return True
         return False
         
