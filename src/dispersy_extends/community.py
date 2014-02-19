@@ -191,20 +191,21 @@ class MyCommunity(Community):
         # Make sure you have the filename, and a proper hash
         if isfile(file_hash_message.filename) and file_hash_message.roothash is not None and len(file_hash_message.roothash) == HASH_LENGTH:
             meta = self.get_meta_message(FILE_HASH_MESSAGE_NAME)
-            # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
-            messages = [meta.impl(authentication=(self.my_member,), 
+            
+            # Messages need to be created only when they are sent, otherwise peers get sequence errors
+            def send_messages():
+                messages = [meta.impl(authentication=(self.my_member,), 
                                   distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
                                   payload=(file_hash_message.filename, file_hash_message.directories, 
                                            file_hash_message.roothash, file_hash_message.size, 
                                            file_hash_message.timestamp, self._addresses()))
                         # TODO: Perhaps only send active sockets?
                         for _ in xrange(count)]
-            
-            def send_messages():
                 self.dispersy.callback.register(self.dispersy.store_update_forward, args=(messages, store, update, forward), delay=delay)
                 
             # Let Swift know that it should seed this file
-            self.swift_community.add_file(file_hash_message.filename, file_hash_message.roothash, messages[0].destination,
+            # Nasty hack to get the destination implementation
+            self.swift_community.add_file(file_hash_message.filename, file_hash_message.roothash, meta.destination.Implementation(meta),
                                           file_hash_message.size, file_hash_message.timestamp, send_messages)
                 
     def create_addresses_messages(self, count, addresses_message, candidates, store=True, update=True, forward=True):

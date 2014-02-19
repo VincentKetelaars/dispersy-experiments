@@ -33,11 +33,7 @@ class TestSwiftCommunity(unittest.TestCase):
         logger.debug("%d %s %s", key, args, kwargs)
     
     def add_file(self, callback, community, message):
-        self.event = Event()
-        def done(arg):
-            self.event.set()        
-        callback.register(community.create_file_hash_messages, (1, message), kargs={"update":False}, delay=0.0, callback=done)
-        self.event.wait(1)
+        community.create_file_hash_messages(1, message, 0.0, update=False)
         
     def candidate(self, addr):
         return EligibleWalkCandidate(addr, True, addr, addr, u"unknown")
@@ -170,8 +166,6 @@ class TestSwiftCommunity(unittest.TestCase):
             if check:
                 break
             time.sleep(SLEEP_TIME)
-
-    # TODO: Create test that will see if Endpoint handles no Swift well
 
 if __name__ == "__main__":
     unittest.main()

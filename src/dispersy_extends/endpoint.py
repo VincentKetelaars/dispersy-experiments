@@ -914,7 +914,8 @@ class MultiEndpoint(CommonEndpoint):
             if (e.address.ip == addr.ip or e.address.interface.name == addr.interface.name or
                 e.address.interface.device == addr.interface.device):
                 # Don't try and overwrite this endpoint if it is working or trying to work
-                if e.socket_running or e.socket_initializing(): 
+                if e.socket_running or e.socket_initializing():
+                    logger.debug("Interface is already up and running")
                     return
                 e.socket_running = -1 # This new socket is not yet running, so initialize to -1
                 addr.set_port(e.address.port) # Use the old port
@@ -930,8 +931,8 @@ class MultiEndpoint(CommonEndpoint):
         Note that if we have received a message from a new contact, the new addresses will be send a list of local sockets        
         """
         community, new_recv = CommonEndpoint.update_dispersy_contacts(self, sock_addr, packets, recv=recv)
-#         if new_recv is not None:
-#             self.send_addresses_to_communities(community, new_recv)
+        if new_recv is not None:
+            self.send_addresses_to_communities(community, new_recv)
         return community, new_recv
             
     def send_addresses_to_communities(self, community, contact):
