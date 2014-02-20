@@ -132,9 +132,10 @@ class DispersyContact(object):
             return max(self.last_send_time[self.address], self.last_recv_time[self.address])
         return max(self.last_send_time.get(address, datetime.min), self.last_recv_time.get(address, datetime.min))
     
-    def no_contact_since(self, expiration_time=ENDPOINT_CONTACT_TIMEOUT):
+    def no_contact_since(self, expiration_time=ENDPOINT_CONTACT_TIMEOUT, lan=None, wan=None):
         addrs = []
-        for a in self.reachable_addresses:
+        own_addresses = self.reachable_addresses if lan is None and wan is None else self.get_peer_addresses(lan, wan)
+        for a in own_addresses:
             if (self.last_rcvd(a) + timedelta(seconds=expiration_time) < datetime.utcnow() or
                 self.last_sent(a) + timedelta(seconds=expiration_time) < datetime.utcnow()): # Timed out
                 addrs.append(a)

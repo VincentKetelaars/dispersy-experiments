@@ -196,8 +196,6 @@ class Address(object):
         return self.port == 0
     
     def resolve_interface(self):
-#         if self.family == AF_INET6:
-#             return False # TODO: Handle this
         if self.interface_exists():
             return True
         if self.is_wildcard_ip():
@@ -216,8 +214,6 @@ class Address(object):
         """
         if interface is None:
             interface = self._if
-        if interface is None:
-            return False # TODO: Not false, but unknown, raise exception?
         if self.family == AF_INET6:
             return (self.ipv6_str_to_int(ip) & self.ipv6_str_to_int(interface.netmask) ==
                     self.ipv6_str_to_int(self.ip) & self.ipv6_str_to_int(interface.netmask))

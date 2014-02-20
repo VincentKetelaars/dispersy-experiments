@@ -202,7 +202,7 @@ class SwiftCommunity(object):
         @param add_known: Boolean that determines if all known peers should be added to this download
         @return: Download
         """
-        logger.debug("Add to known downloads, %s %s %d %f %s %s %s", binascii.hexlify(roothash), filename, size, timestamp, seed, download)
+        logger.debug("Add to known downloads, %s %s %d %f %s %s", binascii.hexlify(roothash), filename, size, timestamp, seed, download)
         d = Download(roothash, filename, download_impl, size, timestamp, self.dcomm.cid, seed=seed, download=download, moreinfo=MOREINFO, destination=destination)
         self.downloads[roothash] = d
         return d

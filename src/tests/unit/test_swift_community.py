@@ -6,7 +6,6 @@ Created on Jan 7, 2014
 import unittest
 import os
 import time
-from threading import Event
 
 from src.swift.swift_process import MySwiftProcess # Before other import because of logger
 from dispersy.callback import Callback

@@ -46,6 +46,13 @@ class FakeCommunity():
     
 class FakeCommonEndpoint(CommonEndpoint):
     
+    def open(self, dispersy):
+        self._dispersy = dispersy
+        return True
+    
+    def get_address(self):
+        return ("0.0.0.0", 0)
+    
     def get_community(self, cid):
         return FakeCommunity()
     
