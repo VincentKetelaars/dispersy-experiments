@@ -14,7 +14,7 @@ class MyDispersy(Dispersy):
     def on_swift_restart(self, q, roothashes):
         """
         When a Swift instance fails, a new instance is created. 
-        This new instance needs to be notified of its downloads and peers.
+        This new instance needs to be notified of its downloads.
         This method asks each SwiftCommunity to add endpoint functions to the queue.
         q.put((func, (args), {kwargs}))
         """

@@ -144,7 +144,7 @@ class TestCommonEndpoint(unittest.TestCase):
         ids = [os.urandom(16)]
         dc = self.common.peer_endpoints_received(community, mid, lan_addresses, wan_addresses, ids)
         self.assertEqual(len(self.common.dispersy_contacts), 1)
-        self.assertEqual(dc.peer, Peer(lan_addresses, wan_addresses, ids))
+        self.assertEqual(dc.peer, Peer(lan_addresses, wan_addresses, ids, mid))
         self.assertEqual(dc.member_id, mid)
         self.assertEqual(len(dc.community_ids), 1)
         self.assertEqual(iter(dc.community_ids).next(), community.cid)
@@ -163,7 +163,7 @@ class TestCommonEndpoint(unittest.TestCase):
         comm, first_contact = self.common.update_dispersy_contacts(wan_addresses[0].addr(), ["asdf"], recv=True)
         dc = self.common.peer_endpoints_received(community, mid, lan_addresses, wan_addresses, ids)
         self.assertEqual(first_contact, dc)
-        self.assertEqual(dc.peer, Peer(lan_addresses, wan_addresses, ids))
+        self.assertEqual(dc.peer, Peer(lan_addresses, wan_addresses, ids, mid))
         self.assertEqual(len(self.common.dispersy_contacts), 1)
         
     def test_two_contacts_one_peer(self):
@@ -177,7 +177,7 @@ class TestCommonEndpoint(unittest.TestCase):
         comm, second_contact = self.common.update_dispersy_contacts(wan_addresses[0].addr(), ["asdf"], recv=True)
         dc = self.common.peer_endpoints_received(community, mid, lan_addresses, wan_addresses, ids)
         self.assertIn(dc, [first_contact, second_contact])
-        self.assertEqual(dc.peer, Peer(lan_addresses, wan_addresses, ids))
+        self.assertEqual(dc.peer, Peer(lan_addresses, wan_addresses, ids, mid))
         self.assertEqual(len(self.common.dispersy_contacts), 1)
     
 class TestMultiEndpoint(unittest.TestCase):

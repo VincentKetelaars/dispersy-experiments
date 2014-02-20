@@ -421,7 +421,7 @@ class CommonEndpoint(SwiftHandler):
         Get all peers that live in this community represented by the community id
         @param cid: community id
         """
-        return [dc.peer for dc in self.dispersy_contacts if dc.has_community(cid)]
+        return [dc.peer for dc in self.dispersy_contacts if dc.has_community(cid) and dc.peer is not None]
         
     def update_dispersy_contacts(self, sock_addr, packets, recv=True):
         """
@@ -457,7 +457,7 @@ class CommonEndpoint(SwiftHandler):
     def peer_endpoints_received(self, community, mid, lan_addresses, wan_addresses, ids):
         same_contacts = []
         for dc in self.dispersy_contacts:
-            if dc.member_id == mid or dc.peer.has_any(lan_addresses + wan_addresses, ids=ids): # Both lan and wan can have arrived
+            if dc.member_id == mid or dc.has_any(lan_addresses + wan_addresses, ids=ids): # Both lan and wan can have arrived
                 same_contacts.append(dc)
         # Quite possibly some of these addresses are not public, and may therefore not be reachable by each local address
         if len(same_contacts) == 0: # Can happen with endpoints that have not had contact yet
@@ -476,7 +476,7 @@ class CommonEndpoint(SwiftHandler):
                     dc.merge(c) # Merge
             self.dispersy_contacts.add(dc)
         dc.member_id = mid # Set member id
-        dc.set_peer(Peer(lan_addresses, wan_addresses, ids, member_id=mid), True) # update the peer to include all addresses
+        dc.set_peer(Peer(lan_addresses, wan_addresses, ids, mid), True) # update the peer to include all addresses
         return dc
     
     def get_community(self, community_id):
@@ -872,6 +872,8 @@ class MultiEndpoint(CommonEndpoint):
         # In case an endpoint has not done any sending or receiving (Tunnelled or not), ensure the socket is still working
         for e in self.swift_endpoints:
             for dc in e.dispersy_contacts:
+                if not dc.addresses_received:
+                    continue
                 addrs = set(dc.no_contact_since(expiration_time=ENDPOINT_CONTACT_TIMEOUT)).difference(set([c[1] for c in self._get_channels(dc)]))
                 if len(addrs) > 0:
                     [logger.info("%s has %s received and %s sent from/to %s in communities %s", str(e.address), dc.last_rcvd(a), 
@@ -1061,7 +1063,7 @@ class MultiEndpoint(CommonEndpoint):
         for e in self.swift_endpoints + [self]:
             dc = e.get_contact(sender_lan, mid=member.mid)
             if dc is not None:
-                dc.peer.update_address(sender_lan, sender_wan, sender_id)
+                dc.update_address(sender_lan, sender_wan, sender_id, member.mid)
                 
     def incoming_puncture_response_message(self, member, sender_lan, sender_wan, vote_address, endpoint_id):
         pass
@@ -1071,7 +1073,7 @@ class MultiEndpoint(CommonEndpoint):
         for e in self.swift_endpoints + [self]:
             dc = e.get_contact(sender_lan, mid=member.mid)
             if dc is not None:
-                dc.peer.update_address(sender_lan, sender_wan, endpoint_id)
+                dc.update_address(sender_lan, sender_wan, endpoint_id, member.mid)
         if dc.addresses_sent + timedelta(seconds=MIN_TIME_BETWEEN_ADDRESSES_MESSAGE) < datetime.utcnow():
             self.send_addresses_to_communities(community, dc)
                 

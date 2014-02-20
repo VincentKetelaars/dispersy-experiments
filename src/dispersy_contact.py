@@ -5,11 +5,11 @@ Created on Nov 21, 2013
 '''
 
 from datetime import datetime, timedelta
-from src.download import Peer
 from src.address import Address
 
 from src.logger import get_logger
 from src.definitions import ENDPOINT_CONTACT_TIMEOUT
+from src.peer import Peer
 logger = get_logger(__name__)
 
 class DispersyContact(object):
@@ -27,7 +27,7 @@ class DispersyContact(object):
         self.bytes_sent = {}
         self.bytes_rcvd = {}
         self.community_ids = [community_id] if community_id is not None else []
-        self.peer = Peer([address]) if peer is None else peer
+        self.peer = peer
         self._unreachable_addresses = set()
         self._addresses_received = datetime.utcnow() if addresses_received else datetime.min
         self._addresses_sent = datetime.min
@@ -37,17 +37,21 @@ class DispersyContact(object):
     @classmethod
     def shallow_copy(cls, contact):
         assert isinstance(contact, DispersyContact)
-        dc = DispersyContact(contact.address, peer=contact.peer) # Should these be copies?
-        dc.community_ids = contact.community_ids
+        dc = DispersyContact(contact.address, peer=contact.peer) # TODO: Should these be copies?
+        dc.community_ids = list(contact.community_ids)
         return dc
+    
+    @property
+    def addresses(self):
+        return self.peer.addresses if self.peer is not None else set([self.address])
         
     @property
     def reachable_addresses(self):
-        return set(self.peer.addresses).difference(self._unreachable_addresses)
+        return list(self.addresses.difference(self._unreachable_addresses))
     
     @property
     def confirmed_addresses(self):
-        return [a for a in self.peer.addresses if self.last_rcvd(a) > datetime.min]
+        return [a for a in self.addresses if self.last_rcvd(a) > datetime.min]
     
     @property
     def addresses_received(self):
@@ -76,6 +80,8 @@ class DispersyContact(object):
         self._addresses_requested = datetime.utcnow()
     
     def get_peer_addresses(self, lan, wan):
+        if self.peer is None:
+            return [self.address]
         return [l if wan.ip == w.ip else w for l, w in self.peer._addresses.itervalues()]
     
     def add_community(self, cid):
@@ -154,6 +160,17 @@ class DispersyContact(object):
         @type address: Address
         """
         return address == self.address or (self.peer is not None and self.peer.has_any([address]))
+    
+    def has_any(self, addresses, ids=[]):
+        if self.peer is None:
+            return self.address in addresses
+        return self.peer.has_any(addresses, ids)
+    
+    def update_address(self, lan_address, wan_address, endpoint_id, mid):
+        if self.peer is None:
+            self.peer = Peer(lan_address, wan_address, endpoint_id, mid)
+        else:
+            self.peer.update_address(lan_address, wan_address, endpoint_id)
     
     def merge(self, contact):
         self.merge_stats(contact)
