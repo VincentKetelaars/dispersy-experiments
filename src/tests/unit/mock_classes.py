@@ -5,6 +5,7 @@ Created on Oct 3, 2013
 '''
 
 import os
+from src.swift.swift_process import MySwiftProcess
 from src.dispersy_extends.endpoint import CommonEndpoint
             
 class FakeDispersy(object):
@@ -16,7 +17,7 @@ class FakeDispersy(object):
     def lan_address(self):
         return self._lan_address
     
-class FakeSwift(object):
+class FakeSwift(MySwiftProcess):
     
     def __init__(self, addresses):
         self.working_sockets = set(addresses)

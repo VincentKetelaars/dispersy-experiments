@@ -34,6 +34,10 @@ class Test(unittest.TestCase):
         new_wan = Address(ip="12.231.21.21", port=234)
         self.peer.update_wan(self.lan, new_wan)
         self.assertEqual(self.peer.wan_addresses, [new_wan])
+        
+    def test_peer_equal(self):
+        self.assertEqual(Peer([Address(ip="0.1.2.3", port=4235), Address(ip="0.1.2.6", port=42356)]),
+                         Peer([Address(ip="0.1.2.3", port=4235), Address(ip="0.1.2.6", port=42356)]))
 
 if __name__ == "__main__":
     unittest.main()

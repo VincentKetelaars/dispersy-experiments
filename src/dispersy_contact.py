@@ -78,9 +78,15 @@ class DispersyContact(object):
     def get_peer_addresses(self, lan, wan):
         return [l if wan.ip == w.ip else w for l, w in self.peer._addresses.itervalues()]
     
-    def add_community(self, id_):
-        if not id_ in self.community_ids:
-            self.community_ids.append(id_)
+    def add_community(self, cid):
+        if not cid in self.community_ids:
+            self.community_ids.append(cid)
+            
+    def has_community(self, cid):
+        for c in self.community_ids:
+            if c == cid:
+                return True
+        return False
         
     def add_unreachable_address(self, address):
         self._unreachable_addresses.add(address)

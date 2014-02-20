@@ -238,3 +238,6 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
                  'total_down' : self.midict['bytes_down'] / 1024.0}        
 
         return (plist, total)
+    
+    def __hash__(self):
+        return self.get_def().get_roothash()

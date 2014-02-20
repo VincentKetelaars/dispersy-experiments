@@ -63,11 +63,10 @@ class SwiftHandler(TunnelEndpoint):
         self._waiting_on_cmd_connection = False
         self._swift_cmd_queue = Queue.Queue()
         self._dequeueing_cmd_queue = False
-        self._started_downloads = set()
+        self._started_downloads = {}
         self._swift_download_stack = PriorityStack()
         self._swift_upload_stack = PriorityStack()
-        self._added_peers = set()
-        self._peers_to_add = set()
+        self._added_peers = {}
         self._closing = False
         
         self.lock = RLock() # Reentrant Lock
@@ -121,34 +120,37 @@ class SwiftHandler(TunnelEndpoint):
         """
         if d is None or d.bad_swarm:
             return
-        if not d.get_def().get_roothash() in self._started_downloads:
-            return self._peers_to_add.add((d, addr, sock_addr))
-        if not any([addr == a and d.get_def().get_roothash() == h and sock_addr == s for a, h, s in self._added_peers]):
+        roothash = d.get_def().get_roothash()
+        if not roothash in self._started_downloads.keys():
+            return
+        peer_set = self._added_peers.get(roothash, set())
+        if not any([addr == a and sock_addr == s for a, s in peer_set]):
             # It could very well be that this endpoint has no way of reaching this peer's endpoint
             # We open the channel up regardless and rely on swift and regularly checking to kill this channel if it doesn't work out
             self._swift.add_peer(d, addr, sock_addr)
-            self._added_peers.add((addr, d.get_def().get_roothash(), sock_addr))
+            peer_set.add((addr, sock_addr))
+            self._added_peers[roothash] = peer_set
     
     @_swift_runnable_decorator    
     def swift_checkpoint(self, d):
         """
         @type d: SwiftDownloadImpl
         """
-        if d is not None and d.get_def().get_roothash() in self._started_downloads and not d.bad_swarm:
+        if d is not None and d.get_def().get_roothash() in self._started_downloads.keys() and not d.bad_swarm:
             self._swift.checkpoint_download(d)
             d.checkpointing()
     
     @_swift_runnable_decorator  
-    def swift_start(self, d):
+    def swift_start(self, d, cid):
         """
         @type d: SwiftDownloadImpl
         """
-        if not d.get_def().get_roothash() in self._started_downloads:
-            self._started_downloads.add(d.get_def().get_roothash())
+        if not d.get_def().get_roothash() in self._started_downloads.keys():
+            if d.bad_swarm:
+                return logger.debug("%s is a bad swarm", d.get_def().get_roothash_as_hex())
+            self._started_downloads[d.get_def().get_roothash()] = cid
             self._swift.start_download(d)
-            for peer in self._peers_to_add:
-                if peer[0].get_def().get_roothash() == d.get_def().get_roothash():
-                    self.swift_add_peer(*peer)
+            self.add_peers_to_new_download(d, cid)
         else:
             logger.warning("This roothash %s was already started!", d.get_def().get_roothash_as_hex())
     
@@ -158,7 +160,7 @@ class SwiftHandler(TunnelEndpoint):
         @type d: SwiftDownloadImpl
         @type yes: boolean
         """
-        if d is not None and d.get_def().get_roothash() in self._started_downloads and not d.bad_swarm:
+        if d is not None and d.get_def().get_roothash() in self._started_downloads.keys() and not d.bad_swarm:
             self._swift.set_moreinfo_stats(d, yes)
     
     @_swift_runnable_decorator
@@ -168,9 +170,9 @@ class SwiftHandler(TunnelEndpoint):
         @type rm_state: boolean
         @type rm_content: boolean
         """
-        if d is not None and d.get_def().get_roothash() in self._started_downloads and not d.bad_swarm:
-            self._started_downloads.remove(d.get_def().get_roothash())
-            self._added_peers.difference_update([a for a in self._added_peers if a[1] == d.get_def().get_roothash()])            
+        if d is not None and d.get_def().get_roothash() in self._started_downloads.keys() and not d.bad_swarm:
+            del self._started_downloads[d.get_def().get_roothash()]
+            del self._added_peers[d.get_def().get_roothash()]
             self._swift.remove_download(d, rm_state, rm_content)
     
     @_swift_runnable_decorator
@@ -179,7 +181,7 @@ class SwiftHandler(TunnelEndpoint):
         @type d: SwiftDownloadImpl
         @type enable: boolean
         """
-        if d is not None and d.get_def().get_roothash() in self._started_downloads and not d.bad_swarm:
+        if d is not None and d.get_def().get_roothash() in self._started_downloads.keys() and not d.bad_swarm:
             self._swift.set_pex(d.get_def().get_roothash_as_hex(), enable)
             
     @_swift_runnable_decorator
@@ -203,8 +205,7 @@ class SwiftHandler(TunnelEndpoint):
             self._resetting = True # Probably not necessary because of the lock
             logger.info("Resetting swift")
             self.do_callback(MESSAGE_KEY_SWIFT_STATE, STATE_RESETTING, error_code=error_code)
-            self._added_peers = set() # Reset the peers added before restarting
-            self._started_downloads = set() # Reset the started downloads before restarting
+            self._added_peers = {} # Reset the peers added before restarting
             
             # Try the sockets to see if they are in use
             if not try_sockets(self._swift.working_sockets, timeout=1.0):
@@ -230,9 +231,10 @@ class SwiftHandler(TunnelEndpoint):
                 temp_queue.put(self._swift_cmd_queue.get())
             
             try:
-                self._dispersy.on_swift_restart(temp_queue)    
+                self._dispersy.on_swift_restart(temp_queue, self._started_downloads.keys())    
             except AttributeError:
-                pass           
+                pass                
+            self._started_downloads = {} # Reset the started downloads before restarting
                             
             while not temp_queue.empty():
                 self._swift_cmd_queue.put(temp_queue.get())
@@ -366,6 +368,9 @@ class SwiftHandler(TunnelEndpoint):
         finally:
             self.lock.release()
         return d
+    
+    def add_peers_to_new_download(self, downloadimpl, cid):
+        pass
         
 class CommonEndpoint(SwiftHandler):
     
@@ -410,6 +415,13 @@ class CommonEndpoint(SwiftHandler):
                 self._dispersy._bootstrap_candidates.get(candidate.sock_addr) is not None):
                 return True
         return False
+    
+    def peers(self, cid):
+        """
+        Get all peers that live in this community represented by the community id
+        @param cid: community id
+        """
+        return [dc.peer for dc in self.dispersy_contacts if dc.has_community(cid)]
         
     def update_dispersy_contacts(self, sock_addr, packets, recv=True):
         """
@@ -520,12 +532,6 @@ class MultiEndpoint(CommonEndpoint):
                     self.enqueue_swift_queue(self.send, candidates, packets)
                 return False
             logger.debug("Send %s %d", [c.sock_addr for c in candidates], len(packets))
-            
-            # If filehash message, let SwiftCommunity know the peers!
-            name = self._dispersy.convert_packet_to_meta_message(packets[0], load=False, auto_load=False).name
-            # TODO: Should we only check packet 0? I.e. can packets of different kinds go together?
-            if name == FILE_HASH_MESSAGE_NAME:
-                self._dispersy.notify_filehash_peers([Address.tuple(c.sock_addr) for c in candidates])
             
             for c in candidates:
                 new_c = self.determine_endpoint(c, packets)
@@ -933,6 +939,7 @@ class MultiEndpoint(CommonEndpoint):
         community, new_recv = CommonEndpoint.update_dispersy_contacts(self, sock_addr, packets, recv=recv)
         if new_recv is not None:
             self.send_addresses_to_communities(community, new_recv)
+            self.add_peer_to_started_downloads(new_recv)
         return community, new_recv
             
     def send_addresses_to_communities(self, community, contact):
@@ -976,7 +983,7 @@ class MultiEndpoint(CommonEndpoint):
                 self.add_endpoint(address)
         self.dequeue_swift_queue()
         if state == 0:
-            for addr, roothash, sock_addr in self._added_peers:
+            for roothash, (addr, sock_addr) in self._added_peers.iteritems():
                 if sock_addr != address:
                     d = self.retrieve_download_impl(roothash)
                     if d is not None:
@@ -1001,9 +1008,25 @@ class MultiEndpoint(CommonEndpoint):
         
     def peer_endpoints_received(self, community, member, addresses, wan_addresses, ids):
         logger.debug("Addresses of peer arrived %s, %s, %s", community, [str(a) for a in addresses], [str(i) for i in ids])
-        CommonEndpoint.peer_endpoints_received(self, community, member.mid, addresses, wan_addresses, ids)
+        dc = CommonEndpoint.peer_endpoints_received(self, community, member.mid, addresses, wan_addresses, ids)
+        self.add_peer_to_started_downloads(dc)
         for e in self.swift_endpoints:
-            e.peer_endpoints_received(community, member, addresses, wan_addresses, ids)            
+            e.peer_endpoints_received(community, member, addresses, wan_addresses, ids)
+            
+    def add_peer_to_started_downloads(self, contact):
+        logger.debug("Adding contact %s to our %d downloads", str(contact), len(self._started_downloads))
+        for h, cid in self._started_downloads.iteritems():
+            if contact.has_community(cid):
+                for addr in contact.reachable_addresses: # TODO: We're going over addresses twice now..
+                    self.swift_add_peer(self.retrieve_download_impl(h), addr, None)
+                # TODO: Remove those that are no longer designated as reachable?
+                
+    def add_peers_to_new_download(self, downloadimpl, cid):
+        logger.debug("Adding peers to new download %s", downloadimpl.get_def().get_roothash_as_hex())
+        for contact in self.dispersy_contacts:
+            if contact.has_community(cid):
+                for addr in contact.reachable_addresses: # TODO: We're going over addresses twice now..
+                    self.swift_add_peer(downloadimpl, addr, None)
             
     def swift_add_peer(self, d, addr, sock_addr=None):
         if self.is_bootstrap_candidate(addr=addr):

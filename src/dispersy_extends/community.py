@@ -113,7 +113,7 @@ class MyCommunity(Community):
             if len(x.payload.filename) >= 1 and x.payload.directories is not None and len(x.payload.roothash) == HASH_LENGTH:
                 self.swift_community.filehash_received(x.payload.filename, x.payload.directories, 
                                                        x.payload.roothash, x.payload.size, x.payload.timestamp,
-                                                       x.payload.addresses, x.destination)
+                                                       x.destination)
     
     def addresses_message_check(self, messages):
         for x in messages:
@@ -121,7 +121,6 @@ class MyCommunity(Community):
     
     def addresses_message_handle(self, messages):
         for x in messages:
-            self.swift_community.peer_endpoints_received(x.payload.addresses, x.payload.ids)
             self.dispersy.endpoint.peer_endpoints_received(self, x.authentication.member, x.payload.addresses, 
                                                            x.payload.wan_addresses, x.payload.ids)
             
