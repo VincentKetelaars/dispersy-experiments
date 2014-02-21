@@ -37,13 +37,17 @@ class DispersyContact(object):
     @classmethod
     def shallow_copy(cls, contact):
         assert isinstance(contact, DispersyContact)
-        dc = DispersyContact(contact.address, peer=contact.peer) # TODO: Should these be copies?
+        dc = DispersyContact(Address.copy(contact.address), peer=Peer.copy(contact.peer)) # Copies are not really necessary probably
         dc.community_ids = list(contact.community_ids)
         return dc
     
     @property
     def addresses(self):
         return self.peer.addresses if self.peer is not None else set([self.address])
+    
+    @property
+    def tuples(self):
+        return self.peer.tuples if self.peer is not None else [(self.address, self.address)]
         
     @property
     def reachable_addresses(self):
@@ -134,11 +138,14 @@ class DispersyContact(object):
     
     def no_contact_since(self, expiration_time=ENDPOINT_CONTACT_TIMEOUT, lan=None, wan=None):
         addrs = []
-        own_addresses = self.reachable_addresses if lan is None and wan is None else self.get_peer_addresses(lan, wan)
-        for a in own_addresses:
-            if (self.last_rcvd(a) + timedelta(seconds=expiration_time) < datetime.utcnow() or
-                self.last_sent(a) + timedelta(seconds=expiration_time) < datetime.utcnow()): # Timed out
-                addrs.append(a)
+        for a in self.tuples:
+            # No contact with lan or wan address
+            if ((self.last_rcvd(a[0]) + timedelta(seconds=expiration_time) < datetime.utcnow() and
+                 self.last_rcvd(a[1]) + timedelta(seconds=expiration_time) < datetime.utcnow()) or
+                (self.last_sent(a[0]) + timedelta(seconds=expiration_time) < datetime.utcnow() and
+                 self.last_sent(a[1]) + timedelta(seconds=expiration_time) < datetime.utcnow())):
+                # Only send lan if we know the wans are equal otherwise wan
+                addrs.append(a[0] if wan is not None and wan.ip == a[1].ip else a[1]) 
         return addrs
     
     def last_rcvd(self, address):
@@ -166,6 +173,11 @@ class DispersyContact(object):
         if self.peer is None:
             return self.address in addresses
         return self.peer.has_any(addresses, ids)
+    
+    def get_id(self, address):
+        if self.peer is None:
+            return None
+        return self.peer.get_id(address)
     
     def update_address(self, lan_address, wan_address, endpoint_id, mid):
         if self.peer is None:
@@ -212,7 +224,7 @@ class DispersyContact(object):
     def __eq__(self, other):
         if not isinstance(other, DispersyContact):
             return False
-        # TODO: Do we need a better comparison?
+        # This comparison should be sufficient to identify unique contacts
         if self.address == other.address and self.bytes_rcvd == other.bytes_rcvd and self.bytes_sent == other.bytes_sent: 
             return True
         return False

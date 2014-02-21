@@ -17,7 +17,7 @@ class PriorityStack(object):
         self._stack = [] # (priority, item)
         
     def put(self, priority, item):
-        # TODO: Implement binary search two increase insert speed
+        # TODO: Implement binary search to increase insert speed
         i = len(self._stack)
         for i in range(len(self._stack) - 1, -1, -1): # Starting at the end
             if self._stack[i][0] < priority:

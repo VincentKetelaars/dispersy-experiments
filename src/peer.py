@@ -8,6 +8,11 @@ class Peer(object):
     def __init__(self, lan_addresses, wan_addresses, ids, member_id):
         self._addresses = dict(zip(ids, zip(lan_addresses, wan_addresses)))
         self._member_id = member_id
+        
+    @classmethod
+    def copy(cls, peer):
+        assert isinstance(peer, Peer)
+        return Peer(peer.lan_addresses, peer.wan_addresses, peer.endpoint_ids, peer.member_id)
     
     @property
     def member_id(self):
@@ -18,12 +23,20 @@ class Peer(object):
         return set(self.lan_addresses + self.wan_addresses)
     
     @property
+    def tuples(self):
+        return self._addresses.values()
+    
+    @property
     def lan_addresses(self):
         return [l for l, _ in self._addresses.values()]
     
     @property
     def wan_addresses(self):
         return [w for _, w in self._addresses.values()]
+    
+    @property
+    def endpoint_ids(self):
+        return self._addresses.keys()
     
     def get(self, id_):
         return self._addresses.get(id_, None)
@@ -69,8 +82,8 @@ class Peer(object):
         Return whether any of these addresses is the same as any of this _peers'
         @param addrs: List(Address)
         """
-        for i, a in self._addresses.iteritems():
-            if i in ids or a[0] in addrs or a[1] in addrs:
+        for i, (l, w) in self._addresses.iteritems():
+            if i in ids or l in addrs or w in addrs:
                 return True
         return False
 

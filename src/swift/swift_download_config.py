@@ -204,10 +204,6 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     def checkpoint_done(self):
         return self._final_checkpoint != datetime.min
     
-    def dropped_packets_rate(self):
-        # TODO: Implement this!!!
-        return 0.0
-    
     def is_usefull(self):
         return self._last_leecher_time + timedelta(seconds=MAX_SWARM_LIFE_WITHOUT_LEECHERS) > datetime.utcnow()
         

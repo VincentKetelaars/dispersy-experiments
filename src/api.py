@@ -163,12 +163,11 @@ class API(Thread, PipeHandler):
         logger.info("In state %d. Stop self and children %s", self._state, self._children_recur)               
         if self._state == STATE_RUNNING: # Tell Dispersy to stop
             self.send_message(MESSAGE_KEY_STOP)
-        # TODO: If something goes wrong, we should still make sure that everything is stopped
         else:
             self._api_stop()
         
     def _api_stop(self):
-        # TODO: Make sure that you told the child process to stop before you sever the connection
+        # Make sure that you told the child process to stop before you sever the connection
         # wait_on_receive will block unless this is set (Is already set in case process was started)
         if not self.is_alive_event.is_set(): # Haven't actually started anything
             self.is_alive_event.set()
@@ -399,7 +398,7 @@ class ReceiverAPI(PipeHandler):
             self.dispersy_instance._register_some_message(APIMessageCarrier(message, addresses=addrs))
         else:
             logger.info("This message of length %d is to big to send with Dispersy", len(message))
-            # TODO: Alternative might be to write file to disk and send that..
+            # TODO: Alternative might be to write file to disk and send that.. Or cut it into pieces
             # Will need candidate destination for this, so can't use filehash then.. 
     
     @_dispersy_running_decorator
@@ -445,12 +444,6 @@ class ReceiverAPI(PipeHandler):
     @_dispersy_running_decorator
     def add_socket(self, address):
         self.dispersy_instance._endpoint.swift_add_socket(address)
-    
-    @_dispersy_running_decorator
-    def return_progress_data(self):
-        downloads = self.dispersy_instance._endpoint.downloads
-        # These downloads should contain most information
-        # TODO: Find something to return
     
     @_dispersy_running_decorator
     def interface_came_up(self, ip, if_name, device, gateway=None, port=0):

@@ -7,6 +7,8 @@ Dispersy itself is still a problem though. (Starts with the inet_aton in convers
 
 DispersyContacts need to be there for each endpoint, and the multiendpoint, but overall they have a peer in common. Fix this. 
 
+In Endpoint lists can change often.. Perhaps while iterating over them, either create a new list, or ensure they can't change
+
 WALKER:
 
 you should still be able to use the associated Member to determine that multiple Candidate instances belong to a single device

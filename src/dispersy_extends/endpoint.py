@@ -25,7 +25,7 @@ from src.address import Address
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.definitions import MESSAGE_KEY_SWIFT_STATE, MESSAGE_KEY_SOCKET_STATE, MESSAGE_KEY_SWIFT_PID,\
      STATE_RESETTING, STATE_RUNNING, STATE_STOPPED,\
-    REPORT_DISPERSY_INFO_TIME, MESSAGE_KEY_DISPERSY_INFO, FILE_HASH_MESSAGE_NAME,\
+    REPORT_DISPERSY_INFO_TIME, MESSAGE_KEY_DISPERSY_INFO, \
     MAX_CONCURRENT_DOWNLOADING_SWARMS, ALMOST_DONE_DOWNLOADING_TIME,\
     BUFFER_DRAIN_TIME, MAX_SOCKET_INITIALIZATION_TIME, ENDPOINT_SOCKET_TIMEOUT,\
     SWIFT_ERROR_TCP_FAILED, PUNCTURE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME,\
@@ -866,18 +866,20 @@ class MultiEndpoint(CommonEndpoint):
             self.remove_endpoint(e)
             
         def send_puncture(endpoint, cid, address, id_):
-            endpoint.send_puncture_message(self.get_community(cid), address, id_)
+            if not id_ is None:
+                endpoint.send_puncture_message(self.get_community(cid), address, id_)
         
         # In case an endpoint has not done any sending or receiving (Tunnelled or not), ensure the socket is still working
         for e in self.swift_endpoints:
             for dc in e.dispersy_contacts:
                 if not dc.addresses_received:
                     continue
-                addrs = set(dc.no_contact_since(expiration_time=ENDPOINT_CONTACT_TIMEOUT)).difference(set([c[1] for c in self._get_channels(dc)]))
+                addrs = set(dc.no_contact_since(expiration_time=ENDPOINT_CONTACT_TIMEOUT, 
+                                                lan=self.address, wan=self.wan_address)).difference(set([c[1] for c in self._get_channels(dc)]))
                 if len(addrs) > 0:
                     [logger.info("%s has %s received and %s sent from/to %s in communities %s", str(e.address), dc.last_rcvd(a), 
                                  dc.last_sent(a), str(a), dc.community_ids) for a in addrs]
-                    [self._dispersy.callback.register(send_puncture, args=(e, dc.community_ids[0], a, dc.peer.get_id(a))) 
+                    [self._dispersy.callback.register(send_puncture, args=(e, dc.community_ids[0], a, dc.get_id(a))) 
                      for a in addrs]
         
         # We aim to alleviate the stress of continuously sending puncture messages to non responding hosts
@@ -1017,7 +1019,7 @@ class MultiEndpoint(CommonEndpoint):
             
     def add_peer_to_started_downloads(self, contact):
         logger.debug("Adding contact %s to our %d downloads", str(contact), len(self._started_downloads))
-        for h, cid in self._started_downloads.iteritems():
+        for h, cid in list(self._started_downloads.items()):
             if contact.has_community(cid):
                 downloadimpl = self.retrieve_download_impl(h)
                 for addr in contact.reachable_addresses:
@@ -1185,12 +1187,13 @@ class SwiftEndpoint(CommonEndpoint):
                 contacts = [contact] # The contact better be there
             
         def send_puncture(cid, address, id_):
-            self.send_puncture_message(self.get_community(cid), address, id_)
+            if id_ is not None:
+                self.send_puncture_message(self.get_community(cid), address, id_)
             
         for dc in contacts:
             for addr in dc.no_contact_since(expiration_time=ENDPOINT_SOCKET_TIMEOUT, lan=self.address, wan=self.wan_address):
                 if dc.last_sent(addr) + timedelta(seconds=MIN_TIME_BETWEEN_PUNCTURE_REQUESTS) < datetime.utcnow():
-                    self._dispersy.callback.register(send_puncture, args=(dc.community_ids[0], addr, dc.peer.get_id(addr)))
+                    self._dispersy.callback.register(send_puncture, args=(dc.community_ids[0], addr, dc.get_id(addr)))
                 
     def send_puncture_message(self, community, address, id_):
         logger.debug("Creating puncture message for %s %s %s", community.cid, str(address), str(id_))

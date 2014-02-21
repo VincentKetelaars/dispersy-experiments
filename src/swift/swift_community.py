@@ -270,7 +270,7 @@ class SwiftCommunity(object):
         done_downloads = sum([d.is_finished() and d.is_download() and not d.is_bad_swarm() for d in self.downloads.itervalues()])
         num_seeding = sum([d.seeder() and not d.running_on_swift() for d in self.downloads.itervalues()])
         active_sockets = len(set(s for d in self.downloads.itervalues() for s in d.active_sockets()))
-        active_addresses = len(set(a for d in self.downloads.itervalues() for a in d.active_addresses()))
+        active_addresses = set(a for d in self.downloads.itervalues() for a in d.active_addresses())
         active_peers = len([p for p in self.endpoint.peers(self.dcomm.cid) if p.has_any(active_addresses)])
         active_channels = len([c for d in self.downloads.itervalues() for c in d._active_channels])
         num_downloading = sum([d.seeder() and not d.is_finished() and not d.running_on_swift() for d in self.downloads.itervalues()])

@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from dispersy.destination import CommunityDestination, CandidateDestination
 from src.address import Address
 from src.definitions import DOWNLOAD_MOREINFO_UPDATE
-from src.peer import Peer
 
 from src.logger import get_logger
 logger = get_logger(__name__)
@@ -111,10 +110,9 @@ class Download(object):
     
     def got_moreinfo(self):
         self._last_moreinfo = datetime.utcnow()
-        # TODO: Handle paused downloads
         for c in self.downloadimpl.midict.get("channels", []):
-            self._active_channels.add((Address(ip=c["socket_ip"], port=int(c["socket_port"])), 
-                                       Address(ip=c["ip"], port=int(c["port"])))) # TODO: Add IPv6
+            self._active_channels.add((Address.tuple((c["socket_ip"], c["socket_port"])), 
+                                       Address.tuple((c["ip"], c["port"])))) # Tuple can handle both ipv4 and ipv6 (port can be string)
             
     def community_destination(self):
         return isinstance(self._destination, CommunityDestination.Implementation)

@@ -60,7 +60,7 @@ class Address(object):
         # Assume Address instance
         try:
             return cls(ip=addr.ip, port=addr.port, family=addr.family, flowinfo=addr.flowinfo, scopeid=addr.scopeid, 
-                       interface=addr.interface)
+                       interface=Interface.copy(addr.interface) if addr.interface is not None else None)
         except AttributeError:
             logger.debug("%s is not an Address instance!", addr)
             return cls()
@@ -103,16 +103,16 @@ class Address(object):
     def unknown(cls, addr):
         if isinstance(addr, Address):
             return cls.copy(addr)
-        addr = addr.strip()
         try:
             p = int(addr)
             # If it is an integer, it is a port
             return cls(port=p)
-        except ValueError:
+        except (ValueError, TypeError):
             pass
         if len(addr) == 2:
             return cls.tuple(addr)
         # Not an integer or tuple, so most likely a string
+        addr = addr.strip()
         try:               
             if addr.find(":") > 0:
                 if addr.find("[") >= 0:
@@ -242,7 +242,7 @@ class Address(object):
             for i, n in PRIVATE_IPV4_ADDRESSES:
                 if self.same_subnet(i, Interface(None, i, n, None)):
                     return True
-        # TODO: Determine for IPv6 addresses
+        # We do not mark any IPv6 addresses as private
         return False
     
     def set_interface(self, name, ip, netmask, broadcast):

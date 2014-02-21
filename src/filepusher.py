@@ -86,7 +86,6 @@ class FilePusher(Thread):
                     dirs = None
                     if loc != -1:
                         dirs = absfilename[len(self._dir) + 1:-len(basename(absfilename))]
-                    # TODO: Put a limit to this (If it is not being sent), because it costs considerable resources
                     self._thread_func.put(self.send_file_hash_message, absfilename, dirs=dirs, 
                                           queue_priority=getmtime(absfilename))
                 else:

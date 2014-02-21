@@ -6,14 +6,20 @@ Created on Jan 13, 2014
 from socket import AF_INET, AF_INET6
 
 class Interface(object):
-    def __init__(self, name, address, netmask, broadcast, version=AF_INET, device=None):
+    def __init__(self, name, address, netmask, broadcast, version=AF_INET, device=None, gateway=None):
         self.name = name
         self.address = address # ip string
         self.netmask = netmask # ip string
         self.broadcast = broadcast # ip string
-        self.gateway = None # ip string
+        self.gateway = gateway # ip string
         self.device = device if device is not None else (name[:-1] if name is not None else None) # Initialize to the interface name
         self._version = version
+        
+    @classmethod
+    def copy(cls, interface):
+        assert isinstance(interface, Interface)
+        return Interface(interface.name, interface.address, interface.netmask, interface.broadcast, 
+                         interface.version, interface.device, interface.gateway)
         
     def ipv4(self):
         return self._version == AF_INET

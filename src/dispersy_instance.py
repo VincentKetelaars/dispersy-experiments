@@ -144,14 +144,13 @@ class DispersyInstance(object):
     def _stop(self):
         logger.debug("Stop instance")
         try:
-            if self._filepusher is not None:
-                self._filepusher.stop()
+            self._filepusher.stop()
             return self._dispersy.stop(timeout=0.0)
         except AttributeError:
             logger.error("Could not stop Dispersy")
         finally:
             self.state = STATE_DONE
-            # TODO: How do we make sure that we are completely done?
+            # Now we should be totally done, if anything is still running for some reason, the user should forcibly kill it
 
     @property
     def state(self):
