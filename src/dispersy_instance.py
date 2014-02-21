@@ -32,7 +32,7 @@ class DispersyInstance(object):
     '''
 
     def __init__(self, dest_dir, swift_binpath, dispersy_work_dir=u".", sqlite_database=":memory:", swift_work_dir=None,
-                 swift_zerostatedir=None, listen=[], peers=[], files_directory=None, files=[], file_timestamp_min=None, 
+                 swift_zerostatedir=None, listen=[], peers=[], file_directories=[], files=[], file_timestamp_min=None, 
                  run_time=-1, bloomfilter_update=-1, walker=False, gateways={}, mtu=MAX_MTU, callback=None):
         """
         @param dest_dir: Directory in which downloads will be placed as well as logs
@@ -61,7 +61,7 @@ class DispersyInstance(object):
         self._swift_zerostatedir = swift_zerostatedir 
         self._listen = [Address.unknown(l) for l in listen] # Local socket addresses
         self._peers = [Address.unknown(p) for p in peers] # Peer addresses
-        self._files_directory = files_directory # Directory to monitor for new files (or changes in files)
+        self._file_directories = file_directories # Directory to monitor for new files (or changes in files)
         self._files = files # Files to monitor
         self._file_timestamp_min = file_timestamp_min  # Minimum file modification time
         self._run_time = int(run_time) # Time after which this process stops, -1 is infinite
@@ -76,7 +76,7 @@ class DispersyInstance(object):
         self._mtu = mtu
         
         self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, 
-                                      directory=self._files_directory, files=self._files, 
+                                      directories=self._file_directories, files=self._files, 
                                       file_size=self._mtu - DISPERSY_MESSAGE_MINIMUM,
                                       min_timestamp=self._file_timestamp_min)
         

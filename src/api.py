@@ -403,7 +403,7 @@ class ReceiverAPI(PipeHandler):
     
     @_dispersy_running_decorator
     def monitor_directory_for_files(self, directory):
-        return self.dispersy_instance._filepusher.set_directory(directory)
+        return self.dispersy_instance._filepusher.add_directory(directory)
     
     @_dispersy_running_decorator
     def add_file(self, file_):
