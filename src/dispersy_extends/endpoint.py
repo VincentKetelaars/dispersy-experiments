@@ -769,7 +769,7 @@ class MultiEndpoint(CommonEndpoint):
         random.shuffle(public_endpoints)
         addresses = [a for a in contact.addresses if not a.is_private_address()]
         random.shuffle(addresses)
-        return [(e, p) for e in random.shuffle(public_endpoints) for p in addresses]
+        return [(e, p) for e in public_endpoints for p in addresses]
         
     def determine_endpoint(self, candidate, packets):
         """
