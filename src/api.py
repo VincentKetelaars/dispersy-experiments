@@ -163,12 +163,11 @@ class API(Thread, PipeHandler):
         logger.info("In state %d. Stop self and children %s", self._state, self._children_recur)               
         if self._state == STATE_RUNNING: # Tell Dispersy to stop
             self.send_message(MESSAGE_KEY_STOP)
-        # TODO: If something goes wrong, we should still make sure that everything is stopped
         else:
             self._api_stop()
         
     def _api_stop(self):
-        # TODO: Make sure that you told the child process to stop before you sever the connection
+        # Make sure that you told the child process to stop before you sever the connection
         # wait_on_receive will block unless this is set (Is already set in case process was started)
         if not self.is_alive_event.is_set(): # Haven't actually started anything
             self.is_alive_event.set()
@@ -399,12 +398,12 @@ class ReceiverAPI(PipeHandler):
             self.dispersy_instance._register_some_message(APIMessageCarrier(message, addresses=addrs))
         else:
             logger.info("This message of length %d is to big to send with Dispersy", len(message))
-            # TODO: Alternative might be to write file to disk and send that..
+            # TODO: Alternative might be to write file to disk and send that.. Or cut it into pieces
             # Will need candidate destination for this, so can't use filehash then.. 
     
     @_dispersy_running_decorator
     def monitor_directory_for_files(self, directory):
-        return self.dispersy_instance._filepusher.set_directory(directory)
+        return self.dispersy_instance._filepusher.add_directory(directory)
     
     @_dispersy_running_decorator
     def add_file(self, file_):
@@ -447,24 +446,20 @@ class ReceiverAPI(PipeHandler):
         self.dispersy_instance._endpoint.swift_add_socket(address)
     
     @_dispersy_running_decorator
-    def return_progress_data(self):
-        downloads = self.dispersy_instance._endpoint.downloads
-        # These downloads should contain most information
-        # TODO: Find something to return
-    
-    @_dispersy_running_decorator
     def interface_came_up(self, ip, if_name, device, gateway=None, port=0):
         logger.debug("Interface came up with %s:%d %s %s %s", ip, port, if_name, device, gateway)
         addr = Address.unknown(ip + ":" + str(port)) # Not very elegant.. But should work for ipv6 as well
         if addr.resolve_interface():
             if addr.interface.name != if_name:
-                return # Provided the wrong interface..
+                logger.warning("Interfaces do not match %s %s", addr.interface.name, if_name)
             addr.interface.device = device
             addr.interface.gateway = gateway
             if addr.interface.address is None: # In case netifaces does not recognize interface such as ppp
                 addr.interface.address = ip         
-            self.dispersy_instance._endpoint.interface_came_up(addr)               
+            self.dispersy_instance._endpoint.interface_came_up(addr)
         else:
+            addr.set_interface(if_name, ip, None, None, device=device)
+            self.send_message(MESSAGE_KEY_SOCKET_STATE, addr, -2)
             logger.debug("Bogus interface, cannot locate it")
             
     def set_API_logger(self, logger):

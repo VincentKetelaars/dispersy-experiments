@@ -157,6 +157,39 @@ char *ipv4_to_if(sockaddr_in *find, std::map<string, short> pifs, sockaddr_in &n
 	return buf;
 }
 
+//char *ipv6_to_if(sockaddr_in6 *find, sockaddr_in &netmask) {
+//	struct ifaddrs *addrs, *iap;
+//	struct sockaddr_in6 *sa, *temp_netmask;
+//	struct in6_addr si;
+//	char *buf = NULL;
+//	short priority = 0;
+//
+//	getifaddrs(&addrs);
+//	for (iap = addrs; iap != NULL; iap = iap->ifa_next) {
+//		if (iap->ifa_addr && (iap->ifa_flags & IFF_UP) && iap->ifa_addr->sa_family == AF_INET6) {
+//			sa = (struct sockaddr_in6 *)(iap->ifa_addr);
+//			temp_netmask = (struct sockaddr_in6 *) iap->ifa_netmask;
+//			// Determine whether both address are in the same subnet.. If so then pick this address.
+//			in6_addr_t cmp_subnet1 = find->sin6_addr.s6_addr & temp_netmask->sin6_addr.s6_addr;
+//			in6_addr_t cmp_subnet2 = sa->sin6_addr.s6_addr & temp_netmask->sin6_addr.s6_addr;
+//			if (find && memcmp(&cmp_subnet1, &cmp_subnet2, sizeof(cmp_subnet1)) == 0) {
+//				fprintf(stderr, "Found interface %s with ip %s\n", iap->ifa_name, inet_ntoa(sa->sin6_addr));
+//				netmask = *temp_netmask;
+//				find->sin6_addr = sa->sin6_addr;
+//				return iap->ifa_name;
+//			}
+//		}
+//	}
+//	freeifaddrs(addrs);
+//	if (buf != NULL) {
+//		find->sin6_addr = si; // Set the default interface address
+//		fprintf(stderr, "Failed to find resembling ip. Try interface %s with ip %s %x\n",
+//				buf, inet_ntop(find->sin6_addr), find->sin6_addr.s6_addr);
+//	}
+//
+//	return buf;
+//}
+
 int ipv6_to_scope_id(sockaddr_in6 *find) {
 	struct ifaddrs *addrs, *iap;
 	struct sockaddr_in6 *sa;
@@ -168,7 +201,7 @@ int ipv6_to_scope_id(sockaddr_in6 *find) {
 			sa = (struct sockaddr_in6 *)(iap->ifa_addr);
 			if (memcmp(&find->sin6_addr.s6_addr, &sa->sin6_addr.s6_addr, sizeof(sa->sin6_addr.s6_addr)) == 0) {
 				getnameinfo(iap->ifa_addr, sizeof(struct sockaddr_in6), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
-				//				fprintf(stderr, "Found interface %s with scope %d\n", host, sa->sin6_scope_id);
+				fprintf(stderr, "Found interface %s with scope %d\n", host, sa->sin6_scope_id);
 				return sa->sin6_scope_id;
 			}
 		}
@@ -329,8 +362,8 @@ std::vector<int> create_own_sockets() {
 	std::vector<int> fd;
 	struct sockaddr_in si = create_ipv4_sockaddr(5555, "193.156.108.78");
 	fd.push_back(bind_ipv4(si));
-	//	struct sockaddr_in6 si6 = create_ipv6_sockaddr(5556, "fe80::caf7:33ff:fe8f:d39c", 0, 0);
-	struct sockaddr_in6 si6 = create_ipv6_sockaddr(5556, "::0", 0, 0);
+	struct sockaddr_in6 si6 = create_ipv6_sockaddr(5556, "fe80::caf7:33ff:fe8f:d39c", 0, 0);
+//	struct sockaddr_in6 si6 = create_ipv6_sockaddr(5556, "::0", 0, 0);
 	fd.push_back(bind_ipv6(si6));
 
 	return fd;
@@ -466,15 +499,9 @@ sockaddr testshit(sockaddr_in6 saddr, string gateway) {
 }
 
 int main(int argc, char *argv[]) {
-	if (true) {
-		sockaddr_in6 saddr = create_ipv6_sockaddr(0, "::1", 0, 0, false);
-		sockaddr sa = testshit(saddr, "0.0.0.0");
-		fprintf(stderr, "Shit ouwe %d\n", sa.sa_family);
-		return 0;
-	}
-
-
-
+	string host = "830423904%wlan0";
+	string name = host.substr(host.find("%") + 1);
+	fprintf(stderr, "Name: %s\n", name.c_str());
 	std::vector<int> fd = create_own_sockets();//create_socket_for_each_if();
 	if (fd.size() <= 0) {
 		perror("No sockets..");

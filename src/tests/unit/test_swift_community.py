@@ -6,7 +6,6 @@ Created on Jan 7, 2014
 import unittest
 import os
 import time
-from threading import Event
 
 from src.swift.swift_process import MySwiftProcess # Before other import because of logger
 from dispersy.callback import Callback
@@ -33,11 +32,7 @@ class TestSwiftCommunity(unittest.TestCase):
         logger.debug("%d %s %s", key, args, kwargs)
     
     def add_file(self, callback, community, message):
-        self.event = Event()
-        def done(arg):
-            self.event.set()        
-        callback.register(community.create_file_hash_messages, (1, message), kargs={"update":False}, delay=0.0, callback=done)
-        self.event.wait(1)
+        community.create_file_hash_messages(1, message, 0.0, update=False)
         
     def candidate(self, addr):
         return EligibleWalkCandidate(addr, True, addr, addr, u"unknown")
@@ -77,8 +72,8 @@ class TestSwiftCommunity(unittest.TestCase):
         self._roothash2 = get_hash(self._filename2, SWIFT_BINPATH)
 
     def tearDown(self):
-        self._dispersy.stop()
-        self._dispersy2.stop()
+        self._dispersy.stop(timeout=0.0)
+        self._dispersy2.stop(timeout=0.0)
         for f in FILES:
             remove_files(f) # Remove hashmap and bin files
         dir_ = os.path.join(self._dest_dir, self._directories)
@@ -125,7 +120,6 @@ class TestSwiftCommunity(unittest.TestCase):
         self.add_file(self._callback, self._community, 
                       FileHashCarrier(file2, self._directories, roothash2, os.path.getsize(file2), 
                                       os.path.getmtime(file2), None))
-        # TODO: Make sure that we're not doing too many things twice
         self._wait(self._swiftcomm2)
          
         absfilename1 = os.path.join(self._dest_dir, self._directories, os.path.basename(self._filename))
@@ -170,8 +164,6 @@ class TestSwiftCommunity(unittest.TestCase):
             if check:
                 break
             time.sleep(SLEEP_TIME)
-
-    # TODO: Create test that will see if Endpoint handles no Swift well
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,25 +1,13 @@
 DISPERSY:
 
-Stored messages are sent immediately when a dispersy introduction response is sent. If multiple endpoints have the same peer, 
-this will result in duplicate messages sent. Are multiple introduction messages necessary? (NAT problems?) 
-Perhaps send puncture requests instead.
-
-MultiEndpoint, at this point, holds all information on downloads in self.downloads. 
-The download_impl is stored there as well, giving it a lifetime beyond the swift instance download_impl.
-SwiftEndpoints have no access to this information for now.
-
 FIXME: MySwiftProcess causes the logs to go haywire. Temporary fix for now is to import this class earlier.
 
-Regardless of what MultiEndpoint says.. Every download in Libswift is leech and seed, since peers will be found via the PEX messages.
-At least if they now about those swarms. But even so, MultiEndpoint should still distinguish them because otherwise cleaning up
-would be difficult. Perhaps introduce boolean, delete after complete.
-
-If an introduction message does not arrive, is not read, or whatever, there are no timeouts to send again.
-
-Started on providing IPv6 capabilities. Swift instances should be able to handle it.. (Needs testing)
-Dispersy itself will be a problem most likely.
+No routing stuff has been introduced for IPv6 in Swift, but addresses can be bound. IPv6 is mostly good on my end.
+Dispersy itself is still a problem though. (Starts with the inet_aton in conversion for introduction_request)
 
 DispersyContacts need to be there for each endpoint, and the multiendpoint, but overall they have a peer in common. Fix this. 
+
+In Endpoint lists can change often.. Perhaps while iterating over them, either create a new list, or ensure they can't change
 
 WALKER:
 
@@ -27,17 +15,17 @@ you should still be able to use the associated Member to determine that multiple
 perhaps you should override the 'who to introduce' method, to take into account your multi-interface thing (this code should also ensure you don't introduce A(interface1) to A(interface2)
 or you will introduce a device to one of its other interfaces, so you may want to filter out those introductions (to prevent a device to talk to itself)
 
+How can we use the multifile capabilities to our benefit?
+
 LIBSWIFT:
 
 Set LD_LIBRARY_PATH for swift to work
 
-AddPeer in content.cpp now connects all sockets to all peers
+AddPeer in content.cpp can either add a peer to a single socket, or to all sockets
 
 If both eth and wlan are available, a UDP socket will switch between both, depending on the destination address, each sendto.
 Perhaps it is good to choose a single interface for each socket. This will create problems with NAT traversal.
 http://stackoverflow.com/questions/12371385/how-to-specify-which-interface-to-use-for-a-socket-in-linux
-
-Problem with wildcard: invalid peer address 0.0.0.0:18795!=127.0.0.1:18795
 
 ROUTING:
 

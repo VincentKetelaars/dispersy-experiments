@@ -132,7 +132,7 @@ class AddressesRequestConversion(BinaryConversion):
         
     def encode_payload(self, message):
         m = str(message.payload.sender_lan) + SEPARATOR + str(message.payload.sender_wan) + SEPARATOR + \
-            message.payload.endpoint_id.encode(ENDPOINT_ID_ENCODING)
+            message.payload.endpoint_id.encode(ENDPOINT_ID_ENCODING) + SEPARATOR + str(message.payload.wan_address)
         return struct.pack("!L", len(m)), m
 
     def decode_payload(self, placeholder, offset, data):
@@ -148,9 +148,10 @@ class AddressesRequestConversion(BinaryConversion):
         sender_lan = Address.unknown(splitted[0])
         sender_wan = Address.unknown(splitted[1])
         endpoint_id = splitted[2].decode(ENDPOINT_ID_ENCODING)
+        wan_address = Address.unknown(splitted[3])
         offset += data_length
 
-        return offset, placeholder.meta.payload.implement(sender_lan, sender_wan, endpoint_id)
+        return offset, placeholder.meta.payload.implement(sender_lan, sender_wan, endpoint_id, wan_address)
     
 class PunctureConversion(BinaryConversion):
     '''

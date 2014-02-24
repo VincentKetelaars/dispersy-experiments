@@ -115,6 +115,7 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         self.sp = sp
         self._last_leecher_time = datetime.utcnow()
         self._bad_swarm = False
+        self._final_checkpoint = datetime.min # We own every bit of it
         
     @property
     def bad_swarm(self):
@@ -196,9 +197,12 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     def seeding(self):
         return self.get_status() == DLSTATUS_SEEDING
     
-    def dropped_packets_rate(self):
-        # TODO: Implement this!!!
-        return 0.0
+    def checkpointing(self):
+        if self.seeding():
+            self._final_checkpoint = datetime.utcnow()
+            
+    def checkpoint_done(self):
+        return self._final_checkpoint != datetime.min
     
     def is_usefull(self):
         return self._last_leecher_time + timedelta(seconds=MAX_SWARM_LIFE_WITHOUT_LEECHERS) > datetime.utcnow()
@@ -230,3 +234,6 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
                  'total_down' : self.midict['bytes_down'] / 1024.0}        
 
         return (plist, total)
+    
+    def __hash__(self):
+        return self.get_def().get_roothash()

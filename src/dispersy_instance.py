@@ -32,7 +32,7 @@ class DispersyInstance(object):
     '''
 
     def __init__(self, dest_dir, swift_binpath, dispersy_work_dir=u".", sqlite_database=":memory:", swift_work_dir=None,
-                 swift_zerostatedir=None, listen=[], peers=[], files_directory=None, files=[], file_timestamp_min=None, 
+                 swift_zerostatedir=None, listen=[], peers=[], file_directories=[], files=[], file_timestamp_min=None, 
                  run_time=-1, bloomfilter_update=-1, walker=False, gateways={}, mtu=MAX_MTU, callback=None):
         """
         @param dest_dir: Directory in which downloads will be placed as well as logs
@@ -61,7 +61,7 @@ class DispersyInstance(object):
         self._swift_zerostatedir = swift_zerostatedir 
         self._listen = [Address.unknown(l) for l in listen] # Local socket addresses
         self._peers = [Address.unknown(p) for p in peers] # Peer addresses
-        self._files_directory = files_directory # Directory to monitor for new files (or changes in files)
+        self._file_directories = file_directories # Directory to monitor for new files (or changes in files)
         self._files = files # Files to monitor
         self._file_timestamp_min = file_timestamp_min  # Minimum file modification time
         self._run_time = int(run_time) # Time after which this process stops, -1 is infinite
@@ -76,7 +76,7 @@ class DispersyInstance(object):
         self._mtu = mtu
         
         self._filepusher = FilePusher(self._register_some_message, self._swift_binpath, 
-                                      directory=self._files_directory, files=self._files, 
+                                      directories=self._file_directories, files=self._files, 
                                       file_size=self._mtu - DISPERSY_MESSAGE_MINIMUM,
                                       min_timestamp=self._file_timestamp_min)
         
@@ -144,14 +144,13 @@ class DispersyInstance(object):
     def _stop(self):
         logger.debug("Stop instance")
         try:
-            if self._filepusher is not None:
-                self._filepusher.stop()
-            return self._dispersy.stop()
+            self._filepusher.stop()
+            return self._dispersy.stop(timeout=0.0)
         except AttributeError:
             logger.error("Could not stop Dispersy")
         finally:
             self.state = STATE_DONE
-            # TODO: How do we make sure that we are completely done?
+            # Now we should be totally done, if anything is still running for some reason, the user should forcibly kill it
 
     @property
     def state(self):
@@ -174,12 +173,17 @@ class DispersyInstance(object):
         kwargs = {"enable" : self._walker, "api_callback" : self._api_callback}
         return MyCommunity.join_community(self._dispersy, master_member, my_member, *args, **kwargs)
         
-    def _register_some_message(self, message=None, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
+    def _register_some_message(self, message, count=DEFAULT_MESSAGE_COUNT, delay=DEFAULT_MESSAGE_DELAY):
+        """
+        Send certain messages
+        Update is False, otherwise the message will be handled locally as well
+        @type message: SmallFileCarrier, FileHashCarrier, APIMessageCarrier
+        """
         logger.info("Registered %d messages: %s with delay %f", count, message, delay)
         if isinstance(message, SmallFileCarrier):
             self._callback.register(self._community.create_small_file_messages, (count, message), kargs={"update":False}, delay=delay)
         elif isinstance(message, FileHashCarrier):
-            self._callback.register(self._community.create_file_hash_messages, (count, message), kargs={"update":False}, delay=delay)
+            self._community.create_file_hash_messages(count, message, delay, update=False)
         elif isinstance(message, APIMessageCarrier):
             self._callback.register(self._community.create_api_messages, (count, message), kargs={"update":False}, delay=delay)
         else:

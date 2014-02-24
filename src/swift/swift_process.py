@@ -19,7 +19,7 @@ from src.swift.tribler.SwiftProcess import SwiftProcess, DONE_STATE_WORKING, DON
 from src.address import Address
 from src.definitions import LIBEVENT_LIBRARY, SWIFT_ERROR_TCP_FAILED,\
     SWIFT_ERROR_UNKNOWN_COMMAND, SWIFT_ERROR_MISSING_PARAMETER,\
-    SWIFT_ERROR_BAD_PARAMETER
+    SWIFT_ERROR_BAD_PARAMETER, MAX_WAIT_FOR_TCP
 import socket
 from src.swift.tribler.exceptions import TCPConnectionFailedException
 import signal
@@ -171,10 +171,9 @@ class MySwiftProcess(SwiftProcess):
             
     def start_cmd_connection(self):
         # Wait till Libswift is actually ready to create a TCP connection
-        # TODO: Set timeout so that endpoint can make a new attempt at starting Swift
         def wait_to_start():
-            while not self._last_moreinfo.is_set():
-                self._last_moreinfo.wait()
+            if not self._last_moreinfo.is_set():
+                self._last_moreinfo.wait(MAX_WAIT_FOR_TCP) # Timeout in case something fails
             try:
                 SwiftProcess.start_cmd_connection(self)
             except TCPConnectionFailedException: # If Swift fails to connect within 60 seconds
@@ -344,7 +343,7 @@ class MySwiftProcess(SwiftProcess):
                 and self._last_moreinfo.is_set() and self.is_alive())
 
     def is_ready(self):
-        # TODO: Make sure that fastconn is not busy writing
+        # Fasctconn has a lock for writing, so if it's up, it's good
         return self.is_running();
     
     def add_peer(self, d, addr, saddr):

@@ -3,7 +3,7 @@ Created on Aug 7, 2013
 
 @author: Vincent Ketelaars
 '''
-from threading import Event
+from threading import Event, Lock
 from os.path import isfile
 
 from src.logger import get_logger
@@ -52,6 +52,7 @@ class MyCommunity(Community):
         self._api_callback = api_callback
         self._looper = Looper(sleep=0.1, name="MyCommunity_looper")
         self._looper.start()
+        self._lock = Lock()
         self.swift_community = SwiftCommunity(self, self.dispersy.endpoint, api_callback=api_callback)
         
     def initiate_conversions(self):
@@ -87,10 +88,10 @@ class MyCommunity(Community):
                         self.addresses_request_message_check, self.addresses_request_message_handle),
                 Message(self, PUNCTURE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._puncture_distribution, CandidateDestination(), PuncturePayload(), 
-                        self.puncture_check, self.puncture_handle), # TODO: We don't need MemberAuthentication, right?
+                        self.puncture_check, self.puncture_handle),
                 Message(self, PUNCTURE_RESPONSE_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._puncture_response_distribution, CandidateDestination(), PunctureResponsePayload(), 
-                        self.puncture_response_check, self.puncture_response_handle), # TODO: We don't need MemberAuthentication, right?
+                        self.puncture_response_check, self.puncture_response_handle),
                 Message(self, API_MESSAGE_NAME, MemberAuthentication(encoding="sha1"), PublicResolution(), 
                         self._api_message_distribution, CandidateDestination(), APIMessagePayload(), 
                         self.api_message_check, self.api_message_handle)]
@@ -109,10 +110,8 @@ class MyCommunity(Community):
     
     def file_hash_handle(self, messages):
         for x in messages:
-            if len(x.payload.filename) >= 1 and x.payload.directories is not None and len(x.payload.roothash) == HASH_LENGTH:
-                self.swift_community.filehash_received(x.payload.filename, x.payload.directories, 
-                                                       x.payload.roothash, x.payload.size, x.payload.timestamp,
-                                                       x.payload.addresses, x.destination)
+            self.swift_community.filehash_received(x.payload.filename, x.payload.directories, x.payload.roothash, 
+                                                   x.payload.size, x.payload.timestamp, x.destination)
     
     def addresses_message_check(self, messages):
         for x in messages:
@@ -120,7 +119,6 @@ class MyCommunity(Community):
     
     def addresses_message_handle(self, messages):
         for x in messages:
-            self.swift_community.peer_endpoints_received(x.payload.addresses, x.payload.ids)
             self.dispersy.endpoint.peer_endpoints_received(self, x.authentication.member, x.payload.addresses, 
                                                            x.payload.wan_addresses, x.payload.ids)
             
@@ -131,7 +129,7 @@ class MyCommunity(Community):
     def addresses_request_message_handle(self, messages):
         for x in messages:
             self.dispersy.endpoint.addresses_requested(self, x.authentication.member, x.payload.sender_lan, 
-                                                       x.payload.sender_wan, x.payload.endpoint_id)
+                                                       x.payload.sender_wan, x.payload.endpoint_id, x.payload.wan_address)
             
     def puncture_check(self, messages):
         for x in messages:
@@ -165,8 +163,8 @@ class MyCommunity(Community):
     def _short_member_id(self):
         return str(self.my_member.mid.encode("HEX"))[0:5]     
     
-    def _addresses(self):
-        return [s.address for s in self.dispersy.endpoint.swift_endpoints]
+    def _active_sockets(self):
+        return [s.address for s in self.dispersy.endpoint.swift_endpoints if s.socket_running]
             
     def _port(self):
         return str(self.dispersy.endpoint.get_address()[1])       
@@ -182,7 +180,7 @@ class MyCommunity(Community):
                               payload=(simple_message.filename, simple_message.data)) for _ in xrange(count)]
         self.dispersy.store_update_forward(messages, store, update, forward)
         
-    def create_file_hash_messages(self, count, file_hash_message, store=True, update=True, forward=True):
+    def create_file_hash_messages(self, count, file_hash_message, delay, store=True, update=True, forward=True):
         """
         @param count: Number of messages
         @type file_hash_message: FileHashCarrier
@@ -190,19 +188,22 @@ class MyCommunity(Community):
         # Make sure you have the filename, and a proper hash
         if isfile(file_hash_message.filename) and file_hash_message.roothash is not None and len(file_hash_message.roothash) == HASH_LENGTH:
             meta = self.get_meta_message(FILE_HASH_MESSAGE_NAME)
-            # Send this hash to candidates (probably do the prior stuff out of the candidates loop)
-            messages = [meta.impl(authentication=(self.my_member,), 
+            
+            # Messages need to be created only when they are sent, otherwise peers get sequence errors
+            def send_messages():
+                messages = [meta.impl(authentication=(self.my_member,), 
                                   distribution=(self.claim_global_time(), self._file_hash_distribution.claim_sequence_number()), 
                                   payload=(file_hash_message.filename, file_hash_message.directories, 
                                            file_hash_message.roothash, file_hash_message.size, 
-                                           file_hash_message.timestamp, self._addresses()))
-                        # TODO: Perhaps only send active sockets?
+                                           file_hash_message.timestamp, self._active_sockets()))
                         for _ in xrange(count)]
-            self.dispersy.store_update_forward(messages, store, update, forward)
+                self.dispersy.callback.register(self.dispersy.store_update_forward, args=(messages, store, update, forward), delay=delay)
                 
             # Let Swift know that it should seed this file
-            self.swift_community.add_file(file_hash_message.filename, file_hash_message.roothash, messages[0].destination,
-                                          file_hash_message.size, file_hash_message.timestamp)
+            # Nasty hack to get the destination implementation
+            self.swift_community.add_file(file_hash_message.filename, file_hash_message.roothash, 
+                                          meta.destination.Implementation(meta),
+                                          file_hash_message.size, file_hash_message.timestamp, send_messages)
                 
     def create_addresses_messages(self, count, addresses_message, candidates, store=True, update=True, forward=True):
         """
@@ -354,3 +355,11 @@ class MyCommunity(Community):
     def update_bloomfilter(self, update_bloomfilter):
         self._update_bloomfilter = update_bloomfilter    
     
+    def unload_community(self):
+        self._looper.stop()
+        Community.unload_community(self)
+        return self.swift_community.unload_community()
+    
+    def claim_global_time(self):
+        with self._lock:
+            return Community.claim_global_time(self)

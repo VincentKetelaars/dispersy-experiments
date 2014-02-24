@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from dispersy.destination import CommunityDestination, CandidateDestination
 from src.address import Address
 from src.definitions import DOWNLOAD_MOREINFO_UPDATE
-from src.peer import Peer
 
 from src.logger import get_logger
 logger = get_logger(__name__)
@@ -22,7 +21,8 @@ class Download(object):
     Peers are only added if allowed by the destination.
     '''
 
-    def __init__(self, roothash, filename, downloadimpl, size, timestamp, directories="", seed=False, download=False, moreinfo=True, destination=None, priority=0):
+    def __init__(self, roothash, filename, downloadimpl, size, timestamp, community_id, directories="", seed=False, 
+                 download=False, moreinfo=True, destination=None, priority=0):
         '''
         Constructor
         '''
@@ -34,10 +34,10 @@ class Download(object):
         self._seed = seed
         self._download = download
         self._downloadimpl = downloadimpl
-        self._peers = set() # Set of Peers
         self._size = size
         self._timestamp = timestamp
         self._priority = priority
+        self._communit_id = community_id
         
         self._start_time = datetime.max
         self._finished_time = datetime.max
@@ -110,16 +110,9 @@ class Download(object):
     
     def got_moreinfo(self):
         self._last_moreinfo = datetime.utcnow()
-        # TODO: Handle paused downloads
         for c in self.downloadimpl.midict.get("channels", []):
-            self._active_channels.add((Address(ip=c["socket_ip"], port=int(c["socket_port"])), 
-                                       Address(ip=c["ip"], port=int(c["port"])))) # TODO: Add IPv6
-    
-    def add_address(self, address):
-        assert isinstance(address, Address)
-        if self.known_address(address):
-            return
-        self.add_peer(Peer([address]))
+            self._active_channels.add((Address.tuple((c["socket_ip"], c["socket_port"])), 
+                                       Address.tuple((c["ip"], c["port"])))) # Tuple can handle both ipv4 and ipv6 (port can be string)
             
     def community_destination(self):
         return isinstance(self._destination, CommunityDestination.Implementation)
@@ -132,59 +125,6 @@ class Download(object):
             return [Address.tuple(c.sock_addr) for c in self._destination._candidates]
         return None # We're not returning a list if this is not a candidatedestination.. Deal with it
     
-    def determine_seeding(self):
-        """
-        Only call this method if we received this information from another peer,
-        because of |allowed_addresses| > 1
-        """      
-        # We should share if either community destination or if we are not the only on in the candidate destination
-        share = self._destination is None or self.community_destination() or (self.candidate_destination() and 
-                                                                              len(self.allowed_addresses()) > 1)
-        # TODO: We should use the relay distribution to figure out who's also entitled to this download
-        self._seed = self._seed and share
-        
-    def _allow_peer(self, peer):
-        """
-        Allow _peers when we're seeding and if at least one of their addresses corresponds to the candidate destination
-        """
-        assert isinstance(peer, Peer)
-        if len(peer.addresses) == 0 or not self._seed: # If we're not seeding, we're not allowing!
-            return False
-        if self.community_destination():
-        # TODO: Verify that the peer actually is part of this community
-            return True
-        elif self.candidate_destination():
-            allowed = self.allowed_addresses()
-            for a in peer.addresses:
-                if a in allowed:
-                    return True
-        return False # Destination is None, unknown or none of the addresses are in allowed_addresses
-    
-    def add_peers(self, peers):
-        for p in peers:
-            self.add_peer(p)
-        
-    def add_peer(self, peer):
-        if peer is not None and self._allow_peer(peer):
-            self._peers.add(peer)
-        else:
-            logger.debug("Peer %s is not allowed", peer)
-        
-    def peers(self):
-        return self._peers
-    
-    def merge_peers(self, new_peer):
-        if new_peer is not None and self._allow_peer(new_peer) and not new_peer in self._peers:
-            diff = set([p for p in self._peers if p.matches(new_peer)]) # If any addresses or endpoints are the same
-            self._peers.difference_update(diff)
-            for p in diff:
-                new_peer.merge(p) # Any other addresses belong to this new peer now as well
-            self._peers.add(new_peer)
-            
-    def known_address(self, addr):
-        assert isinstance(addr, Address)
-        return addr in [a for p in self._peers for a in p.addresses]
-    
     def running_on_swift(self):
         return self._last_moreinfo + timedelta(seconds=DOWNLOAD_MOREINFO_UPDATE * 2) > datetime.utcnow()
         
@@ -196,12 +136,6 @@ class Download(object):
     
     def active_addresses(self):
         return [c[1] for c in self._active_channels]
-    
-    def inactive_addresses(self):
-        return set([a for p in self._peers for a in p.addresses]).difference(self.active_addresses())
-        
-    def active_peers(self):
-        return [p for p in self._peers if p.has_any(self.active_addresses())]
         
     def package(self):
         """

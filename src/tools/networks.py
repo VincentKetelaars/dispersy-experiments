@@ -4,9 +4,11 @@ Created on Jan 13, 2014
 @author: Vincent Ketelaars
 '''
 import netifaces
-from src.tools.network_interface import Interface
+from src.tools.network_interface import Interface, AF_INET, AF_INET6
+from src.logger import get_logger
+logger = get_logger(__name__)
 
-def get_interface_addresses():
+def get_interface_addresses(version=AF_INET):
     """
     Yields Interface instances for each available AF_INET interface found.
 
@@ -23,13 +25,22 @@ def get_interface_addresses():
         except ValueError:
             # some interfaces are given that are invalid, we encountered one called ppp0
             yield Interface(interface, None, None, None)
-
         else:
-            for option in addresses.get(netifaces.AF_INET, []):
-                try:
-                    yield Interface(interface, option.get("addr"), option.get("netmask"), option.get("broadcast"))
-
-                except TypeError:
-                    # some interfaces have no netmask configured, causing a TypeError when
-                    # trying to unpack _l_netmask
-                    pass
+            if version == AF_INET:
+                for option in addresses.get(netifaces.AF_INET, []):
+                    try:
+                        yield Interface(interface, option.get("addr"), option.get("netmask"), option.get("broadcast"))
+                    except TypeError:
+                        # some interfaces have no netmask configured, causing a TypeError when
+                        # trying to unpack _l_netmask
+                        pass
+            elif version == AF_INET6:
+                for option in addresses.get(netifaces.AF_INET6, []):
+                    try:
+                        yield Interface(interface, option.get("addr").split("%")[0], option.get("netmask"), option.get("broadcast"), version=AF_INET6)
+                    except TypeError:
+                        # some interfaces have no netmask configured, causing a TypeError when
+                        # trying to unpack _l_netmask
+                        pass
+            else:
+                logger.warning("Unknown version %s", version)

@@ -17,9 +17,11 @@ from src.dispersy_extends.endpoint import MultiEndpoint, get_hash, try_sockets
 from src.dispersy_extends.mydispersy import MyDispersy
 
 from src.tests.unit.definitions import DIRECTORY, FILES, DISPERSY_WORKDIR, TIMEOUT_TESTS
-from src.tests.unit.mock_classes import FakeDispersy, FakeSwift
+from src.tests.unit.mock_classes import FakeDispersy, FakeSwift,\
+    FakeCommonEndpoint, FakeCommunity
 
 from src.logger import get_logger
+from src.peer import Peer
 logger = get_logger(__name__)
    
 class TestEndpointNoConnection(unittest.TestCase):
@@ -56,8 +58,8 @@ class TestEndpointNoConnection(unittest.TestCase):
         self._dispersy2.start()
         
     def tearDown(self):
-        self._dispersy.stop()
-        self._dispersy2.stop()
+        self._dispersy.stop(timeout=0.0)
+        self._dispersy2.stop(timeout=0.0)
         if self._filename is not None:
             remove_files(self._filename)
         dir_ = os.path.join(self._dest_dir, self._directories)
@@ -90,6 +92,93 @@ class TestEndpointNoConnection(unittest.TestCase):
             if check:
                 break
             time.sleep(SLEEP_TIME)
+            
+class TestCommonEndpoint(unittest.TestCase):
+    
+    def setUp(self):
+        self.common = FakeCommonEndpoint(None)
+    
+    def test_update_contacts(self):
+        sock_addr = ("1.1.1.1", 3)
+        packets = ["asdf", "sf"]
+        comm, dc = self.common.update_dispersy_contacts(sock_addr, packets, recv=False)
+        first_contact = iter(self.common.dispersy_contacts).next()
+        self.assertEqual(dc, None)
+        self.assertEqual(len(self.common.dispersy_contacts), 1)
+        self.assertEqual(first_contact.address.ip, sock_addr[0])
+        self.assertEqual(self.common.get_contact(Address.tuple(sock_addr)), first_contact)
+        more_packets = ["sfjdoiwenfo", "sfjisa"]
+        comm, dc = self.common.update_dispersy_contacts(sock_addr, more_packets, recv=False)
+        self.assertEqual(dc, None)
+        self.assertEqual(len(self.common.dispersy_contacts), 1)
+        self.assertEqual(first_contact.num_sent(), len(packets + more_packets))
+        self.assertEqual(first_contact.total_sent(), sum(len(p) for p in packets + more_packets))
+        comm, dc = self.common.update_dispersy_contacts(sock_addr, more_packets, recv=True)
+        self.assertEqual(dc, first_contact, str(dc) + " != " + str(first_contact))
+        self.assertEqual(len(self.common.dispersy_contacts), 1)
+        self.assertEqual(first_contact.num_sent(), len(packets + more_packets))
+        self.assertEqual(first_contact.total_sent(), sum(len(p) for p in packets + more_packets))
+        self.assertEqual(first_contact.num_rcvd(), len(more_packets))
+        self.assertEqual(first_contact.total_rcvd(), sum(len(p) for p in more_packets))
+        new_sock_addr = ("2.2.1.2", 5)
+        comm, dc = self.common.update_dispersy_contacts(new_sock_addr, packets, recv=True)
+        for c in self.common.dispersy_contacts:
+            if c != first_contact:
+                second_contact = c
+        self.assertEqual(dc, second_contact)
+        self.assertEqual(len(self.common.dispersy_contacts), 2)
+        self.assertEqual(first_contact.num_sent(), len(packets + more_packets))
+        self.assertEqual(first_contact.total_sent(), sum(len(p) for p in packets + more_packets))
+        self.assertEqual(first_contact.num_rcvd(), len(more_packets))
+        self.assertEqual(first_contact.total_rcvd(), sum(len(p) for p in more_packets))
+        self.assertEqual(second_contact.num_rcvd(), len(packets))
+        self.assertEqual(second_contact.total_rcvd(), sum(len(p) for p in packets))
+        
+    def test_unknown_peer(self):
+        # Case where these addresses do not match any incoming addresses
+        # This is possible if the peer does not know its proper wan address
+        community = FakeCommunity()
+        mid = "Smoothy"
+        lan_addresses = [Address(ip="127.3.2.4", port=123)]
+        wan_addresses = [Address(ip="42.23.2.1", port=332)]
+        ids = [os.urandom(16)]
+        dc = self.common.peer_endpoints_received(community, mid, lan_addresses, wan_addresses, ids)
+        self.assertEqual(len(self.common.dispersy_contacts), 1)
+        self.assertEqual(dc.peer, Peer(lan_addresses, wan_addresses, ids, mid))
+        self.assertEqual(dc.member_id, mid)
+        self.assertEqual(len(dc.community_ids), 1)
+        self.assertEqual(iter(dc.community_ids).next(), community.cid)
+        self.assertEqual(self.common.get_contact(Address(), mid=mid), dc)
+        dc2 = self.common.peer_endpoints_received(community, mid, lan_addresses, wan_addresses, ids)
+        self.assertEqual(dc2, dc)        
+        self.assertEqual(dc2.peer, dc.peer)
+        
+    def test_one_contact_peer(self):
+        # DispersyCandidate is already there
+        community = FakeCommunity()
+        mid = "Smoothy"
+        lan_addresses = [Address(ip="127.3.2.4", port=123)]
+        wan_addresses = [Address(ip="42.23.2.1", port=332)]
+        ids = [os.urandom(16)]
+        comm, first_contact = self.common.update_dispersy_contacts(wan_addresses[0].addr(), ["asdf"], recv=True)
+        dc = self.common.peer_endpoints_received(community, mid, lan_addresses, wan_addresses, ids)
+        self.assertEqual(first_contact, dc)
+        self.assertEqual(dc.peer, Peer(lan_addresses, wan_addresses, ids, mid))
+        self.assertEqual(len(self.common.dispersy_contacts), 1)
+        
+    def test_two_contacts_one_peer(self):
+        # here are two DispersyCandidates that represent the same peer
+        community = FakeCommunity()
+        mid = "Smoothy"
+        lan_addresses = [Address(ip="127.3.2.4", port=123)]
+        wan_addresses = [Address(ip="42.23.2.1", port=332)]
+        ids = [os.urandom(16)]
+        comm, first_contact = self.common.update_dispersy_contacts(lan_addresses[0].addr(), ["asdf"], recv=True)
+        comm, second_contact = self.common.update_dispersy_contacts(wan_addresses[0].addr(), ["asdf"], recv=True)
+        dc = self.common.peer_endpoints_received(community, mid, lan_addresses, wan_addresses, ids)
+        self.assertIn(dc, [first_contact, second_contact])
+        self.assertEqual(dc.peer, Peer(lan_addresses, wan_addresses, ids, mid))
+        self.assertEqual(len(self.common.dispersy_contacts), 1)
     
 class TestMultiEndpoint(unittest.TestCase):
     """

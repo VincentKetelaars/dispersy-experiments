@@ -15,6 +15,14 @@ class TestAddress(unittest.TestCase):
         self.assertEqual(addr.port, 1)
         self.assertEqual(addr.ip, "0.0.0.0")
         self.assertEqual(addr.family, AF_INET)
+        addr = Address.unknown("12")
+        self.assertEqual(addr.port, 12)
+        self.assertEqual(addr.ip, "0.0.0.0")
+        self.assertEqual(addr.family, AF_INET)
+        addr = Address.unknown(" 12 ")
+        self.assertEqual(addr.port, 12)
+        self.assertEqual(addr.ip, "0.0.0.0")
+        self.assertEqual(addr.family, AF_INET)
         
     def test_no_port_ipv4(self):
         addr = Address.ipv4("0.0.0.0")
@@ -79,6 +87,18 @@ class TestAddress(unittest.TestCase):
         self.assertTrue(addr.is_private_address())
         addr = Address(ip="192.180.124.231")
         self.assertFalse(addr.is_private_address())
+        
+    def test_tuple(self):
+        addr = Address.unknown(("1.0.1.0", 1)) # int as port
+        self.assertEqual(addr.port, 1)
+        self.assertEqual(addr.ip, "1.0.1.0")
+        self.assertEqual(addr.family, AF_INET)
+        addr = Address.unknown(("[FEDC:BA98:7654:3210:FEDC:BA98:7654:3210]", "1")) # string as port
+        self.assertEqual(addr.port, 1)
+        self.assertEqual(addr.ip, "FEDC:BA98:7654:3210:FEDC:BA98:7654:3210")
+        self.assertEqual(addr.family, AF_INET6)
+        self.assertEqual(addr._flowinfo, 0)
+        self.assertEqual(addr._scopeid, 0)
 
 if __name__ == "__main__":
     unittest.main()

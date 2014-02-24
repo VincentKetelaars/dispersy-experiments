@@ -8,7 +8,7 @@ import os
 import time
 
 from src.filepusher import FilePusher
-from src.definitions import SWIFT_BINPATH, MAX_FILE_SIZE, HASH_LENGTH, FILENAMES_NOT_TO_SEND, FILETYPES_NOT_TO_SEND
+from src.definitions import SWIFT_BINPATH, MAX_MESSAGE_SIZE, HASH_LENGTH, FILENAMES_NOT_TO_SEND, FILETYPES_NOT_TO_SEND
 
 from src.tests.unit.definitions import DIRECTORY, FILES
 
@@ -93,10 +93,10 @@ class TestFilePusher(unittest.TestCase):
         def callback(message):
             all_files.remove(message.filename)
             self.check_filename(message.filename)
-            if os.path.getsize(message.filename) > MAX_FILE_SIZE:
+            if os.path.getsize(message.filename) > MAX_MESSAGE_SIZE:
                 self.assertEqual(len(message.roothash), HASH_LENGTH)
                 
-        self._filepusher = FilePusher(callback, SWIFT_BINPATH, directory=self._directory)
+        self._filepusher = FilePusher(callback, SWIFT_BINPATH, directories=[self._directory])
         self._filepusher.start()
         
         self.wait_and_asses(all_files)
@@ -107,7 +107,7 @@ class TestFilePusher(unittest.TestCase):
         def callback(message):
             all_files.remove(message.filename)
             self.check_filename(message.filename)
-            if os.path.getsize(message.filename) > MAX_FILE_SIZE:
+            if os.path.getsize(message.filename) > MAX_MESSAGE_SIZE:
                 self.assertEqual(len(message.roothash), HASH_LENGTH)
                 
         self._filepusher = FilePusher(callback, SWIFT_BINPATH, files=all_files)
@@ -135,10 +135,10 @@ class TestFilePusher(unittest.TestCase):
         def callback(message):
             all_files.remove(message.filename)
             self.check_filename(message.filename)
-            if os.path.getsize(message.filename) > MAX_FILE_SIZE:
+            if os.path.getsize(message.filename) > MAX_MESSAGE_SIZE:
                 self.assertEqual(len(message.roothash), HASH_LENGTH)
                 
-        self._filepusher = FilePusher(callback, SWIFT_BINPATH, directory=self._directory, files=self._files)
+        self._filepusher = FilePusher(callback, SWIFT_BINPATH, directories=[self._directory], files=self._files)
         self._filepusher.start()
         
         self.wait_and_asses(all_files)

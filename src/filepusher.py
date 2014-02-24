@@ -8,13 +8,13 @@ from threading import Thread, Event
 from datetime import datetime
 from string import find
 from os import listdir
-from os.path import exists, isfile, isdir, getmtime, join, getsize, basename
+from os.path import exists, isfile, isdir, getmtime, join, getsize, basename, abspath
 
 from src.logger import get_logger
 from src.tools.runner import CallFunctionThread
 from src.dispersy_extends.payload import SmallFileCarrier, FileHashCarrier
 from src.dispersy_extends.endpoint import get_hash
-from src.definitions import SLEEP_TIME, MAX_FILE_SIZE, FILENAMES_NOT_TO_SEND, FILETYPES_NOT_TO_SEND
+from src.definitions import SLEEP_TIME, MAX_MESSAGE_SIZE, FILENAMES_NOT_TO_SEND, FILETYPES_NOT_TO_SEND
 
 logger = get_logger(__name__)
 
@@ -25,7 +25,7 @@ class FilePusher(Thread):
     In the former case the filename is send back, whereas in the latter case the contents of the file (string) is send back.
     '''
 
-    def __init__(self, callback, swift_path, directory=None, files=[], file_size=MAX_FILE_SIZE, hidden=False, min_timestamp=None):
+    def __init__(self, callback, swift_path, directories=[], files=[], file_size=MAX_MESSAGE_SIZE, hidden=False, min_timestamp=None):
         '''
         @param callback: The function that will be called with a FileHashCarrier or SimpleFileCarrier object
         @param swift_path: Path to swift executable
@@ -37,11 +37,11 @@ class FilePusher(Thread):
         '''
         Thread.__init__(self, name="Filepusher")
         self.setDaemon(True)
-        self._dir = None
-        self.set_directory(directory)
-        # TODO: Allow for multiple directories
+        self._dirs = set()
+        for d in directories:
+            self.add_directory(d)
         
-        self._files = []
+        self._files = set()
         self.add_files(files)
                 
         self._recent_files = []
@@ -55,15 +55,14 @@ class FilePusher(Thread):
         self._thread_func = CallFunctionThread(timeout=1.0, name="Filepusher")
         self._paused = False
         
-    def set_directory(self, directory):
+    def add_directory(self, directory):
         if directory and exists(directory) and isdir(directory):
-            self._dir = directory
+            self._dirs.add(abspath(directory)) # Add only absolute paths, no ambiguities
         
     def add_files(self, files):
-        if files and hasattr(files, "__iter__"): # It should also have a next (or __next__ in Python 3.x) method
-            for f in files:
-                if exists(f) and isfile(f):
-                    self._files.append(f)
+        for f in files:
+            if exists(f) and isfile(f):
+                self._files.add(f)
 
     def run(self):
         """
@@ -80,14 +79,7 @@ class FilePusher(Thread):
                     continue # Only go for files that are older than self._min_timestamp
                 logger.debug("New file to be sent: %s", absfilename)
                 if getsize(absfilename) > self._file_size:
-                    loc = -1
-                    if self._dir is not None:
-                        loc = find(absfilename, self._dir)
-                    dirs = None
-                    if loc != -1:
-                        dirs = absfilename[len(self._dir) + 1:-len(basename(absfilename))]
-                    # TODO: Put a limit to this (If it is not being sent), because it costs considerable resources
-                    self._thread_func.put(self.send_file_hash_message, absfilename, dirs=dirs, 
+                    self._thread_func.put(self.send_file_hash_message, absfilename, dirs=self._get_dir(absfilename), 
                                           queue_priority=getmtime(absfilename))
                 else:
                     with file(absfilename) as f:
@@ -95,6 +87,20 @@ class FilePusher(Thread):
                         self._callback(message=SmallFileCarrier(absfilename, s))
                 
             self._stop_event.wait(SLEEP_TIME)
+            
+    def _get_dir(self, absfilename):
+        """
+        Find the longest path in the available directories.
+        Return None if no found. 
+        @param absfilename: The absolute path to the filename
+        """
+        longest = "" # Longest directory path
+        for d in self._dirs:
+            if d in absfilename and len(longest) < len(d):
+                longest = d
+        if len(longest): # Not length 0
+            return absfilename[len(longest) + 1:-len(basename(absfilename))]
+        return None
             
     def send_file_hash_message(self, absfilename, dirs=None):
         roothash = get_hash(absfilename, self.swift_path)
@@ -151,12 +157,9 @@ class FilePusher(Thread):
                 all_files.extend(recur(d))
             return all_files
         
-        all_files = []
-        if self._dir is not None: # Get all files in the directory and subdirectories
-            all_files = recur(self._dir)
-            
-        if self._files:
-            all_files.extend(self._files)
+        # Get all files in the directory and subdirectories
+        all_files = set([f for d in self._dirs for f in recur(d)])
+        all_files.update(self._files)
         file_updates = [ (f, getmtime(f)) for f in all_files] # create tuple of file and last modified timestamp
 
         # Each file in the directory should be send at least once

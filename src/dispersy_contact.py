@@ -5,11 +5,11 @@ Created on Nov 21, 2013
 '''
 
 from datetime import datetime, timedelta
-from src.download import Peer
 from src.address import Address
 
 from src.logger import get_logger
 from src.definitions import ENDPOINT_CONTACT_TIMEOUT
+from src.peer import Peer
 logger = get_logger(__name__)
 
 class DispersyContact(object):
@@ -27,26 +27,35 @@ class DispersyContact(object):
         self.bytes_sent = {}
         self.bytes_rcvd = {}
         self.community_ids = [community_id] if community_id is not None else []
-        self.peer = Peer([address]) if peer is None else peer
+        self.peer = peer
         self._unreachable_addresses = set()
         self._addresses_received = datetime.utcnow() if addresses_received else datetime.min
         self._addresses_sent = datetime.min
+        self._addresses_requested = datetime.min
         self._member_id = member_id
         
     @classmethod
     def shallow_copy(cls, contact):
         assert isinstance(contact, DispersyContact)
-        dc = DispersyContact(contact.address, peer=contact.peer) # Should these be copies?
-        dc.community_ids = contact.community_ids
+        dc = DispersyContact(Address.copy(contact.address), peer=Peer.copy(contact.peer)) # Copies are not really necessary probably
+        dc.community_ids = list(contact.community_ids)
         return dc
+    
+    @property
+    def addresses(self):
+        return self.peer.addresses if self.peer is not None else set([self.address])
+    
+    @property
+    def tuples(self):
+        return self.peer.tuples if self.peer is not None else [(self.address, self.address)]
         
     @property
     def reachable_addresses(self):
-        return set(self.peer.addresses).difference(self._unreachable_addresses)
+        return list(self.addresses.difference(self._unreachable_addresses))
     
     @property
     def confirmed_addresses(self):
-        return [a for a in self.peer.addresses if self.last_rcvd(a) > datetime.min]
+        return [a for a in self.addresses if self.last_rcvd(a) > datetime.min]
     
     @property
     def addresses_received(self):
@@ -60,6 +69,10 @@ class DispersyContact(object):
     def member_id(self):
         return self._member_id
     
+    @property
+    def addresses_requested(self):
+        return self._addresses_requested
+
     @member_id.setter
     def member_id(self, member_id):
         self._member_id = member_id
@@ -67,12 +80,23 @@ class DispersyContact(object):
     def sent_addresses(self):
         self._addresses_sent = datetime.utcnow()
     
+    def requested_addresses(self):
+        self._addresses_requested = datetime.utcnow()
+    
     def get_peer_addresses(self, lan, wan):
+        if self.peer is None:
+            return [self.address]
         return [l if wan.ip == w.ip else w for l, w in self.peer._addresses.itervalues()]
     
-    def add_community(self, id_):
-        if not id_ in self.community_ids:
-            self.community_ids.append(id_)
+    def add_community(self, cid):
+        if not cid in self.community_ids:
+            self.community_ids.append(cid)
+            
+    def has_community(self, cid):
+        for c in self.community_ids:
+            if c == cid:
+                return True
+        return False
         
     def add_unreachable_address(self, address):
         self._unreachable_addresses.add(address)
@@ -112,12 +136,16 @@ class DispersyContact(object):
             return max(self.last_send_time[self.address], self.last_recv_time[self.address])
         return max(self.last_send_time.get(address, datetime.min), self.last_recv_time.get(address, datetime.min))
     
-    def no_contact_since(self, expiration_time=ENDPOINT_CONTACT_TIMEOUT):
+    def no_contact_since(self, expiration_time=ENDPOINT_CONTACT_TIMEOUT, lan=None, wan=None):
         addrs = []
-        for a in self.reachable_addresses:
-            if (self.last_rcvd(a) + timedelta(seconds=expiration_time) < datetime.utcnow() or
-                self.last_sent(a) + timedelta(seconds=expiration_time) < datetime.utcnow()): # Timed out
-                addrs.append(a)
+        for a in self.tuples:
+            # No contact with lan or wan address
+            if ((self.last_rcvd(a[0]) + timedelta(seconds=expiration_time) < datetime.utcnow() and
+                 self.last_rcvd(a[1]) + timedelta(seconds=expiration_time) < datetime.utcnow()) or
+                (self.last_sent(a[0]) + timedelta(seconds=expiration_time) < datetime.utcnow() and
+                 self.last_sent(a[1]) + timedelta(seconds=expiration_time) < datetime.utcnow())):
+                # Only send lan if we know the wans are equal otherwise wan
+                addrs.append(a[0] if wan is not None and wan.ip == a[1].ip else a[1]) 
         return addrs
     
     def last_rcvd(self, address):
@@ -140,6 +168,22 @@ class DispersyContact(object):
         @type address: Address
         """
         return address == self.address or (self.peer is not None and self.peer.has_any([address]))
+    
+    def has_any(self, addresses, ids=[]):
+        if self.peer is None:
+            return self.address in addresses
+        return self.peer.has_any(addresses, ids)
+    
+    def get_id(self, address):
+        if self.peer is None:
+            return None
+        return self.peer.get_id(address)
+    
+    def update_address(self, lan_address, wan_address, endpoint_id, mid):
+        if self.peer is None:
+            self.peer = Peer(lan_address, wan_address, endpoint_id, mid)
+        else:
+            self.peer.update_address(lan_address, wan_address, endpoint_id)
     
     def merge(self, contact):
         self.merge_stats(contact)
@@ -180,7 +224,8 @@ class DispersyContact(object):
     def __eq__(self, other):
         if not isinstance(other, DispersyContact):
             return False
-        if self.address == other.address:
+        # This comparison should be sufficient to identify unique contacts
+        if self.address == other.address and self.bytes_rcvd == other.bytes_rcvd and self.bytes_sent == other.bytes_sent: 
             return True
         return False
         

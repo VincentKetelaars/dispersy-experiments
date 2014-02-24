@@ -17,7 +17,7 @@ class Test(unittest.TestCase):
         self.lan = Address(ip="213.23.212.22", port=123)
         self.wan = Address(ip="213.23.212.22", port=123)
         self.id = urandom(16)
-        self.peer = Peer([self.lan], [self.wan], [self.id])
+        self.peer = Peer([self.lan], [self.wan], [self.id], "asjdfkl")
 
     def tearDown(self):
         pass

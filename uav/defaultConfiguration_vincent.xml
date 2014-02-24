@@ -313,7 +313,9 @@
 				<peers>
 					<address>193.156.106.116:12345</address>
 				</peers>
-				<files_directory>/home/vincent/Desktop/test_large</files_directory>
+				<file_directories>
+					<d0>/home/vincent/Desktop/test_large</d0>
+				</file_directories>
 				<files></files>
 				<file_timestamp_min></file_timestamp_min>
 				<run_time>60</run_time>

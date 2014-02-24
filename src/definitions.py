@@ -102,7 +102,7 @@ API_MESSAGE_NAME = u"api_message"
 MIN_MTU = 1500 # Bytes. Bloomfilters will be this big unless we change that as well
 MAX_MTU = 2**16 # Bytes
 DISPERSY_MESSAGE_MINIMUM = 60 # Bytes
-MAX_FILE_SIZE = MAX_MTU - DISPERSY_MESSAGE_MINIMUM
+MAX_MESSAGE_SIZE = MAX_MTU - DISPERSY_MESSAGE_MINIMUM
 ENDPOINT_SOCKET_TIMEOUT = 180.0 # Seconds
 ENDPOINT_CONTACT_TIMEOUT = 25.0 # Seconds
 ENDPOINT_CHECK = 5 # int seconds
@@ -115,10 +115,9 @@ MIN_TIME_BETWEEN_ADDRESSES_MESSAGE = 10.0 # Seconds
 FILETYPES_NOT_TO_SEND = [".mhash",".mbinmap"]
 FILENAMES_NOT_TO_SEND = ["swifturl-"]
 
-# Private addresses
+# Private addresses, including loopback
 PRIVATE_IPV4_ADDRESSES = [("127.0.0.0", "255.0.0.0"), ("10.0.0.0", "255.0.0.0"), ("172.16.0.0", "255.240.0.0"), 
                      ("192.168.0.0", "255.255.0.0")]
-# TODO: Should the Loopback address range be kept in here?
 
 """
 Swift
@@ -137,6 +136,7 @@ MAX_SWARM_LIFE_WITHOUT_LEECHERS = 30.0 # Seconds
 DOWNLOAD_MOREINFO_UPDATE = 1.0 # Seconds
 UPLOAD_STACK_PAUSE = 10
 UPLOAD_STACK_UNPAUSE = 5
+MAX_WAIT_FOR_TCP = 5.0 # Seconds
 
 # Error codes
 SWIFT_ERROR_TCP_FAILED = 0

@@ -6,6 +6,7 @@ Created on Oct 3, 2013
 
 import os
 from src.swift.swift_process import MySwiftProcess
+from src.dispersy_extends.endpoint import CommonEndpoint
             
 class FakeDispersy(object):
 
@@ -33,3 +34,27 @@ class FakeSwift(MySwiftProcess):
     
     def get_pid(self):
         return os.getpid()
+    
+class FakeCommunity():
+    
+    def __init__(self):
+        pass
+    
+    @property
+    def cid(self):
+        return "Bladiebla"
+    
+class FakeCommonEndpoint(CommonEndpoint):
+    
+    def open(self, dispersy):
+        self._dispersy = dispersy
+        return True
+    
+    def get_address(self):
+        return ("0.0.0.0", 0)
+    
+    def get_community(self, cid):
+        return FakeCommunity()
+    
+    def is_bootstrap_candidate(self, addr=None, candidate=None):
+        return False
