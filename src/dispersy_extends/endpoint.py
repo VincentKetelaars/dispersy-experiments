@@ -812,7 +812,7 @@ class MultiEndpoint(CommonEndpoint):
                     logger.debug("%d bytes will be sent with %s in the same subnet as %s", total_size, e, paddr)
                     return (e, paddr.addr())
             # Pick one endpoint at random and one of the peer's endpoints as long as they are public
-            for e, paddr in self._subnet_endpoints(contact):
+            for e, paddr in self._pick_public_endpoints_at_random(contact):
                 if e is not None and e.is_alive and e.socket_running:
                     logger.debug("%d bytes will be sent with public endpoint %s and public peer %s", total_size, e, paddr)
                     return (e, paddr.addr())
