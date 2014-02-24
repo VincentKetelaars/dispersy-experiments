@@ -109,6 +109,7 @@ class Download(object):
         return self.downloadimpl.bad_swarm
     
     def got_moreinfo(self):
+        self.set_started()
         self._last_moreinfo = datetime.utcnow()
         for c in self.downloadimpl.midict.get("channels", []):
             self._active_channels.add((Address.tuple((c["socket_ip"], c["socket_port"])), 
