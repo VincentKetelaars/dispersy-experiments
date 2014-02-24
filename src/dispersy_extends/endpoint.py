@@ -650,12 +650,12 @@ class MultiEndpoint(CommonEndpoint):
                     last_contacts.append((e, paddr, contact.last_contact(paddr)))
         return sorted(last_contacts, key=lambda x: x[2], reverse=True)
     
-    def _subnet_endpoints(self, address, endpoints=[]):
+    def _subnet_endpoints(self, contact, endpoints=[]):
         """
         This function returns the endpoints that reside in the same subnet.
         These are either point to point or local connections, which will likely be fastest(?).
         
-        @type address: Address 
+        @type contact: DispersyContact 
         @param endpoints: List of endpoints to use (defaults to self.swift_endpoints)
         @return: List((SwiftEndpoint, peer Address))
         """
@@ -663,9 +663,6 @@ class MultiEndpoint(CommonEndpoint):
             endpoints = self.swift_endpoints
         same_subnet = []
         for e in endpoints:
-            contact = e.get_contact(address)
-            if contact is None:
-                continue
             for paddr in contact.get_peer_addresses(self.address, self.wan_address):
                 if e.address.same_subnet(paddr.ip):
                     same_subnet.append((e, paddr))
@@ -809,7 +806,7 @@ class MultiEndpoint(CommonEndpoint):
                                  last_contact.strftime("%H:%M:%S"))
                     return (e, paddr.addr())
             # In case no contact has been made with this peer (or those endpoint are not available)
-            for e, paddr in self._subnet_endpoints(contact.address):
+            for e, paddr in self._subnet_endpoints(contact):
                 if e is not None and e.is_alive and e.socket_running:
                     logger.debug("%d bytes will be sent with %s in the same subnet as %s", total_size, e, paddr)
                     return (e, paddr.addr())
