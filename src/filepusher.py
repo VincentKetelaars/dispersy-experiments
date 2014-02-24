@@ -40,7 +40,6 @@ class FilePusher(Thread):
         self._dirs = set()
         for d in directories:
             self.add_directory(d)
-        # TODO: Allow for multiple directories
         
         self._files = set()
         self.add_files(files)
