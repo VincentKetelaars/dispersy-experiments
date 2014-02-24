@@ -766,8 +766,10 @@ class MultiEndpoint(CommonEndpoint):
         if not endpoints:
             endpoints = self.swift_endpoints
         public_endpoints = [e for e in endpoints if not e.wan_address.is_private_address()]
-        shuffeled_addresses = random.shuffle([a for a in contact.addresses if not a.is_private_address()])
-        return [(e, p) for e in random.shuffle(public_endpoints) for p in shuffeled_addresses]
+        random.shuffle(public_endpoints)
+        addresses = [a for a in contact.addresses if not a.is_private_address()]
+        random.shuffle(addresses)
+        return [(e, p) for e in random.shuffle(public_endpoints) for p in addresses]
         
     def determine_endpoint(self, candidate, packets):
         """
