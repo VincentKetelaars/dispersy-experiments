@@ -7,6 +7,7 @@ import socket
 import time
 import logging
 import Queue
+import random
 from os import urandom
 from os.path import isfile, dirname, getmtime
 from datetime import datetime, timedelta
@@ -757,6 +758,16 @@ class MultiEndpoint(CommonEndpoint):
                         est += c["avg_rtt"] / float(10**6) / 2 # avg_rtt (us) / 10^6 / 2
                     r.append((e, paddr, est))
         return sorted(r, key=lambda x: x[2]) # From low to high
+    
+    def _pick_public_endpoints_at_random(self, contact, endpoints=[]):
+        """
+        Determine public endpoints and public contact addresses, choose from these at random
+        """
+        if not endpoints:
+            endpoints = self.swift_endpoints
+        public_endpoints = [e for e in endpoints if not e.wan_address.is_private_address()]
+        shuffeled_addresses = random.shuffle([a for a in contact.addresses if not a.is_private_address()])
+        return [(e, p) for e in random.shuffle(public_endpoints) for p in shuffeled_addresses]
         
     def determine_endpoint(self, candidate, packets):
         """
@@ -799,7 +810,12 @@ class MultiEndpoint(CommonEndpoint):
             for e, paddr in self._subnet_endpoints(contact.address):
                 if e is not None and e.is_alive and e.socket_running:
                     logger.debug("%d bytes will be sent with %s in the same subnet as %s", total_size, e, paddr)
-                    return (e, paddr.addr())          
+                    return (e, paddr.addr())
+            # Pick one endpoint at random and one of the peer's endpoints as long as they are public
+            for e, paddr in self._subnet_endpoints(contact):
+                if e is not None and e.is_alive and e.socket_running:
+                    logger.debug("%d bytes will be sent with public endpoint %s and public peer %s", total_size, e, paddr)
+                    return (e, paddr.addr())
             return recur(self._endpoint, len(self.swift_endpoints))
         
         if (len(self.swift_endpoints) == 0):
