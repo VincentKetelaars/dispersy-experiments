@@ -56,6 +56,7 @@ class SwiftCommunity(object):
             if download.community_destination():
                 self.endpoint.put_swift_upload_stack(self._swift_start, size, timestamp, priority=0, args=(d, self.dcomm.cid), 
                                                      kwargs={"func" : send_message})
+                download.stacked()
             
     def clean_up_download(self, download):
         """
@@ -83,7 +84,7 @@ class SwiftCommunity(object):
         if self._api_callback is not None:
             self._api_callback(key, *args, **kwargs)
         
-    def filehash_received(self, filename, directories, roothash_hex, size, timestamp, destination):
+    def filehash_received(self, filename, directories, roothash_hex, size, timestamp, destination, priority=0):
         """
         @param filename: The name the file will get
         @param directories: Optional path of directories within the destination directory
@@ -103,9 +104,9 @@ class SwiftCommunity(object):
             seed = not DELETE_CONTENT # Seed if not delete when done
             # Add download first, because it might take while before swift process returns
             download = self.add_to_downloads(roothash, d.get_dest_dir(), d, size, timestamp,
-                                  seed=seed, download=True, destination=destination)
+                                  seed=seed, download=True, destination=destination, priority=priority)
             if download.community_destination():
-                self.endpoint.put_swift_download_stack(self._swift_start, size, timestamp, priority=0, args=(d, self.dcomm.cid))
+                self.endpoint.put_swift_download_stack(self._swift_start, size, timestamp, priority=priority, args=(d, self.dcomm.cid))
             
             
     def file_received(self, filename, contents):
@@ -190,7 +191,8 @@ class SwiftCommunity(object):
         else:
             logger.debug("Unknown swarm %s", binascii.hexlify(roothash))
 
-    def add_to_downloads(self, roothash, filename, download_impl, size, timestamp, seed=False, download=False, destination=None):
+    def add_to_downloads(self, roothash, filename, download_impl, size, timestamp, seed=False, download=False, 
+                         destination=None, priority=0):
         """
         @param roothash: Binary form of the roothash of filename
         @param filename: Absolute path of filename
@@ -202,8 +204,10 @@ class SwiftCommunity(object):
         @param add_known: Boolean that determines if all known peers should be added to this download
         @return: Download
         """
-        logger.debug("Add to known downloads, %s %s %d %f %s %s", binascii.hexlify(roothash), filename, size, timestamp, seed, download)
-        d = Download(roothash, filename, download_impl, size, timestamp, self.dcomm.cid, seed=seed, download=download, moreinfo=MOREINFO, destination=destination)
+        logger.debug("Add to known downloads, %s %s %d %f %s %s", binascii.hexlify(roothash), filename, size, timestamp, 
+                     seed, download)
+        d = Download(roothash, filename, download_impl, size, timestamp, self.dcomm.cid, seed=seed, download=download, 
+                     moreinfo=MOREINFO, destination=destination, priority=priority)
         self.downloads[roothash] = d
         return d
         
@@ -245,6 +249,11 @@ class SwiftCommunity(object):
     def _loop(self):
         while not self._thread_stop_event.is_set():
             self.do_callback(MESSAGE_KEY_SWIFT_INFO, {"regular" : self._overal_data()})
+            for download in self.downloads.itervalues():
+                if not download.is_finished() and not download.running_on_swift() and not download.on_stack() and not download.is_bad_swarm():
+                    self.endpoint.put_swift_download_stack(self._swift_start, download.size, download.timestamp, 
+                                                           priority=download.priority, args=(download.downloadimpl, self.dcomm.cid))
+                    download.stacked()
             self._thread_stop_event.wait(REPORT_DISPERSY_INFO_TIME)
             
     def unload_community(self):

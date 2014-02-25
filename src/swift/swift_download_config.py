@@ -116,6 +116,7 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         self._last_leecher_time = datetime.utcnow()
         self._bad_swarm = False
         self._final_checkpoint = datetime.min # We own every bit of it
+        self._on_stack = False
         
     @property
     def bad_swarm(self):
@@ -150,6 +151,7 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     def i2ithread_info_callback(self, dlstatus, progress, dynasize, dlspeed, ulspeed, numleech, numseeds, contentdl, contentul):
         SwiftDownloadImpl.i2ithread_info_callback(self, dlstatus, progress, dynasize, dlspeed, ulspeed, numleech, numseeds, contentdl, contentul)
         self._update_leeching(numleech)
+        self._on_stack = False
         if dlstatus == DLSTATUS_SEEDING and self._download_ready_callback is not None:
             self._download_ready_callback(self.get_def().get_roothash())
     
@@ -196,6 +198,13 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         
     def seeding(self):
         return self.get_status() == DLSTATUS_SEEDING
+    
+    @property
+    def on_stack(self):
+        return self._on_stack
+    
+    def stacked(self):
+        self._on_stack = True
     
     def checkpointing(self):
         if self.seeding():

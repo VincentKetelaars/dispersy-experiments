@@ -96,6 +96,12 @@ class Download(object):
     def is_download(self):
         return self._download
     
+    def on_stack(self):
+        return self.downloadimpl.on_stack
+    
+    def stacked(self):
+        self.downloadimpl.stacked()
+    
     def is_usefull(self):
         return self.downloadimpl.is_usefull()
     

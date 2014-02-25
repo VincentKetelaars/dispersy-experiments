@@ -279,8 +279,9 @@ class SwiftHandler(TunnelEndpoint):
         @param priority: priority of the file
         @type priority: int
         """
-        self._swift_upload_stack.put((priority, timestamp), (func, size, timestamp, args, kwargs))
-        self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
+        if not (func, size, timestamp, args, kwargs) in self._swift_upload_stack:
+            self._swift_upload_stack.put((priority, timestamp), (func, size, timestamp, args, kwargs))
+            self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
                 
     def put_swift_download_stack(self, func, size, timestamp, priority=0, args=(), kwargs={}):
         """
@@ -293,8 +294,9 @@ class SwiftHandler(TunnelEndpoint):
         @param priority: priority of the file
         @type priority: int
         """
-        self._swift_download_stack.put((priority, timestamp), (func, size, timestamp, args, kwargs))
-        self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
+        if not (func, size, timestamp, args, kwargs) in self._swift_download_stack:
+            self._swift_download_stack.put((priority, timestamp), (func, size, timestamp, args, kwargs))
+            self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
         
     def pop_swift_upload_stack(self):
         """
@@ -341,10 +343,12 @@ class SwiftHandler(TunnelEndpoint):
                             almost_done_swarms += 1
                             logger.debug("Estimate %s to be done downloading in %f", 
                                          d.get_def().get_roothash_as_hex(), dw_time_left)
+                    if len(self._swift_download_stack) and not d.is_usefull():
+                        swarms_to_be_removed.append(d)
                 elif d.seeding() or d.initialized(): # Seeding or initializing
                     seeding_swarms += 1
-                if not d.is_usefull():
-                    swarms_to_be_removed.append(d)
+                    if len(self._swift_upload_stack) and not d.is_usefull():
+                        swarms_to_be_removed.append(d)
         # Start new swarms if there is room
         for _ in range(downloading_swarms - almost_done_swarms, MAX_CONCURRENT_DOWNLOADING_SWARMS):
             self.pop_swift_download_stack()

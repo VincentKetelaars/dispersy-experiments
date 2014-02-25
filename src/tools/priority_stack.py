@@ -40,6 +40,9 @@ class PriorityStack(object):
     def __iter__(self):
         for i in range(len(self._stack) - 1, -1, -1):
             yield self._stack[i][1]
+            
+    def __contains__(self, elem):
+        return self._stack.__contains__(elem)
         
     def __len__(self):
         return len(self._stack)
