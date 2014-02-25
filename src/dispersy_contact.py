@@ -181,7 +181,7 @@ class DispersyContact(object):
     
     def update_address(self, lan_address, wan_address, endpoint_id, mid):
         if self.peer is None:
-            self.peer = Peer(lan_address, wan_address, endpoint_id, mid)
+            self.peer = Peer([lan_address], [wan_address], [endpoint_id], mid)
         else:
             self.peer.update_address(lan_address, wan_address, endpoint_id)
     
