@@ -37,7 +37,8 @@ class DispersyContact(object):
     @classmethod
     def shallow_copy(cls, contact):
         assert isinstance(contact, DispersyContact)
-        dc = DispersyContact(Address.copy(contact.address), peer=Peer.copy(contact.peer)) # Copies are not really necessary probably
+        # Copies are not really necessary probably
+        dc = DispersyContact(Address.copy(contact.address), peer=Peer.copy(contact.peer) if contact.peer is not None else None)
         dc.community_ids = list(contact.community_ids)
         return dc
     
