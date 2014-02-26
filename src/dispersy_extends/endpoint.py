@@ -1124,7 +1124,7 @@ class SwiftEndpoint(CommonEndpoint):
         self.waiting_queue = Queue.Queue()
         if self.address.resolve_interface():
             if not address in self._swift.working_sockets:
-                self.swift_add_socket()
+                self.swift_add_socket(self.address)
             else:
                 self.socket_running = 0
         else:
@@ -1191,7 +1191,7 @@ class SwiftEndpoint(CommonEndpoint):
         return (self._socket_running[0] == -1 and 
                 self._socket_running[1] > datetime.utcnow() - timedelta(seconds=MAX_SOCKET_INITIALIZATION_TIME))
         
-    def swift_add_socket(self, addr=None):
+    def swift_add_socket(self, addr):
         logger.debug("SwiftEndpoint add socket %s", addr)
         if not self.socket_running:
             self.address = addr
