@@ -220,7 +220,7 @@ class SwiftCommunity(object):
         """
         for h in roothashes:
             d = self.downloads.get(h)
-            if d is not None and not d.is_bad_swarm() and d.is_usefull() and (not d.is_finished() or d.seeder()): # No sense in adding a download that is finished, and not seeding
+            if d is not None and not d.is_bad_swarm() and d.has_peer() and (not d.is_finished() or d.seeder()): # No sense in adding a download that is finished, and not seeding
                 logger.debug("Enqueue start download %s", h)
                 if d.community_destination():
                     q.put((self._swift_start, (d.downloadimpl, self.dcomm.cid), {}))

@@ -114,6 +114,7 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         SwiftDownloadImpl.__init__(self, session, sdef)
         self.sp = sp
         self._last_leecher_time = datetime.utcnow()
+        self._last_seeder_time = datetime.utcnow()
         self._bad_swarm = False
         self._final_checkpoint = datetime.min # We own every bit of it
         self._on_stack = False
@@ -151,6 +152,7 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     def i2ithread_info_callback(self, dlstatus, progress, dynasize, dlspeed, ulspeed, numleech, numseeds, contentdl, contentul):
         SwiftDownloadImpl.i2ithread_info_callback(self, dlstatus, progress, dynasize, dlspeed, ulspeed, numleech, numseeds, contentdl, contentul)
         self._update_leeching(numleech)
+        self._update_seeding(numseeds)
         self._on_stack = False
         if dlstatus == DLSTATUS_SEEDING and self._download_ready_callback is not None:
             self._download_ready_callback(self.get_def().get_roothash())
@@ -175,6 +177,10 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     def _update_leeching(self, numleech):
         if numleech > 0:
             self._last_leecher_time = datetime.utcnow()
+            
+    def _update_seeding(self, numseeds):
+        if numseeds > 0:
+            self._last_seeder_time = datetime.utcnow()
         
     def speed(self, direction):
         try:
@@ -213,8 +219,13 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     def checkpoint_done(self):
         return self._final_checkpoint != datetime.min
     
-    def is_usefull(self):
-        return self._last_leecher_time + timedelta(seconds=MAX_SWARM_LIFE_WITHOUT_LEECHERS) > datetime.utcnow()
+    def has_peer(self, timelapsed=MAX_SWARM_LIFE_WITHOUT_LEECHERS):
+        if self.downloading():
+            return self._last_leecher_time + timedelta(seconds=timelapsed) > datetime.utcnow()
+        elif self.seeding():
+            return self._last_seeder_time + timedelta(seconds=timelapsed) > datetime.utcnow()
+        # TODO: What should we do here? Can be initializing..
+        return True
         
     def network_create_spew_from_channels(self):
         if not 'channels' in self.midict:

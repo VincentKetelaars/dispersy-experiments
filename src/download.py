@@ -9,7 +9,8 @@ from datetime import datetime, timedelta
 
 from dispersy.destination import CommunityDestination, CandidateDestination
 from src.address import Address
-from src.definitions import DOWNLOAD_MOREINFO_UPDATE
+from src.definitions import DOWNLOAD_MOREINFO_UPDATE,\
+    MAX_SWARM_LIFE_WITHOUT_LEECHERS
 
 from src.logger import get_logger
 logger = get_logger(__name__)
@@ -102,8 +103,8 @@ class Download(object):
     def stacked(self):
         self.downloadimpl.stacked()
     
-    def is_usefull(self):
-        return self.downloadimpl.is_usefull()
+    def has_peer(self, timelapsed=MAX_SWARM_LIFE_WITHOUT_LEECHERS):
+        return self.downloadimpl.has_peer(timelapsed)
     
     def seeder(self):
         return self._seed
