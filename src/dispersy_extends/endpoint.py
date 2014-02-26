@@ -964,6 +964,7 @@ class MultiEndpoint(CommonEndpoint):
                     for dc in e.dispersy_contacts: 
                         # Reset unreachable addresses, because they might be reachable with this new ip
                         dc.reset_unreachable_addresses()
+                return
         self.swift_add_socket(addr) # If it is new send address to swift
         
     def update_dispersy_contacts(self, sock_addr, packets, recv=True):
