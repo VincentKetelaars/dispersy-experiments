@@ -109,6 +109,7 @@ class MySwiftProcess(SwiftProcess):
         self._sockaddr_info_callback = None
         self._swift_restart_callback = None
         self._tcp_connection_open_callback = None
+        self._channel_closed_callback = None
         
         self.roothash2dl = {}
         self.donestate = DONE_STATE_WORKING  # shutting down
@@ -199,6 +200,9 @@ class MySwiftProcess(SwiftProcess):
         self._sockaddr_info_callback = callback
         for s in self.working_sockets: # In case some are already up and running
             callback(s, 0)
+    
+    def set_on_channel_closed_callback(self, callback):
+        self._channel_closed_callback = callback
     
     def i2ithread_readlinecallback(self, ic, cmd):
         logger.debug("CMD IN: %s", cmd)
@@ -310,9 +314,10 @@ class MySwiftProcess(SwiftProcess):
             elif words[0] == "CHANNELCLOSED":
                 saddr = Address.unknown(words[2])
                 paddr = Address.unknown(words[3])
+                if self._channel_closed_callback is not None:
+                    self._channel_closed_callback(roothash, saddr, paddr)
                 if d._channel_closed_callback is not None:
                     d._channel_closed_callback(roothash, saddr, paddr)
-                
     
     def write(self, msg):
         if self.is_running():

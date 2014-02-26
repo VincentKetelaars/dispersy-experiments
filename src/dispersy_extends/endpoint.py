@@ -67,7 +67,7 @@ class SwiftHandler(TunnelEndpoint):
         self._started_downloads = {}
         self._swift_download_stack = PriorityStack()
         self._swift_upload_stack = PriorityStack()
-        self._added_peers = {}
+        self._added_peers = {} # Dictionary of sets (paddr, saddr)
         self._closing = False
         
         self.lock = RLock() # Reentrant Lock
@@ -264,6 +264,7 @@ class SwiftHandler(TunnelEndpoint):
         self._swift.set_on_swift_restart_callback(self.restart_swift)
         self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback)
         self._swift.set_on_sockaddr_info_callback(self.sockaddr_info_callback)
+        self._swift.set_on_channel_closed_callback(self.channel_closed_callback)
         
     def sockaddr_info_callback(self, address, state):
         self.socket_running = state
@@ -376,6 +377,12 @@ class SwiftHandler(TunnelEndpoint):
     
     def add_peers_to_new_download(self, downloadimpl, cid):
         pass
+    
+    def channel_closed_callback(self, roothash, saddr, paddr):
+        try:
+            self._added_peers[roothash].remove((paddr, saddr))
+        except KeyError:
+            pass
         
 class CommonEndpoint(SwiftHandler):
     
