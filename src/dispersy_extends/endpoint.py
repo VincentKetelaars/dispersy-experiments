@@ -1012,11 +1012,7 @@ class MultiEndpoint(CommonEndpoint):
                 self.add_endpoint(address)
         self.dequeue_swift_queue()
         if state == 0:
-            for roothash, (addr, sock_addr) in self._added_peers.iteritems():
-                if sock_addr != address:
-                    d = self.retrieve_download_impl(roothash)
-                    if d is not None:
-                        self.swift_add_peer(d, addr, address)
+            self.add_socket_to_started_downloads(address)
                 
     def swift_started_running_callback(self):
         logger.info("The TCP connection with Swift is up")
@@ -1043,6 +1039,11 @@ class MultiEndpoint(CommonEndpoint):
         for e in self.swift_endpoints:
             e.peer_endpoints_received(community, member, addresses, wan_addresses, ids)
             
+    def add_socket_to_started_downloads(self, sock_addr):
+        logger.debug("Adding socket %s to our %d downloads", str(sock_addr), len(self._started_downloads))
+        for h, cid in list(self._started_downloads.items()):
+            self.add_peers_to_new_download(self.retrieve_download_impl(h), cid, sock_addr)
+            
     def add_peer_to_started_downloads(self, contact):
         logger.debug("Adding contact %s to our %d downloads", str(contact), len(self._started_downloads))
         for h, cid in list(self._started_downloads.items()):
@@ -1051,12 +1052,12 @@ class MultiEndpoint(CommonEndpoint):
                 for addr in contact.reachable_addresses:
                     self.swift_add_peer(downloadimpl, addr, None)
                 
-    def add_peers_to_new_download(self, downloadimpl, cid):
+    def add_peers_to_new_download(self, downloadimpl, cid, sock_addr=None):
         logger.debug("Adding peers to new download %s", downloadimpl.get_def().get_roothash_as_hex())
         for contact in self.dispersy_contacts:
             if contact.has_community(cid):
                 for addr in contact.reachable_addresses:
-                    self.swift_add_peer(downloadimpl, addr, None)
+                    self.swift_add_peer(downloadimpl, addr, sock_addr)
             
     def swift_add_peer(self, d, addr, sock_addr=None):
         if self.is_bootstrap_candidate(addr=addr):
