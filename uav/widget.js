@@ -500,9 +500,9 @@ function generate_widget(name, info, c) {
     }
     else if (wname.startsWith("Dispersy")) {
     body = _p_add(wid, name, "swift.state", "Swift") + "<br>"
-    body += _p_add(wid, name, "swift.num_peers", "Peers") + "<br>"
-    body += _p_add(wid, name, "swift.num_seeding", "Seeding") + "<br>"
-    body += _p_add(wid, name, "swift.num_downloading", "Downloading") + "<br>"
+    body += _p_add(wid, name, "swift.active_peers", "Peers") + "<br>"
+    body += _p_add(wid, name, "swift.seeders", "Seeding") + "<br>"
+    body += _p_add(wid, name, "swift.downloading", "Downloading") + "<br>"
     body += _p_add(wid, name, "swift.done_downloads", "Finished") + "<br>"
     body += _p_add(wid, name, "swift.up_speed", "Up speed", trim_float2) + "<br>"
     body += _p_add(wid, name, "swift.down_speed", "Down speed", trim_float2) + "<br>"
