@@ -3,11 +3,12 @@ FOLDER=${HOME}/Desktop/mysql/
 
 usage() {
 	echo "Usage"
-	echo "-e | --endtime 		to set endtime"
+	echo "-d | --date		to set date (dd-mm-yyyy), defaults to today"
+	echo "-e | --endtime 		to set endtime (default 23:59:59)"
 	echo "-h | --help 		to display usage"
-	echo "-s | --starttime 	to set starttime"
+	echo "-s | --starttime 	to set starttime (default 00:00:00)"
 	echo "-v | --verbose 		to show python command"
-	echo "-z | --zeroed 		to normalize time to start at zero"
+	echo "-z | --zeroed 		to normalize timestamps to start at zero"
 }
 
 ENDTIME="23:59:59"

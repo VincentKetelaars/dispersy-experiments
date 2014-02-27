@@ -7,6 +7,7 @@ import socket
 import time
 import logging
 import Queue
+import random
 from os import urandom
 from os.path import isfile, dirname, getmtime
 from datetime import datetime, timedelta
@@ -66,7 +67,7 @@ class SwiftHandler(TunnelEndpoint):
         self._started_downloads = {}
         self._swift_download_stack = PriorityStack()
         self._swift_upload_stack = PriorityStack()
-        self._added_peers = {}
+        self._added_peers = {} # Dictionary of sets (paddr, saddr)
         self._closing = False
         
         self.lock = RLock() # Reentrant Lock
@@ -130,6 +131,8 @@ class SwiftHandler(TunnelEndpoint):
             self._swift.add_peer(d, addr, sock_addr)
             peer_set.add((addr, sock_addr))
             self._added_peers[roothash] = peer_set
+        else:
+            logger.debug("We already have the %s %s in %s", str(addr), str(sock_addr), d.get_def().get_roothash_as_hex())
     
     @_swift_runnable_decorator    
     def swift_checkpoint(self, d):
@@ -150,7 +153,7 @@ class SwiftHandler(TunnelEndpoint):
                 return logger.debug("%s is a bad swarm", d.get_def().get_roothash_as_hex())
             self._started_downloads[d.get_def().get_roothash()] = cid
             self._swift.start_download(d)
-            self.add_peers_to_new_download(d, cid)
+            self.add_peers_to_download(d, cid)
         else:
             logger.warning("This roothash %s was already started!", d.get_def().get_roothash_as_hex())
     
@@ -263,6 +266,7 @@ class SwiftHandler(TunnelEndpoint):
         self._swift.set_on_swift_restart_callback(self.restart_swift)
         self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback)
         self._swift.set_on_sockaddr_info_callback(self.sockaddr_info_callback)
+        self._swift.set_on_channel_closed_callback(self.channel_closed_callback)
         
     def sockaddr_info_callback(self, address, state):
         self.socket_running = state
@@ -278,8 +282,9 @@ class SwiftHandler(TunnelEndpoint):
         @param priority: priority of the file
         @type priority: int
         """
-        self._swift_upload_stack.put((priority, timestamp), (func, size, timestamp, args, kwargs))
-        self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
+        if not (func, size, timestamp, args, kwargs) in self._swift_upload_stack:
+            self._swift_upload_stack.put((priority, timestamp), (func, size, timestamp, args, kwargs))
+            self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
                 
     def put_swift_download_stack(self, func, size, timestamp, priority=0, args=(), kwargs={}):
         """
@@ -292,8 +297,9 @@ class SwiftHandler(TunnelEndpoint):
         @param priority: priority of the file
         @type priority: int
         """
-        self._swift_download_stack.put((priority, timestamp), (func, size, timestamp, args, kwargs))
-        self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
+        if not (func, size, timestamp, args, kwargs) in self._swift_download_stack:
+            self._swift_download_stack.put((priority, timestamp), (func, size, timestamp, args, kwargs))
+            self.evaluate_swift_swarms() # Evaluate directly (That is, don't wait for the loop thread to do this)
         
     def pop_swift_upload_stack(self):
         """
@@ -340,10 +346,12 @@ class SwiftHandler(TunnelEndpoint):
                             almost_done_swarms += 1
                             logger.debug("Estimate %s to be done downloading in %f", 
                                          d.get_def().get_roothash_as_hex(), dw_time_left)
+                    if len(self._swift_download_stack) and not d.has_peer():
+                        swarms_to_be_removed.append(d)
                 elif d.seeding() or d.initialized(): # Seeding or initializing
                     seeding_swarms += 1
-                if not d.is_usefull():
-                    swarms_to_be_removed.append(d)
+                    if len(self._swift_upload_stack) and not d.has_peer():
+                        swarms_to_be_removed.append(d)
         # Start new swarms if there is room
         for _ in range(downloading_swarms - almost_done_swarms, MAX_CONCURRENT_DOWNLOADING_SWARMS):
             self.pop_swift_download_stack()
@@ -369,8 +377,15 @@ class SwiftHandler(TunnelEndpoint):
             self.lock.release()
         return d
     
-    def add_peers_to_new_download(self, downloadimpl, cid):
+    def add_peers_to_download(self, downloadimpl, cid):
         pass
+    
+    def channel_closed_callback(self, roothash, saddr, paddr):
+        try:
+            self._added_peers[roothash].remove((paddr, saddr))
+        except KeyError:
+            logger.exception("Channel %s %s %s could not be removed", roothash, str(paddr), str(saddr))
+            
         
 class CommonEndpoint(SwiftHandler):
     
@@ -528,7 +543,7 @@ class MultiEndpoint(CommonEndpoint):
     def send(self, candidates, packets):
         with self.lock:
             if not self._swift.is_ready() or not self.socket_running:
-                if not self._dequeueing_cmd_queue:
+                if not self._dequeueing_cmd_queue: # Functions are dequeued when swift is running, hence we're not keeping messages to be send
                     self.enqueue_swift_queue(self.send, candidates, packets)
                 return False
             logger.debug("Send %s %d", [c.sock_addr for c in candidates], len(packets))
@@ -592,7 +607,8 @@ class MultiEndpoint(CommonEndpoint):
             try:
                 self.swift_endpoints.remove(endpoint)                
                 logger.info("Removed %s", endpoint)
-                self._send_socket_information()
+                if len(self.swift_endpoints):
+                    self._send_socket_information()
                 return True
             except KeyError:
                 logger.info("%s is not part of the SwiftEndpoints", endpoint)
@@ -649,12 +665,12 @@ class MultiEndpoint(CommonEndpoint):
                     last_contacts.append((e, paddr, contact.last_contact(paddr)))
         return sorted(last_contacts, key=lambda x: x[2], reverse=True)
     
-    def _subnet_endpoints(self, address, endpoints=[]):
+    def _subnet_endpoints(self, contact, endpoints=[]):
         """
         This function returns the endpoints that reside in the same subnet.
         These are either point to point or local connections, which will likely be fastest(?).
         
-        @type address: Address 
+        @type contact: DispersyContact 
         @param endpoints: List of endpoints to use (defaults to self.swift_endpoints)
         @return: List((SwiftEndpoint, peer Address))
         """
@@ -662,9 +678,6 @@ class MultiEndpoint(CommonEndpoint):
             endpoints = self.swift_endpoints
         same_subnet = []
         for e in endpoints:
-            contact = e.get_contact(address)
-            if contact is None:
-                continue
             for paddr in contact.get_peer_addresses(self.address, self.wan_address):
                 if e.address.same_subnet(paddr.ip):
                     same_subnet.append((e, paddr))
@@ -757,6 +770,18 @@ class MultiEndpoint(CommonEndpoint):
                         est += c["avg_rtt"] / float(10**6) / 2 # avg_rtt (us) / 10^6 / 2
                     r.append((e, paddr, est))
         return sorted(r, key=lambda x: x[2]) # From low to high
+    
+    def _pick_public_endpoints_at_random(self, contact, endpoints=[]):
+        """
+        Determine public endpoints and public contact addresses, choose from these at random
+        """
+        if not endpoints:
+            endpoints = self.swift_endpoints
+        public_endpoints = [e for e in endpoints if not e.wan_address.is_private_address()]
+        random.shuffle(public_endpoints)
+        addresses = [a for a in contact.addresses if not a.is_private_address()]
+        random.shuffle(addresses)
+        return [(e, p) for e in public_endpoints for p in addresses]
         
     def determine_endpoint(self, candidate, packets):
         """
@@ -796,10 +821,15 @@ class MultiEndpoint(CommonEndpoint):
                                  last_contact.strftime("%H:%M:%S"))
                     return (e, paddr.addr())
             # In case no contact has been made with this peer (or those endpoint are not available)
-            for e, paddr in self._subnet_endpoints(contact.address):
+            for e, paddr in self._subnet_endpoints(contact):
                 if e is not None and e.is_alive and e.socket_running:
                     logger.debug("%d bytes will be sent with %s in the same subnet as %s", total_size, e, paddr)
-                    return (e, paddr.addr())          
+                    return (e, paddr.addr())
+            # Pick one endpoint at random and one of the peer's endpoints as long as they are public
+            for e, paddr in self._pick_public_endpoints_at_random(contact):
+                if e is not None and e.is_alive and e.socket_running:
+                    logger.debug("%d bytes will be sent with public endpoint %s and public peer %s", total_size, e, paddr)
+                    return (e, paddr.addr())
             return recur(self._endpoint, len(self.swift_endpoints))
         
         if (len(self.swift_endpoints) == 0):
@@ -934,6 +964,7 @@ class MultiEndpoint(CommonEndpoint):
                     for dc in e.dispersy_contacts: 
                         # Reset unreachable addresses, because they might be reachable with this new ip
                         dc.reset_unreachable_addresses()
+                return
         self.swift_add_socket(addr) # If it is new send address to swift
         
     def update_dispersy_contacts(self, sock_addr, packets, recv=True):
@@ -986,11 +1017,7 @@ class MultiEndpoint(CommonEndpoint):
                 self.add_endpoint(address)
         self.dequeue_swift_queue()
         if state == 0:
-            for roothash, (addr, sock_addr) in self._added_peers.iteritems():
-                if sock_addr != address:
-                    d = self.retrieve_download_impl(roothash)
-                    if d is not None:
-                        self.swift_add_peer(d, addr, address)
+            self.add_socket_to_started_downloads(address)
                 
     def swift_started_running_callback(self):
         logger.info("The TCP connection with Swift is up")
@@ -1017,6 +1044,11 @@ class MultiEndpoint(CommonEndpoint):
         for e in self.swift_endpoints:
             e.peer_endpoints_received(community, member, addresses, wan_addresses, ids)
             
+    def add_socket_to_started_downloads(self, sock_addr):
+        logger.debug("Adding socket %s to our %d downloads", str(sock_addr), len(self._started_downloads))
+        for h, cid in list(self._started_downloads.items()):
+            self.add_peers_to_download(self.retrieve_download_impl(h), cid, sock_addr)
+            
     def add_peer_to_started_downloads(self, contact):
         logger.debug("Adding contact %s to our %d downloads", str(contact), len(self._started_downloads))
         for h, cid in list(self._started_downloads.items()):
@@ -1025,12 +1057,12 @@ class MultiEndpoint(CommonEndpoint):
                 for addr in contact.reachable_addresses:
                     self.swift_add_peer(downloadimpl, addr, None)
                 
-    def add_peers_to_new_download(self, downloadimpl, cid):
+    def add_peers_to_download(self, downloadimpl, cid, sock_addr=None):
         logger.debug("Adding peers to new download %s", downloadimpl.get_def().get_roothash_as_hex())
         for contact in self.dispersy_contacts:
             if contact.has_community(cid):
                 for addr in contact.reachable_addresses:
-                    self.swift_add_peer(downloadimpl, addr, None)
+                    self.swift_add_peer(downloadimpl, addr, sock_addr)
             
     def swift_add_peer(self, d, addr, sock_addr=None):
         if self.is_bootstrap_candidate(addr=addr):
@@ -1079,7 +1111,12 @@ class MultiEndpoint(CommonEndpoint):
                 dc.update_address(sender_lan, sender_wan, endpoint_id, member.mid)
         if dc.addresses_sent + timedelta(seconds=MIN_TIME_BETWEEN_ADDRESSES_MESSAGE) < datetime.utcnow():
             self.send_addresses_to_communities(community, dc)
-                
+    
+    def channel_closed_callback(self, roothash, saddr, paddr):
+        CommonEndpoint.channel_closed_callback(self, roothash, saddr, paddr)
+        d = self.retrieve_download_impl(roothash)
+        if roothash in self._started_downloads.keys() and self._swift.is_running() and d.downloading():
+            self.add_peers_to_download(d, self._started_downloads[roothash], saddr)
     
 class SwiftEndpoint(CommonEndpoint):
     
@@ -1088,7 +1125,7 @@ class SwiftEndpoint(CommonEndpoint):
         self.waiting_queue = Queue.Queue()
         if self.address.resolve_interface():
             if not address in self._swift.working_sockets:
-                self.swift_add_socket()
+                self.swift_add_socket(self.address)
             else:
                 self.socket_running = 0
         else:
@@ -1155,7 +1192,7 @@ class SwiftEndpoint(CommonEndpoint):
         return (self._socket_running[0] == -1 and 
                 self._socket_running[1] > datetime.utcnow() - timedelta(seconds=MAX_SOCKET_INITIALIZATION_TIME))
         
-    def swift_add_socket(self, addr=None):
+    def swift_add_socket(self, addr):
         logger.debug("SwiftEndpoint add socket %s", addr)
         if not self.socket_running:
             self.address = addr

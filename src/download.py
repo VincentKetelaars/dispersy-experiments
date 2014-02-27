@@ -9,7 +9,8 @@ from datetime import datetime, timedelta
 
 from dispersy.destination import CommunityDestination, CandidateDestination
 from src.address import Address
-from src.definitions import DOWNLOAD_MOREINFO_UPDATE
+from src.definitions import DOWNLOAD_MOREINFO_UPDATE,\
+    MAX_SWARM_LIFE_WITHOUT_LEECHERS
 
 from src.logger import get_logger
 logger = get_logger(__name__)
@@ -96,8 +97,14 @@ class Download(object):
     def is_download(self):
         return self._download
     
-    def is_usefull(self):
-        return self.downloadimpl.is_usefull()
+    def on_stack(self):
+        return self.downloadimpl.on_stack
+    
+    def stacked(self):
+        self.downloadimpl.stacked()
+    
+    def has_peer(self, timelapsed=MAX_SWARM_LIFE_WITHOUT_LEECHERS):
+        return self.downloadimpl.has_peer(timelapsed)
     
     def seeder(self):
         return self._seed
@@ -109,6 +116,7 @@ class Download(object):
         return self.downloadimpl.bad_swarm
     
     def got_moreinfo(self):
+        self.set_started()
         self._last_moreinfo = datetime.utcnow()
         for c in self.downloadimpl.midict.get("channels", []):
             self._active_channels.add((Address.tuple((c["socket_ip"], c["socket_port"])), 
