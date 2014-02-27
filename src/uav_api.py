@@ -201,6 +201,8 @@ class UAVAPI(API):
     def _monitor_uav_interfaces(self):
         current_dialers = self._get_dialers()
         for cd in current_dialers:
+            if cd.lower().find("iridium") >= 0: # We're not using Iridium!
+                continue
             timestamp, state = self.db_reader.get_last_status_value(cd, u"state")
             ip = self._get_channel_value(cd, u"ip")
             if state == u"up" and not self._interface_running(cd):
