@@ -205,7 +205,7 @@ class MySwiftProcess(SwiftProcess):
         self._channel_closed_callback = callback
     
     def i2ithread_readlinecallback(self, ic, cmd):
-        logger.debug("CMD IN: %s", cmd)
+#         logger.debug("CMD IN: %s", cmd)
         if self.donestate != DONE_STATE_WORKING:
             return
 

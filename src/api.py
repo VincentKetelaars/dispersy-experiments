@@ -480,7 +480,7 @@ class ReceiverAPI(PipeHandler):
     """    
         
     def _generic_callback(self, key, *args, **kwargs):
-        logger.debug("Callback %s %s %s", key, args, kwargs)
+#         logger.debug("Callback %s %s %s", key, args, kwargs)
         try:
             func = self.dispersy_callbacks_map[key]
             func(*args, **kwargs)
