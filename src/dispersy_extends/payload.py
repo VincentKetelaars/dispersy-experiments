@@ -163,10 +163,10 @@ class AddressesRequestPayload(Payload):
         
         def __init__(self, meta, sender_lan, sender_wan, endpoint_id, wan_address):
             super(Payload.Implementation, self).__init__(meta)
-            self._sender_lan = sender_lan
-            self._sender_wan = sender_wan
-            self._endpoint_id = endpoint_id
-            self._wan_address = wan_address
+            self._sender_lan = sender_lan # Local lan
+            self._sender_wan = sender_wan # Local wan
+            self._endpoint_id = endpoint_id # Local endpoint id
+            self._wan_address = wan_address # Voting address
             
         @property
         def sender_lan(self):
@@ -195,11 +195,11 @@ class PuncturePayload(Payload):
         
         def __init__(self, meta, sender_lan, sender_wan, sender_id, address_vote, endpoint_id):
             super(Payload.Implementation, self).__init__(meta)
-            self._sender_lan = sender_lan
-            self._sender_wan = sender_wan
-            self._sender_id = sender_id
-            self._address_vote = address_vote
-            self._endpoint_id = endpoint_id
+            self._sender_lan = sender_lan # local lan
+            self._sender_wan = sender_wan # local wan
+            self._sender_id = sender_id # local endpoint id
+            self._address_vote = address_vote # receiver wan
+            self._endpoint_id = endpoint_id # receiver endpoint id for wan
             
         @property
         def sender_lan(self):
@@ -232,10 +232,10 @@ class PunctureResponsePayload(Payload):
         
         def __init__(self, meta, sender_lan, sender_wan, address_vote, endpoint_id):
             super(Payload.Implementation, self).__init__(meta)
-            self._sender_lan = sender_lan
-            self._sender_wan = sender_wan
-            self._address_vote = address_vote
-            self._endpoint_id = endpoint_id
+            self._sender_lan = sender_lan # local lan
+            self._sender_wan = sender_wan # local wan
+            self._address_vote = address_vote # receiver wan
+            self._endpoint_id = endpoint_id # receiver endpoint id for wan
             
         @property
         def sender_lan(self):

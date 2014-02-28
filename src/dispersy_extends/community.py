@@ -6,7 +6,6 @@ Created on Aug 7, 2013
 from threading import Event, Lock
 from os.path import isfile
 
-from src.logger import get_logger
 from dispersy.community import Community
 from dispersy.conversion import DefaultConversion
 from dispersy.message import Message
@@ -14,6 +13,7 @@ from dispersy.authentication import MemberAuthentication
 from dispersy.resolution import PublicResolution
 from dispersy.distribution import FullSyncDistribution, DirectDistribution
 from dispersy.destination import CommunityDestination, CandidateDestination
+from dispersy.candidate import WalkCandidate
 
 from src.dispersy_extends.candidate import EligibleWalkCandidate
 from src.timeout import IntroductionRequestTimeout
@@ -23,27 +23,42 @@ from src.dispersy_extends.conversion import SmallFileConversion, FileHashConvers
 from src.dispersy_extends.payload import SmallFilePayload, FileHashPayload, AddressesPayload,\
     APIMessagePayload, PuncturePayload, AddressesRequestPayload,\
     PunctureResponsePayload
-
 from src.definitions import DISTRIBUTION_DIRECTION, DISTRIBUTION_PRIORITY, NUMBER_OF_PEERS_TO_SYNC, HASH_LENGTH, \
     FILE_HASH_MESSAGE_NAME, SMALL_FILE_MESSAGE_NAME, ADDRESSES_MESSAGE_NAME,\
     MESSAGE_KEY_API_MESSAGE, API_MESSAGE_NAME, PUNCTURE_MESSAGE_NAME,\
     ADDRESSES_REQUEST_MESSAGE_NAME, PUNCTURE_RESPONSE_MESSAGE_NAME
 from src.tools.periodic_task import Looper, PeriodicIntroductionRequest
 from src.swift.swift_community import SwiftCommunity
-from dispersy.candidate import WalkCandidate
 
+from src.logger import get_logger
 logger = get_logger(__name__)    
     
 class MyCommunity(Community):
     '''
-    classdocs
+    For the most part this Community is designed around the messages that are allowed to be used by its members.
+    The SmallFile message is a container for a filename and the file's data. It has to be small enough to fit in a single packet.
+    The FileHash message is designed to convey the information necessary for Swift to create a swarm for the file 
+    you want to disseminate.
+    The Addresses message allows you to send information about your endpoints (the sockets your have available)
+    The AddressesRequest message is merely a request for an Addresses message.
+    The Puncture message is used to ensure that contact between two endpoints is feasible. 
+    Additionally it conveys the address it thinks it's talking for NAT purposes.
+    The PunctureResponse message is not currently in use and is very much like the Puncture message.
+    The API message is simply a message limited by packet size.
+    
+    Moreover this Community also instantiates the SwiftCommunity which is an abstraction of this community 
+    with respect to Swift.
+    On top of this the Community has the option of not using the bootstrappers and the walker,
+    but instead use a more aggressive form of keeping in contact with peers by periodically sending 
+    introduction requests to each of them.  
     '''
 
     def __init__(self, dispersy, master_member, enable=False, api_callback=None):
         '''
-        Constructor
+        @param enable: Enable the candidate walker
+        @param api_callback: Callback function
         '''
-        logger.debug("I will %swalk today", "" if enable else "not ")
+        logger.info("I will %swalk today", "" if enable else "not ")
         self._enable_candidate_walker = enable # Needs to be set before call to Community
         super(MyCommunity, self).__init__(dispersy, master_member)
         self._dest_dir = None
@@ -160,14 +175,8 @@ class MyCommunity(Community):
             if self._api_callback:
                 self._api_callback(MESSAGE_KEY_API_MESSAGE, x.payload.message)
     
-    def _short_member_id(self):
-        return str(self.my_member.mid.encode("HEX"))[0:5]     
-    
     def _active_sockets(self):
         return [s.address for s in self.dispersy.endpoint.swift_endpoints if s.socket_running]
-            
-    def _port(self):
-        return str(self.dispersy.endpoint.get_address()[1])       
      
     def create_small_file_messages(self, count, simple_message=None, store=True, update=True, forward=True):
         """
@@ -182,6 +191,10 @@ class MyCommunity(Community):
         
     def create_file_hash_messages(self, count, file_hash_message, delay, store=True, update=True, forward=True):
         """
+        Endpoint decides when files will be handed to Swift to be disseminated.
+        As such we will not allow messages to be send until that time, 
+        because peers would not be able to do anything with this information.
+        
         @param count: Number of messages
         @type file_hash_message: FileHashCarrier
         """
@@ -235,7 +248,8 @@ class MyCommunity(Community):
                 
     def create_candidate(self, sock_addr, tunnel, lan_address, wan_address, connection_type):
         """
-        Creates and returns a new WalkCandidate instance.
+        Creates and returns a new EligibleWalkCandidate instance,
+        opposed to the WalkCandidate the general Community creates.
         """
         assert not sock_addr in self._candidates
         assert isinstance(tunnel, bool)
@@ -259,7 +273,7 @@ class MyCommunity(Community):
                   if (other.candidate.wan_address[0] == candidate.wan_address[0] and
                       other.candidate.lan_address == candidate.lan_address)]
         
-        l = len(others)
+        l = len(others) # need l for return value
         if l == 0:
             logger.debug("Add new %s", candidate)
         elif l == 1:
@@ -274,7 +288,6 @@ class MyCommunity(Community):
             o.stop()
             del self._intro_request_updates[o.sock_addr]
         
-        request_update = None
         if self._update_bloomfilter > 0: # Use our own looper to ensure that requests are sent periodically
             request_update = PeriodicIntroductionRequest(send_request, self._update_bloomfilter, candidate, 
                                                          delay=self._update_bloomfilter) # Wait because one is already sent
@@ -286,27 +299,35 @@ class MyCommunity(Community):
         # request_update should have a candidate field
         self._intro_request_updates.update({candidate.sock_addr : request_update})
         
-        return l > 0
+        return l > 0 # if l is larger than 0 it means this candidate already existed
                 
     def add_candidate(self, candidate):
+        """
+        Add the candidate to the list of peers that should receive Introduction requests regularly
+        """
         Community.add_candidate(self, candidate)
         # Each candidate should only do send_introduction_request once
         if not candidate.sock_addr in self._intro_request_updates.iterkeys():
             self.send_introduction_request(candidate) 
         
     def send_introduction_request(self, walker):
+        """
+        Register the sending of an introduction request to this walker
+        With resends if the request fails
+        @type walker: Candidate
+        """
         if isinstance(walker, EligibleWalkCandidate):
             logger.debug("Send introduction request %s", walker)
             walker.set_update_bloomfilter(self.update_bloomfilter)
         
             def send_request():
                 self._dispersy.callback.register(self._dispersy.create_introduction_request, 
-                                    (self, walker, True,True),callback=callback)
+                                    (self, walker, True, True), callback=callback)
             
             def callback(result):
                 if isinstance(result, Exception):
                     # Somehow the introduction request did not work
-                    Event().wait(1)
+                    Event().wait(1) # If we don't wait, we risk trying to many times to no avail
                     send_request()
     
             # First add the IntroductionRequestTimeout to the list, then send request. 
@@ -316,8 +337,8 @@ class MyCommunity(Community):
         else:
             if self.dispersy.endpoint.is_bootstrap_candidate(candidate=walker):
                 logger.debug("This is a BootstrapCandidate: %s", walker)
-            else:
-                logger.debug("This is not a EligibleWalkCandidate: %s", walker)
+            else: # This should not happen
+                logger.warning("This is not a EligibleWalkCandidate: %s", walker)
             
         
     @property
@@ -356,10 +377,16 @@ class MyCommunity(Community):
         self._update_bloomfilter = update_bloomfilter    
     
     def unload_community(self):
+        """
+        Taking down this Community, and the SwiftCommunity as well.
+        """
         self._looper.stop()
         Community.unload_community(self)
         return self.swift_community.unload_community()
     
     def claim_global_time(self):
+        """
+        Overwritten to ensure that claiming is threadsafe
+        """
         with self._lock:
             return Community.claim_global_time(self)

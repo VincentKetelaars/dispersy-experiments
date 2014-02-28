@@ -55,6 +55,16 @@ def _swift_runnable_decorator(func):
     return dec
      
 class SwiftHandler(TunnelEndpoint):
+    """
+    This SwiftHandler is the main link to SwiftProcess and aims to remove dependence on endpoints
+    It keeps track of swarms that have been created as well as their usefulness, 
+    by ensuring that they actually exchange data with peers. 
+    In addition it ensures that Swift does not need to deal with to many swarms at once,
+    by stacking incoming requests by priority.
+    Furthermore it handles the restart of Swift if that is necessary.
+    Unfortunately SwiftHandler is still dependent on Dispersy, 
+    because it needs to ask for new swarms when Swift is restarted. 
+    """
     
     def __init__(self, swift_process, api_callback=None):
         TunnelEndpoint.__init__(self, swift_process)
@@ -78,19 +88,33 @@ class SwiftHandler(TunnelEndpoint):
     
     @property
     def socket_running(self):
+        """
+        TODO: Move to CommonEndpoint?
+        @return: True if socket linked to endpoint is running smoothly or if buffer has been full for minor time period
+        """
         return self._socket_running[0] == 0 or (self._socket_running[0] == EWOULDBLOCK and 
                                                 self._socket_running[1] > datetime.utcnow() - timedelta(seconds=BUFFER_DRAIN_TIME))
     
     @socket_running.setter
     def socket_running(self, state):
+        """
+        Set _socket_running and notify callback of change in state
+        """
         self._socket_running = (state, datetime.utcnow())
         self.do_callback(MESSAGE_KEY_SOCKET_STATE, self.address, state)
     
     def do_callback(self, key, *args, **kwargs):
+        """
+        Perform callback if it is supplied
+        """
         if self._api_callback is not None:
             self._api_callback(key, *args, **kwargs)
             
     def close(self, timeout=0.0):
+        """
+        Close down Swift, whatever it takes.
+        If Swift is response, do it right. If not, just kill it.
+        """
         self._closing = True
         # We want to shutdown now, but if no connection to swift is available, we need to do it the hard way
         if self._swift is not None:
@@ -115,6 +139,7 @@ class SwiftHandler(TunnelEndpoint):
     @_swift_runnable_decorator
     def swift_add_peer(self, d, addr, sock_addr=None):
         """
+        Add peer if d represents an active swarm
         @type d: SwiftDownloadImpl
         @type addr: Address
         @type sock_addr: Address
@@ -137,6 +162,7 @@ class SwiftHandler(TunnelEndpoint):
     @_swift_runnable_decorator    
     def swift_checkpoint(self, d):
         """
+        Do checkpoint if d represents an active swarm
         @type d: SwiftDownloadImpl
         """
         if d is not None and d.get_def().get_roothash() in self._started_downloads.keys() and not d.bad_swarm:
@@ -146,6 +172,7 @@ class SwiftHandler(TunnelEndpoint):
     @_swift_runnable_decorator  
     def swift_start(self, d, cid):
         """
+        Start d if it's not already started or a bad swarm. 
         @type d: SwiftDownloadImpl
         """
         if not d.get_def().get_roothash() in self._started_downloads.keys():
@@ -160,6 +187,7 @@ class SwiftHandler(TunnelEndpoint):
     @_swift_runnable_decorator  
     def swift_moreinfo(self, d, yes):
         """
+        Set the moreinfo boolean
         @type d: SwiftDownloadImpl
         @type yes: boolean
         """
@@ -169,6 +197,7 @@ class SwiftHandler(TunnelEndpoint):
     @_swift_runnable_decorator
     def swift_remove_download(self, d, rm_state, rm_content):
         """
+        Remove swarm from swift
         @type d: SwiftDownloadImpl
         @type rm_state: boolean
         @type rm_content: boolean
@@ -181,6 +210,7 @@ class SwiftHandler(TunnelEndpoint):
     @_swift_runnable_decorator
     def swift_pex(self, d, enable):
         """
+        (Dis)Allow peerExchange to work for this swarm
         @type d: SwiftDownloadImpl
         @type enable: boolean
         """
@@ -190,14 +220,15 @@ class SwiftHandler(TunnelEndpoint):
     @_swift_runnable_decorator
     def swift_add_socket(self, saddr):
         """
+        Add a new address to listen to
         @type address: 
         """
         self._swift.add_socket(saddr)   
     
     def restart_swift(self, error_code=-1):
         """
-        Restart swift if the endpoint is still alive, generally called when an Error occurred in the swift instance
-        After swift has been terminated, a new process starts and previous downloads and their peers are added.
+        Restart swift if the MultiEndpoint is not closing, generally called when an Error occurred in the swift instance
+        After swift has been terminated, a new process starts and communities are requested to add downloads to the queue.
         """
         logger.debug("Restart swift called")
         self.lock.acquire()
@@ -248,13 +279,23 @@ class SwiftHandler(TunnelEndpoint):
         self.lock.release()
         
     def swift_started_running_callback(self):
+        """
+        Callback function called when the TCP connection is up and running
+        """
         self.dequeue_swift_queue()
         
     def enqueue_swift_queue(self, func, *args, **kwargs):
+        """
+        Put function and arguments on the Swift command queue
+        """
         logger.debug("%s is queued", func.__name__)
         self._swift_cmd_queue.put((func, args, kwargs))
         
     def dequeue_swift_queue(self):
+        """
+        Dequeue items from the Swift command queue while swift is running.
+        Ensure that items are not queued while dequeuing, check the _dequeueing_cmd_queue to that end
+        """
         self._dequeueing_cmd_queue = True
         while not self._swift_cmd_queue.empty() and self._swift.is_ready():
             func, args, kargs = self._swift_cmd_queue.get()
@@ -263,12 +304,18 @@ class SwiftHandler(TunnelEndpoint):
         self._dequeueing_cmd_queue = False        
 
     def set_callbacks(self):
+        """
+        Set callbacks for SwiftProcess
+        """
         self._swift.set_on_swift_restart_callback(self.restart_swift)
         self._swift.set_on_tcp_connection_callback(self.swift_started_running_callback)
         self._swift.set_on_sockaddr_info_callback(self.sockaddr_info_callback)
         self._swift.set_on_channel_closed_callback(self.channel_closed_callback)
         
     def sockaddr_info_callback(self, address, state):
+        """
+        Callback function for when SwiftProcess receives a change to the state of a socket
+        """
         self.socket_running = state
         
     def put_swift_upload_stack(self, func, size, timestamp, priority=0, args=(), kwargs={}):
@@ -323,19 +370,22 @@ class SwiftHandler(TunnelEndpoint):
     
     def evaluate_swift_swarms(self):
         """
-        This function determines the state of all downloading swarms.
-        It determines the number of swarms (almost) done, 
-        and subsequently pops new swarms to be created of the stack if there is room
+        This function determines the state of all downloading and seeding swarms.
+        It determines the number of swarms (almost) done downloading, 
+        and subsequently pops new swarms to be created of the stack if there is room.
+        It tracks both the seeding and downloading swarms to see if they have peers
+        to exchange data with. If there are others on the stack and swarms are not useful, 
+        they are marked to be removed.
         @return: The swarms that should be removed
         """
-        if not self.socket_running:
+        if not self.socket_running: # TODO: This does not seem to be useful
             return []
         seeding_swarms = 0
         downloading_swarms = 0
         almost_done_swarms = 0
         swarms_to_be_removed = []
         for d in self.swift.roothash2dl.values():
-            if not isinstance(d, MultiEndpoint):
+            if not isinstance(d, MultiEndpoint): # MultiEndpoint is added to the roothash2dl list in open()
                 if d.downloading():
                     downloading_swarms += 1
                     speed = d.speed("down")
@@ -357,6 +407,7 @@ class SwiftHandler(TunnelEndpoint):
             self.pop_swift_download_stack()
         for _ in range(seeding_swarms, MAX_CONCURRENT_SEEDING_SWARMS):
             self.pop_swift_upload_stack()
+        # This callback is used by API to figure out if the FilePusher should pause or unpause its efforts
         self.do_callback(MESSAGE_KEY_UPLOAD_STACK, len(self._swift_upload_stack), sum([f[1] for f in self._swift_upload_stack]))
         return swarms_to_be_removed
             
@@ -378,9 +429,15 @@ class SwiftHandler(TunnelEndpoint):
         return d
     
     def add_peers_to_download(self, downloadimpl, cid):
-        pass
+        """
+        Called when we a new swarm is added to Swift
+        """
+        pass # Implemented by MultiEndpoint
     
     def channel_closed_callback(self, roothash, saddr, paddr):
+        """
+        Callback from SwiftProcess to tell about a channel that was closed
+        """
         try:
             self._added_peers[roothash].remove((paddr, saddr))
         except KeyError:
@@ -388,6 +445,10 @@ class SwiftHandler(TunnelEndpoint):
             
         
 class CommonEndpoint(SwiftHandler):
+    """
+    CommonEndpoint serves as the parent of both MultiEndpoint and SwiftEndpoint
+    It holds the attributes that both have in common
+    """
     
     def __init__(self, swift_process, api_callback=None, address=Address()):
         SwiftHandler.__init__(self, swift_process, api_callback)
@@ -396,32 +457,13 @@ class CommonEndpoint(SwiftHandler):
         self.dispersy_contacts = set()
         self.is_alive = False # The endpoint is alive between open and close
         self.address = address
-        self._wan_voters = {}
-        self._wan_address = { address : 0 } # Initialize zero vote
-        
-    @property
-    def wan_address(self):
-        return max(self._wan_address, key=self._wan_address.get) # Return the address with the highest vote
-    
-    def vote_wan_address(self, address, sender_lan, sender_wan):
-        """
-        Use the vote to determine the wan address. Endpoints can only vote once
-        Only allowed to vote for wan address when outside of our local network. I.e.
-        wan is not private
-        """
-        # Wan addresses can change over time for an endpoint
-        # We assume the lan address to be unique
-        if self._wan_voters.get(sender_lan) == address:
-            return  # Same vote as last time
-        if self._wan_voters.get(sender_lan) is not None: # So we have a new vote
-            self._wan_address[address] = self._wan_address.get(self._wan_voters.get(sender_lan), 0) - 1 # Get rid of the old vote
-        # We're not going to give the private or wildcard addresses more votes
-        if not (address.is_private_address() or address.is_wildcard_ip()): 
-            self._wan_address[address] = self._wan_address.get(address, 0) + 1 # Increment
-            self._wan_voters[sender_lan] = address # Update vote
-            logger.info("Got a vote for %s to %s from %s", str(self.address), str(address), str(sender_lan))
             
     def is_bootstrap_candidate(self, addr=None, candidate=None):
+        """
+        Determine whether either or both the addr or candidate represents a bootstrap candidate
+        @type addr: Address
+        @type candidate: Candidate
+        """
         if addr is not None:
             if self._dispersy._bootstrap_candidates.get(addr.addr()) is not None:
                 return True
@@ -454,22 +496,38 @@ class CommonEndpoint(SwiftHandler):
             return None, None
         _bytes = sum([len(p) for p in packets])
         contact = DispersyContact(address, community_id=community.cid)
-        if recv:
+        if recv: # Receiving packets
             contact.rcvd(len(packets), _bytes, address=address)
-        else:
+        else: # Sending packets
             contact.sent(len(packets), _bytes, address=address)
+        # Merge this contact with existing one, if present
         for dc in self.dispersy_contacts:
-            if dc.has_address(contact.address):
+            if dc.has_address(contact.address): # There should be only one contact that fits the description
                 dc.merge(contact)
                 if recv and dc.total_rcvd() == contact.total_rcvd(): # First time receiving anything
                     return community, dc
                 return community, None
-        self.dispersy_contacts.add(contact)
+        self.dispersy_contacts.add(contact) # New address
         if recv:
             return community, contact
         return community, None
         
     def peer_endpoints_received(self, community, mid, lan_addresses, wan_addresses, ids):
+        """
+        This method is called when we receive an Addresses message from a peer.
+        We assume the peer sends us valid information!!!
+        Possibly there 0, 1, or more contacts that belong to the same peer,
+        each of these cases is handled such that finally only one contact is left in the set
+        The lengths of lan_addresses, wan_addresses and ids should be the same.
+        The first of each list represent an endpoint together, as do the second, third, etc.
+        @type community: MyCommunity
+        @param mid: Member id
+        @type lan_addresses: List(Address)
+        @type wan_addresses: List(Address)
+        @type ids: List(str)
+        @param ids: List of endpoint ids
+        @return: The DispersyContact that represents this peer
+        """
         same_contacts = []
         for dc in self.dispersy_contacts:
             if dc.member_id == mid or dc.has_any(lan_addresses + wan_addresses, ids=ids): # Both lan and wan can have arrived
@@ -495,19 +553,31 @@ class CommonEndpoint(SwiftHandler):
         return dc
     
     def get_community(self, community_id):
+        """
+        Get community by community id
+        @rtype: Community or None
+        """
         try:
             return self._dispersy.get_community(community_id, load=False, auto_load=False)
         except (KeyError, ProgrammingError):
             logger.warning("Unknown community %s", community_id)
         return None
     
-    def get_contact(self, address, mid=None):
+    def get_contact(self, address=Address(), mid=None):
+        """
+        Get contact by address or member id
+        @rtype: DispersyContact or None
+        """
         for dc in self.dispersy_contacts:
             if dc.member_id == mid or dc.has_address(address):
                 return dc
         return None
                 
     def last_contact(self):
+        """
+        @return: The time this endpoint has last sent or received anything
+        @rtype: datetime
+        """
         return max([dc.last_contact() for dc in self.dispersy_contacts])
     
     def __str__(self):
@@ -515,10 +585,17 @@ class CommonEndpoint(SwiftHandler):
 
 class MultiEndpoint(CommonEndpoint):
     '''
-    MultiEndpoint holds a list of Endpoints, which can be added dynamically. 
-    The status of each of these Endpoints will be checked periodically (push / pull?). 
-    According to the available Endpoints and their status,
-    data will be send via those as to provide the fastest means of delivering data. 
+    MultiEndpoint holds a list of SwiftEndpoints, which can be added and removed dynamically.
+    SwiftEndpoint are not explicitly added, rather each time Swift returns a new address
+    to listen to, we add an endpoint to represent it. 
+    Addresses can be given on initialization or dynamically via the interface_came_up method.
+    Similarly if an endpoint socket has not been functioning for ENDPOINT_SOCKET_TIMEOUT it is removed.
+    Important is the routing of messages through these endpoints, which is determined for each packet
+    and each candidate it is supposed to go to. Packets can be routed through any endpoint,
+    to any address of the peer it needs to go to, defined by determine_endpoint.
+    DispersyContacts represent the peers we send to and receive from.
+    It is the MultiEndpoints job to ensure we know who our peers are, 
+    and as such handles addresses and puncture messages (by redirecting to SwiftEndpoints when needed)
     '''
 
     def __init__(self, swift_process, api_callback=None):
@@ -532,6 +609,9 @@ class MultiEndpoint(CommonEndpoint):
             self.set_callbacks()
     
     def get_address(self):
+        """
+        Called by Dispersy after open
+        """
         if self._endpoint is None:
             return self.address.addr()
         else:
@@ -541,6 +621,9 @@ class MultiEndpoint(CommonEndpoint):
         return list(endpoint.get_address() for endpoint in self.swift_endpoints)
     
     def send(self, candidates, packets):
+        """
+        Send packets to each candidate in turn
+        """
         with self.lock:
             if not self._swift.is_ready() or not self.socket_running:
                 if not self._dequeueing_cmd_queue: # Functions are dequeued when swift is running, hence we're not keeping messages to be send
@@ -578,6 +661,10 @@ class MultiEndpoint(CommonEndpoint):
         return all([x.close(timeout) for x in self.swift_endpoints])
     
     def add_endpoint(self, addr):
+        """
+        Add endpoint
+        Instead of calling this directly, add a socket to Swift
+        """
         logger.info("Add %s", addr)
         with self.lock:
             new_endpoint = SwiftEndpoint(self._swift, addr, api_callback=self._api_callback)
@@ -616,13 +703,11 @@ class MultiEndpoint(CommonEndpoint):
     
     def get_endpoint(self, address):
         """
-        Sockets are distinctly recognized by ip and port. Port can be initially 0 to let the system decide the port number.
-        Even if multiple endpoints have the same ip with port 0, each will in turn get their port assigned.
+        Sockets are distinctly recognized by ip and port. 
         @type address: Address
         """
         for e in self.swift_endpoints:
-            if e.address.ip == address.ip and (e.address.port == 0 or e.address.port == address.port):
-                e.address.set_port(address.port)
+            if e.address.ip == address.ip:
                 return e
         return None
     
@@ -632,11 +717,9 @@ class MultiEndpoint(CommonEndpoint):
         @return the next endpoint in the swift_endpoints. If the current endpoint is not in the list,
         return the first in the list. If the list is empty return None
         """
-        i = -1
-        for x in self.swift_endpoints:
-            if x == current:
-                return self.swift_endpoints[i % len(self.swift_endpoints)]
-            i+=1
+        for i in range(len(self.swift_endpoints)):
+            if self.swift_endpoints[i] == current:
+                return self.swift_endpoints[i + 1 % len(self.swift_endpoints)]
             
         # Apparently the endpoint is not part of the list..
         # Return the first one if available
@@ -646,7 +729,7 @@ class MultiEndpoint(CommonEndpoint):
     
     def _last_endpoints(self, address, endpoints=[]):
         """
-        This function returns the endpoints that last had contact with this peer,
+        This function returns the endpoints that last received from the peer with this address,
         sorted by time since the last contact, latest first
         
         @type address: Address
@@ -657,10 +740,10 @@ class MultiEndpoint(CommonEndpoint):
             endpoints = self.swift_endpoints
         last_contacts = []
         for e in endpoints:
-            contact = e.get_contact(address)
+            contact = e.get_contact(address=address)
             if contact is None:
                 continue
-            for paddr in contact.get_peer_addresses(self.address, self.wan_address):
+            for paddr in contact.get_peer_addresses(e.address, e.wan_address):
                 if contact.last_rcvd(paddr) > datetime.min: # If we use received, we are sure that it is actually reachable
                     last_contacts.append((e, paddr, contact.last_contact(paddr)))
         return sorted(last_contacts, key=lambda x: x[2], reverse=True)
@@ -678,7 +761,7 @@ class MultiEndpoint(CommonEndpoint):
             endpoints = self.swift_endpoints
         same_subnet = []
         for e in endpoints:
-            for paddr in contact.get_peer_addresses(self.address, self.wan_address):
+            for paddr in contact.get_peer_addresses(e.address, e.wan_address):
                 if e.address.same_subnet(paddr.ip):
                     same_subnet.append((e, paddr))
         return same_subnet
@@ -905,7 +988,7 @@ class MultiEndpoint(CommonEndpoint):
                 if not dc.addresses_received:
                     continue
                 addrs = set(dc.no_contact_since(expiration_time=ENDPOINT_CONTACT_TIMEOUT, 
-                                                lan=self.address, wan=self.wan_address)).difference(set([c[1] for c in self._get_channels(dc)]))
+                                                lan=e.address, wan=e.wan_address)).difference(set([c[1] for c in self._get_channels(dc)]))
                 if len(addrs) > 0:
                     [logger.info("%s has %s received and %s sent from/to %s in communities %s", str(e.address), dc.last_rcvd(a), 
                                  dc.last_sent(a), str(a), dc.community_ids) for a in addrs]
@@ -956,7 +1039,7 @@ class MultiEndpoint(CommonEndpoint):
                     logger.debug("Interface is already up and running")
                     return
                 e.socket_running = -1 # This new socket is not yet running, so initialize to -1
-                addr.set_port(e.address.port) # Use the old port
+                addr.set_port(e.address.port) # Use the old port, so that swift might choose to reuse the old instead of creating new
                 old_ip = e.address.ip
                 e.swift_add_socket(addr) # If ip already exists, try adding it to swift (only if not already working)
                 if old_ip != addr.ip: # New address
@@ -1070,7 +1153,7 @@ class MultiEndpoint(CommonEndpoint):
         for e in self.swift_endpoints:
             if sock_addr is None or e.address == sock_addr:
                 if e.socket_running and addr in [a for dc in e.dispersy_contacts 
-                                                 for a in dc.get_peer_addresses(self.address, self.wan_address)]:
+                                                 for a in dc.get_peer_addresses(e.address, e.wan_address)]:
                     SwiftHandler.swift_add_peer(self, d, addr, sock_addr=e.address)
                     
     def _send_socket_information(self):
@@ -1096,7 +1179,7 @@ class MultiEndpoint(CommonEndpoint):
                            str(sender_lan), str(sender_wan), str(vote_address))
         # Update the wan address according to the lan address
         for e in self.swift_endpoints + [self]:
-            dc = e.get_contact(sender_lan, mid=member.mid)
+            dc = e.get_contact(address=sender_lan, mid=member.mid)
             if dc is not None:
                 dc.update_address(sender_lan, sender_wan, sender_id, member.mid)
                 
@@ -1106,7 +1189,7 @@ class MultiEndpoint(CommonEndpoint):
     def addresses_requested(self, community, member, sender_lan, sender_wan, endpoint_id, wan_address):
         dc = DispersyContact(sender_wan)
         for e in self.swift_endpoints + [self]:
-            dc = e.get_contact(sender_lan, mid=member.mid)
+            dc = e.get_contact(address=sender_lan, mid=member.mid)
             if dc is not None:
                 dc.update_address(sender_lan, sender_wan, endpoint_id, member.mid)
         if dc.addresses_sent + timedelta(seconds=MIN_TIME_BETWEEN_ADDRESSES_MESSAGE) < datetime.utcnow():
@@ -1123,6 +1206,8 @@ class SwiftEndpoint(CommonEndpoint):
     def __init__(self, swift_process, address, api_callback=None):
         super(SwiftEndpoint, self).__init__(swift_process, api_callback=api_callback, address=address) # Dispersy and session code 
         self.waiting_queue = Queue.Queue()
+        self._wan_voters = {}
+        self._wan_address = { address : 0 } # Initialize zero vote
         if self.address.resolve_interface():
             if not address in self._swift.working_sockets:
                 self.swift_add_socket(self.address)
@@ -1143,6 +1228,10 @@ class SwiftEndpoint(CommonEndpoint):
     def get_address(self):
         # Dispersy retrieves the local ip
         return self.address.addr()
+        
+    @property
+    def wan_address(self):
+        return max(self._wan_address, key=self._wan_address.get) # Return the address with the highest vote
     
     def send(self, candidate, packets):
         if self._swift is not None and self._swift.is_ready():
@@ -1219,7 +1308,7 @@ class SwiftEndpoint(CommonEndpoint):
         elif contact in self.dispersy_contacts:
             contacts = [contact]
         else:
-            contact = self.get_contact(contact.address)
+            contact = self.get_contact(address=contact.address)
             if contact is not None:
                 contacts = [contact] # The contact better be there
             
@@ -1251,6 +1340,24 @@ class SwiftEndpoint(CommonEndpoint):
         message = meta_puncture.impl(authentication=(community.my_member,), distribution=(community.claim_global_time(),), 
                                      destination=(candidate,), payload=(self.address, self.wan_address, address, id_))
         self.send(candidate, [message.packet]) # In case this one fails, there will be others later if necessary
+    
+    def vote_wan_address(self, address, sender_lan, sender_wan):
+        """
+        Use the vote to determine the wan address. Endpoints can only vote once
+        Only allowed to vote for wan address when outside of our local network. I.e.
+        wan is not private
+        """
+        # Wan addresses can change over time for an endpoint
+        # We assume the lan address to be unique
+        if self._wan_voters.get(sender_lan) == address:
+            return  # Same vote as last time
+        if self._wan_voters.get(sender_lan) is not None: # So we have a new vote
+            self._wan_address[address] = self._wan_address.get(self._wan_voters.get(sender_lan), 0) - 1 # Get rid of the old vote
+        # We're not going to give the private or wildcard addresses more votes
+        if not (address.is_private_address() or address.is_wildcard_ip()): 
+            self._wan_address[address] = self._wan_address.get(address, 0) + 1 # Increment
+            self._wan_voters[sender_lan] = address # Update vote
+            logger.info("Got a vote for %s to %s from %s", str(self.address), str(address), str(sender_lan))
                     
 def get_hash(filename, swift_path):
     """

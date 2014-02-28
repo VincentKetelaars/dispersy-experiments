@@ -19,6 +19,10 @@ from src.tests.unit.test_endpoint import remove_files
 logger = get_logger(__name__)
 
 class TestAPI(unittest.TestCase):
+    """
+    Due to the fact that logs are sent to the same file, two API's in parallel don't always work.
+    If a process needs to be explicitly killed at the end, you know that one API did not start correctly.
+    """
     
     class MyAPI(API):
         

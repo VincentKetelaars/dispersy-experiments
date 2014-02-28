@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 class EligibleWalkCandidate(WalkCandidate):
     '''
-    classdocs
+    This candidate extends the WalkCandidate such that we can keep track of IntroductionRequests send and received.
     '''
     def __init__(self, sock_addr, tunnel, lan_address, wan_address, connection_type):
         WalkCandidate.__init__(self, sock_addr, tunnel, lan_address, wan_address, connection_type)

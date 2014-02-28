@@ -71,13 +71,14 @@ class SwiftCommunity(object):
             return
         rm_state = not download.seeder()
         rm_download = DELETE_CONTENT
-        logger.debug("Clean up download, %s, %s, %s", download.roothash_as_hex(), rm_state, rm_download)
         # No point in doing checkpoint if not both false, and if we've already done it for the entire thing   
-        if not rm_state and not rm_download and not download.downloadimpl.checkpoint_done(): 
+        if not rm_state and not rm_download and not download.downloadimpl.checkpoint_done():
+            logger.debug("Create checkpoint for %s %s %s", download.roothash_as_hex(), rm_state, rm_download)
             self.endpoint.swift_checkpoint(download.downloadimpl)
         # Do callback before removing, in case DELETE_CONTENT is True and someone wants to use it first
         self.do_callback(MESSAGE_KEY_RECEIVE_FILE, download.filename)
         if not download.seeder(): # If we close the download we cannot seed
+            logger.debug("Clean up download, %s, %s, %s", download.roothash_as_hex(), rm_state, rm_download)
             self.endpoint.swift_remove_download(download.downloadimpl, rm_state, rm_download)
                 
     def do_callback(self, key, *args, **kwargs):

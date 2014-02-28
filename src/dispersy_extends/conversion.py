@@ -6,7 +6,6 @@ Created on Aug 7, 2013
 
 import struct
 
-from src.logger import get_logger
 from dispersy.conversion import BinaryConversion
 from dispersy.conversion import DropPacket
 
@@ -14,6 +13,7 @@ from src.definitions import SEPARATOR, SMALL_FILE_MESSAGE_NAME, FILE_HASH_MESSAG
     ADDRESSES_MESSAGE_NAME, API_MESSAGE_NAME, PUNCTURE_MESSAGE_NAME,\
     ADDRESSES_REQUEST_MESSAGE_NAME, PUNCTURE_RESPONSE_MESSAGE_NAME
 from src.address import Address
+from src.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -21,7 +21,7 @@ ENDPOINT_ID_ENCODING = "base-64"
 
 class SmallFileConversion(BinaryConversion):
     '''
-    classdocs
+    filename, data
     '''    
 
     def __init__(self, community):
@@ -51,6 +51,9 @@ class SmallFileConversion(BinaryConversion):
     
     
 class FileHashConversion(BinaryConversion):
+    """
+    filename, directories, roothash, size, timestamp, list(address)
+    """
     
     def __init__(self, community):
         super(FileHashConversion, self).__init__(community, "\x13")
@@ -88,7 +91,7 @@ class FileHashConversion(BinaryConversion):
 
 class AddressesConversion(BinaryConversion):
     '''
-    classdocs
+    list(endpoint id, lan, wan)
     '''
 
     def __init__(self, community):
@@ -122,7 +125,7 @@ class AddressesConversion(BinaryConversion):
     
 class AddressesRequestConversion(BinaryConversion):
     '''
-    classdocs
+    local lan address, local wan address, local endpoint id, receiver wan address 
     '''    
 
     def __init__(self, community):
@@ -155,7 +158,7 @@ class AddressesRequestConversion(BinaryConversion):
     
 class PunctureConversion(BinaryConversion):
     '''
-    classdocs
+    local lan address, local wan address, local endpoint id, receiver wan, receiver endpoint id
     '''    
 
     def __init__(self, community):
@@ -190,7 +193,7 @@ class PunctureConversion(BinaryConversion):
     
 class PunctureResponseConversion(BinaryConversion):
     '''
-    classdocs
+    local lan address, local wan address, receiver wan address, receiver endpoint id
     '''    
 
     def __init__(self, community):
@@ -223,7 +226,7 @@ class PunctureResponseConversion(BinaryConversion):
     
 class APIMessageConversion(BinaryConversion):
     '''
-    classdocs
+    mesage
     '''    
 
     def __init__(self, community):
