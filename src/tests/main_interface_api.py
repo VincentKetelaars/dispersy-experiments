@@ -19,7 +19,6 @@ class MainInterfaceAPI(API):
         self._running = Event()
     
     def run(self):
-        
         while not self._running.is_set():
             if not self._need_socket_event.is_set():
                 output = os.popen('ip route').read()
@@ -29,6 +28,12 @@ class MainInterfaceAPI(API):
                 if ip is not None:
                     self.interface_came_up(ip, if_name, if_name[0:-1] if not if_name is None else None, gateway)
             self._running.wait(1)
+            
+    def _find(self, _input, _format, default):
+        m = re.search(_format, _input, re.IGNORECASE)
+        if m:
+            return m.groups()[0]
+        return default
         
     def socket_state_callback(self, socket, state):
         if state == 0 or state == 11:
