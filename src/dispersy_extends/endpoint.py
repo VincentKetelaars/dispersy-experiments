@@ -707,7 +707,7 @@ class MultiEndpoint(CommonEndpoint):
         @type address: Address
         """
         for e in self.swift_endpoints:
-            if e.address.ip == address.ip:
+            if e.address.ip == address.ip and e.address.port == address.port:
                 return e
         return None
     

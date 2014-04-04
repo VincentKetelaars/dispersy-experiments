@@ -41,3 +41,8 @@ How to drop packets in Linux..
 http://sandilands.info/sgordon/dropping-packets-in-ubuntu-linux-using-tc-and-iptables
 
 ethtool - get all the network interface card parameters (status of the link, speed, offload parameters...)
+
+TOOLS:
+
+View dependencies:
+sfood src/swift/tribler/* -r -i | sfood-graph -p | dot -Tps | epstopdf -f -o=dependencies.pdf
