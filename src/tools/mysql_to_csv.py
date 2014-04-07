@@ -8,7 +8,7 @@ import csv
 import sys
 from datetime import datetime
 
-from Common.InternalDB import mysql
+from src.database.InternalDB import mysql
 
 from src.logger import get_logger
 
