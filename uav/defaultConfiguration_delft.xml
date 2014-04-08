@@ -1,0 +1,84 @@
+<?xml version="1.0" ?>
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="configuration.xsd">
+	<Version>0.34</Version>
+	<ValidationRequired>False</ValidationRequired>
+
+	<Config>
+		<configService_port>10001</configService_port>
+		<callback_configService_port>10002</callback_configService_port>
+		<configService_socket_timeout>10.0</configService_socket_timeout>
+		<configService_file>./Config/configuration.xml</configService_file>
+		<default_configService_file>./Config/defaultConfiguration_vincent.xml</default_configService_file>
+	</Config>
+
+	<Instruments>
+	
+	</Instruments>
+
+	<Network>
+
+
+		<Dispersy>
+			<enabled>True</enabled>
+			<parameters>
+				<dest_dir>/home/vincent/Desktop/tests_dest</dest_dir>
+				<swift_binpath>/home/vincent/git/dispersy-experiments/libswift/swift</swift_binpath>
+				<dispersy_work_dir>/home/vincent/Desktop/tests_dest</dispersy_work_dir>
+				<sqlite_database>:memory:</sqlite_database>
+				<swift_work_dir>/home/vincent/Desktop/tests_dest</swift_work_dir>
+				<swift_zerostatedir></swift_zerostatedir>
+				<listen>
+					<address>192.168.2.14</address>
+				</listen>
+				<peers>
+				</peers>
+				<file_directories>
+					<d0>/home/vincent/Desktop/test_large</d0>
+				</file_directories>
+				<files></files>
+				<file_timestamp_min></file_timestamp_min>
+				<run_time>60</run_time>
+				<bloomfilter_update>5</bloomfilter_update>
+				<walker>False</walker>
+				<gateways></gateways>
+				<mtu></mtu>
+			</parameters>
+		</Dispersy>
+
+	</Network>
+
+	<System>
+		
+		
+	</System>
+
+	<BaseStation>
+		
+		
+		<Dispersy>
+			<enabled>True</enabled>
+			<parameters>
+				<dest_dir>/home/vincent/Desktop/tests_dest</dest_dir>
+				<swift_binpath>/home/vincent/git/dispersy-experiments/libswift/swift</swift_binpath>
+				<dispersy_work_dir>/home/vincent/Desktop/tests_dest</dispersy_work_dir>
+				<sqlite_database>:memory:</sqlite_database>
+				<swift_work_dir>/home/vincent/Desktop/tests_dest</swift_work_dir>
+				<swift_zerostatedir></swift_zerostatedir>
+				<listen>
+					<address_0>193.156.108.78:12345</address_0>
+				</listen>
+				<peers>
+				</peers>
+				<files_directory>/home/vincent/Desktop/test_large</files_directory>
+				<files></files>
+				<run_time>60</run_time>
+				<bloomfilter_update>5</bloomfilter_update>
+				<walker>False</walker>
+				<gateways></gateways>
+				<mtu></mtu>
+			</parameters>
+		</Dispersy>
+
+	</BaseStation>
+</configuration>
