@@ -51,7 +51,7 @@ glblStatusReporter = None
 def get_status_reporter():
     global glblStatusReporter
     if not glblStatusReporter:
-        from Common.Status.MySQLReporter import MySQLStatusReporter as DBReporter
+        from src.database.MySQLReporter import MySQLStatusReporter as DBReporter
         glblStatusReporter = DBReporter()
     return glblStatusReporter
         
@@ -70,11 +70,11 @@ class ReporterCollection:
         self.reporters = {}
         
         try:
-            from Common.Status.MySQLReporter import MySQLStatusReporter as DBReporter
+            from src.database.MySQLReporter import MySQLStatusReporter as DBReporter
             name = "System.Status.MySQL"
         except Exception, e:
             print "Exception importing MySQL destination:", e
-            from Common.Status.Sqlite3Reporter import DBStatusReporter as DBReporter
+            from src.database.Sqlite3Reporter import DBStatusReporter as DBReporter
             name = "System.Status.Sqlite"
 
         self.db_reporter = DBReporter(name)
@@ -99,10 +99,10 @@ class ReporterCollection:
         try:
             if not name in self.reporters:
                 was_created = True
-                from Common.Status.RemoteStatusReporter import RemoteStatusReporter
+                from src.database.RemoteStatusReporter import RemoteStatusReporter
                 self.reporters[name] = RemoteStatusReporter(name, self.stop_event)
                 # Register this reporter with the UAV service
-                import Common.timeout_xmlrpclib as xmlrpclib
+                import src.database.timeout_xmlrpclib as xmlrpclib
                 try:
                     cfg = get_config("System.Status.RemoteStatusReporter")
                     service = xmlrpclib.ServerProxy(cfg["url"], timeout=1.0)

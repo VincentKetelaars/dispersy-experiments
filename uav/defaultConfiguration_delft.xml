@@ -29,7 +29,7 @@
 				<swift_work_dir>/home/vincent/Desktop/tests_dest</swift_work_dir>
 				<swift_zerostatedir></swift_zerostatedir>
 				<listen>
-					<address>192.168.2.14</address>
+					<address>192.168.2.123</address>
 				</listen>
 				<peers>
 				</peers>
@@ -49,36 +49,91 @@
 	</Network>
 
 	<System>
-		
+
+		<SystemInformation>
+			<sample_rate>10</sample_rate>
+			<monitor_sensors>True</monitor_sensors>
+		</SystemInformation>
+
+		<WebServer>
+			<web_root>./GUI/Web/html/</web_root>
+			<port>4321</port>
+
+			<status>
+				<db_name>uav</db_name>
+				<db_user>pilot</db_user>
+				<db_password>pi10t</db_password>
+				<db_host>localhost</db_host>
+			</status>
+		</WebServer>
+
+		<OpenGLRenderer>
+			<zoom>35</zoom>
+		</OpenGLRenderer>
+
+		<InternalDB>
+			<db_user>pilot</db_user>
+			<db_password>pi10t</db_password>
+			<db_host>localhost</db_host>
+			<db_name>uav</db_name>
+		</InternalDB>
+
+		<LogDB>
+			<db_name>uav</db_name>
+			<db_user>pilot</db_user>
+			<db_host>localhost</db_host>
+			<db_password>pi10t</db_password>
+		</LogDB>
+
+		<DbSource>
+			<port>10100</port>
+			<interval>1</interval>
+		</DbSource>
+
+		<Status>
+			<Postgres>
+				<db_name>statusdb</db_name>
+				<db_user>pilot</db_user>
+				<db_host>localhost</db_host>
+				<db_password>pi10t</db_password>
+			</Postgres>
+
+			<MySQL>
+				<db_name>uav</db_name>
+				<db_user>pilot</db_user>
+				<db_host>localhost</db_host>
+				<db_password>pi10t</db_password>
+			</MySQL>
+
+			<Sqlite>
+				<default_filename>./status.db</default_filename>
+			</Sqlite>
+
+			<SyncStatus>
+				<fast_host>10.0.0.2</fast_host>
+				<fast_port>5432</fast_port>
+				<fast_host>10.42.0.106</fast_host>
+				<slow_port>5432</slow_port>
+			</SyncStatus>
+
+			<GroundDB>
+				<db_host>localhost</db_host>
+				<db_port>5432</db_port>
+				<db_name>uav</db_name>
+				<db_user>pilot</db_user>
+				<db_password>pi10t</db_password>
+			</GroundDB>
+
+			<RemoteStatusReporter>
+				<port>auto</port>
+				<url>http://localhost:9002</url>
+			</RemoteStatusReporter>
+
+			<StatusService>
+				<port>9002</port>
+				<timeout>10.0</timeout>
+			</StatusService>
+		</Status>
 		
 	</System>
-
-	<BaseStation>
-		
-		
-		<Dispersy>
-			<enabled>True</enabled>
-			<parameters>
-				<dest_dir>/home/vincent/Desktop/tests_dest</dest_dir>
-				<swift_binpath>/home/vincent/git/dispersy-experiments/libswift/swift</swift_binpath>
-				<dispersy_work_dir>/home/vincent/Desktop/tests_dest</dispersy_work_dir>
-				<sqlite_database>:memory:</sqlite_database>
-				<swift_work_dir>/home/vincent/Desktop/tests_dest</swift_work_dir>
-				<swift_zerostatedir></swift_zerostatedir>
-				<listen>
-					<address_0>193.156.108.78:12345</address_0>
-				</listen>
-				<peers>
-				</peers>
-				<files_directory>/home/vincent/Desktop/test_large</files_directory>
-				<files></files>
-				<run_time>60</run_time>
-				<bloomfilter_update>5</bloomfilter_update>
-				<walker>False</walker>
-				<gateways></gateways>
-				<mtu></mtu>
-			</parameters>
-		</Dispersy>
-
-	</BaseStation>
 </configuration>
