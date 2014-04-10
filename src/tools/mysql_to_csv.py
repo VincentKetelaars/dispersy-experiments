@@ -7,12 +7,15 @@ import argparse
 import csv
 import sys
 from datetime import datetime
+from itertools import izip
 
 from src.database.InternalDB import mysql
 
 from src.logger import get_logger
 
 logger = get_logger(__name__)
+
+DEFAULT_DIRECTION = True # Rows
 
 class ConfigTree():
     
@@ -89,7 +92,7 @@ class StatusElement(object):
 
 class MySQLToCSV(object):
     
-    def __init__(self, database, file_, channel, parameters=[], start=None, end=None, normalize=False):
+    def __init__(self, database, file_, channel, parameters=[], start=None, end=None, normalize=False, rows=DEFAULT_DIRECTION):
         self.db_name = database
         self.file = file_         
         self.mysql = mysql("mysql", db_name=self.db_name)
@@ -139,12 +142,25 @@ class MySQLToCSV(object):
             params_to_csv[i] = sorted(v, key=lambda obj: obj.paramid)
             
         sorted_params = sorted(params_to_csv.iterkeys(), key=lambda i: status_params[i])
+        
+        data = [] # Harbor all lines (rows / columns)
+        for i in sorted_params:
+            data.append([status_params[i][0], "timestamp"] + [s.timestamp for s in params_to_csv[i]])
+            data.append([status_params[i][0], "value"] + [s.value for s in params_to_csv[i]])
+        
+        if not rows: # Transpose data
+            logger.debug("Using columns")
+            max_row_length = max([len(r) for r in data])
+            for r in data:
+                r += [""] * (max_row_length - len(r))
+            data = list(izip(*data))
+        else:
+            logger.debug("Using rows")
                     
         with open(self.file, "wb") as csvfile:
             writer = csv.writer(csvfile, delimiter=',') # Need quotes?
-            for i in sorted_params:
-                writer.writerow([status_params[i][0], "timestamp"] + [s.timestamp for s in params_to_csv[i]])
-                writer.writerow([status_params[i][0], "value"] + [s.value for s in params_to_csv[i]])
+            for l in data:
+                writer.writerow(l)
                 
         
     def get_channel(self, name):
@@ -210,13 +226,21 @@ class MySQLToCSV(object):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Convert MySQL to CSV')
     parser.add_argument("-c", "--channel", required=True, help="Channel")
+    parser.add_argument("-C", "--columns", action="store_true", help="Data arranged in columns")
     parser.add_argument("-d", "--database", required=True, help="Database")
     parser.add_argument("-e", "--end", help="Get only values before this time, formatted: hh:mm:ss_dd-MM-YYYY")
     parser.add_argument("-f", "--file", required=True, help="CSV file")
     parser.add_argument("-p", "--params", default=[], nargs="+", help="Parameters")
+    parser.add_argument("-r", "--rows", action="store_true", help="Data arranged in rows")
     parser.add_argument("-s", "--start", help="Get only values after this time, formatted: hh:mm:ss_dd-MM-YYYY")
     parser.add_argument("-z", "--zero", action="store_true", help="Normalize timestamps to start from zero")
     args = parser.parse_args()
+    
+    rows = DEFAULT_DIRECTION
+    if args.rows and args.columns:
+        logger.warning("You can't have it both ways! Using default.")
+    elif args.rows or args.columns:
+        rows = args.rows or not args.columns
 
     MySQLToCSV(args.database, args.file, args.channel, parameters=args.params, start=args.start, end=args.end, 
-               normalize=args.zero)
+               normalize=args.zero, rows=rows)

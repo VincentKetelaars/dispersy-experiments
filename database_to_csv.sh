@@ -3,9 +3,11 @@ FOLDER=${HOME}/Desktop/mysql/
 
 usage() {
 	echo "Usage"
+	echo "-c | --columns		Use columns"
 	echo "-d | --date		to set date (dd-mm-yyyy), defaults to today"
 	echo "-e | --endtime 		to set endtime (default 23:59:59)"
 	echo "-h | --help 		to display usage"
+	echo "-r | --rows		Use rows"
 	echo "-s | --starttime 	to set starttime (default 00:00:00)"
 	echo "-v | --verbose 		to show python command"
 	echo "-z | --zeroed 		to normalize timestamps to start at zero"
@@ -14,10 +16,12 @@ usage() {
 ENDTIME="23:59:59"
 STARTTIME="00:00:00"
 VERBOSE=false
-ZEROED=""
 DATE=`date +%d-%m-%Y`
+NO_PARAMS=""
 while [ "$1" != "" ]; do
     case $1 in
+    	-c | --columns )		NO_PARAMS="${NO_PARAMS} -C"
+								;;
     	-d | --date )			DATE=$2;
 								shift
 								;;
@@ -27,12 +31,14 @@ while [ "$1" != "" ]; do
 		-h | --help )			usage
 								exit 0
 								;;
+    	-r | --rows )			NO_PARAMS="${NO_PARAMS} -r"
+								;;
         -s | --starttime )      STARTTIME=$2;
 								shift
                                 ;;
         -v | --verbose )		VERBOSE=true
 								;;
-        -z | --zeroed )			ZEROED=" -z"
+        -z | --zeroed )			NO_PARAMS="${NO_PARAMS} -z"
 								;;
         * )                     echo "You are not doing it right..;)"
 								usage
@@ -44,8 +50,9 @@ done
 FILEDATE=`date +%Y%m%d`
 FILE=${FILEDATE}_${STARTTIME}
 
-if [ ! -z "$ZEROED" ]; then
-	FILE="${FILE}_z"
+APPEND_FILE=$(echo ${NO_PARAMS} | sed 's/[^a-zA-Z]*//g' | tr '[:upper:]' '[:lower:]' | grep -o . | sort -n | tr -d '\n')
+if [ ! -z "${APPEND_FILE}" ]; then
+	FILE="${FILE}_${APPEND_FILE}"
 fi
 
 FILEPATH=${FOLDER}${FILE}.csv
@@ -56,4 +63,4 @@ ENDDATETIME="${ENDTIME}_${DATE}"
 if $VERBOSE; then
 	set -v
 fi
-python -m src.tools.mysql_to_csv -d uav -f ${FILEPATH} -c Network.Dispersy -s ${STARTDATETIME} -e ${ENDDATETIME} $ZEROED
+python -m src.tools.mysql_to_csv -d uav -f ${FILEPATH} -c Network.Dispersy -s ${STARTDATETIME} -e ${ENDDATETIME} ${NO_PARAMS}
