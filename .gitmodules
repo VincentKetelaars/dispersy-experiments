@@ -7,3 +7,6 @@
 [submodule "libevent"]
 	path = libevent
 	url = git://github.com/libevent/libevent.git
+[submodule "wifi"]
+	path = pywifi
+	url = git://github.com/VincentKetelaars/wifi.git
