@@ -270,13 +270,10 @@ class DelftAPI(API):
             pass
         for c in cells:
             device = c.ssid.replace(" ", "_")
-            self.status["wireless." + device + ".signal"] = int(c.signal)
-            try:
-                quality, maximum = c.quality.split("/")
-                self.status["wireless." + device + ".quality"] = int(quality)
-                self.status["wireless." + device + ".max_quality"] = int(maximum)
-            except AttributeError:
-                pass
+            self.status["wireless." + device + ".signal"] = int(vars(c).get("signal", -1))
+            quality, maximum = vars(c).get("quality", "-1/-1").split("/")
+            self.status["wireless." + device + ".quality"] = int(quality)
+            self.status["wireless." + device + ".max_quality"] = int(maximum)
             
     def _start_adhoc_interface(self, if_name, ip, ssid, gateway, key, netmask="255.255.255.0", channel="auto"):
         """
