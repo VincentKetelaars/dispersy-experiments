@@ -245,11 +245,11 @@ class Address(object):
         # We do not mark any IPv6 addresses as private
         return False
     
-    def set_interface(self, name, ip, netmask, broadcast):
+    def set_interface(self, name, ip, netmask, broadcast, device=None):
         if ip is not None and ip.count(":"):
-            self._if = Interface(name, ip, netmask, broadcast, version=AF_INET6)
+            self._if = Interface(name, ip, netmask, broadcast, version=AF_INET6, device=device)
         else:
-            self._if = Interface(name, ip, netmask, broadcast, version=AF_INET)
+            self._if = Interface(name, ip, netmask, broadcast, version=AF_INET, device=device)
     
     def __eq__(self, other):
         if not isinstance(other, Address):
