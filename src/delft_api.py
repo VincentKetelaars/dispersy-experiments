@@ -7,9 +7,7 @@ import time
 import signal
 import os
 import re
-import dbus
-from dbus.mainloop.glib import DBusGMainLoop
-from threading import Event
+from threading import Event, Thread
 from errno import EWOULDBLOCK
 
 from src.database.API import get_status, get_config
@@ -19,6 +17,9 @@ from src.definitions import STATE_DONE, STATE_INITIALIZED, STATE_NOT, STATE_RUNN
     STATE_RESETTING
 from src.api import API
 from src.logger import get_logger
+from pywifi.wifi.scan import Cell
+from pywifi.wifi.scheme import Scheme
+from pywifi.wifi.exceptions import InterfaceError
 
 logger = get_logger(__name__)
 
@@ -72,18 +73,14 @@ class DelftAPI(API):
         
         # Set signal quit handler
         signal.signal(signal.SIGQUIT, self.on_quit)
-        
-        # Listen to systembus
-        DBusGMainLoop(set_as_default=True)
-        self.bus = dbus.SystemBus()
-        self.NM = 'org.freedesktop.NetworkManager'
-        self.bus.add_signal_receiver(self._bus_wireless_feedback, None, self.NM + '.AccessPoint', None, None)
-        self.nm = self.bus.get_object(self.NM, '/org/freedesktop/NetworkManager')
+
+        t = Thread(name="Adhoc", target=self._start_adhoc_interface, args=("wlan0", "192.168.1.1", "MyAdhoc", "192.168.1.254", "1234567890"))
+        t.start()
         
     def run(self):
         logger.info("Running")
         while not self.run_event.is_set() and not self.stop_event.is_set():
-            self._bus_wireless_feedback()
+            self._monitor_wireless()
             self._parse_iproute()
             if not self.stop_event.is_set():
                 self.run_event.wait(SLEEP)
@@ -204,25 +201,22 @@ class DelftAPI(API):
     """
     
     def _parse_iproute(self):
-        iwgetid = os.popen('iwgetid').read()
-        ifs = {}
-        for line in iwgetid.splitlines(False):
-            device = self._regex_find(line, "ESSID:(\.+)", "").strip('"')
-            device = device.replace(" ", "_")
-            ifs[self._regex_find(line, "(\w+\d)", None)] = device
         iproute = os.popen('ip route').read()
         for line in iproute.splitlines(False): # There might be multiple lines that correspond
             ip = self._regex_find(line, "src (\d+\.\d+\.\d+\.\d+)", None)
             if_name = self._regex_find(line, "dev ([a-zA-Z]{3,4}\d)", None)
             gateway = self._regex_find(line, "default via (\d+\.\d+\.\d+\.\d+)", None)
             if ip is not None and if_name is not None:
-                device = ifs.get(if_name) if ifs.get(if_name) is not "" else if_name[0:-1]
+                device = if_name[0:-1]
                 if not self._interface_running(device):
                     self.interface_came_up(ip, if_name, device, gateway=gateway)
                     self.use_interfaces[device] = (time.time(), u"up", ip) # Set the newest state
-                    self.status["wireless." + device + ".ip"] = ip
-                    self.status["wireless." + device + ".if_name"] = if_name
-                    self.status["wireless." + device + ".gateway"] = gateway                    
+        iwgetid = os.popen('iwgetid').read()
+        for line in iwgetid.splitlines(False):
+            device = self._regex_find(line, "ESSID:(.+)", "").strip('"')
+            device = device.replace(" ", "_")
+            if_name = self._regex_find(line, "(\w+\d)", None)
+            self.status["wireless." + device + ".if_name"] = if_name
                 
     def _interface_running(self, device):
         return device in self.use_interfaces.iterkeys() and self.use_interfaces[device][1] == u"up"
@@ -268,24 +262,42 @@ class DelftAPI(API):
 
         return di_kwargs
     
-    def dbus_get_property(self, prop, member, proxy):
-        return proxy.Get(self.NM + '.' + member, prop, dbus_interface = 'org.freedesktop.DBus.Properties')
-    
-    def dbus_get_properties(self, dev, member):
-        return dev.GetAll(self.NM + '.' + member)
-    
-    def _bus_wireless_feedback(self, **kwargs):
-        for device in self.nm.GetDevices(dbus_interface = self.NM):
-            tmp = self.bus.get_object(self.NM, device)
-#             logger.debug(self.dbus_get_properties(tmp, "Device"))
-            if self.dbus_get_property('DeviceType', 'Device', tmp) == 2: # 2 == Wifi
-                for j in self.bus.get_object(self.NM, device).GetAccessPoints(dbus_interface = self.NM+'.Device.Wireless'):
-                    k = self.bus.get_object(self.NM, j)
-                    ssid = self.dbus_get_property('Ssid', 'AccessPoint', k)
-                    strength = self.dbus_get_property('Strength', 'AccessPoint', k)
-                    device = "".join([str(s) for s in ssid])
-                    device = device.replace(" ", "_")
-                    self.status["wireless." + device + ".strength"] = int(strength)
+    def _monitor_wireless(self, **kwargs):
+        cells = []
+        try:
+            cells = Cell.all()
+        except InterfaceError:
+            pass
+        for c in cells:
+            device = c.ssid.replace(" ", "_")
+            self.status["wireless." + device + ".signal"] = int(c.signal)
+            try:
+                quality, maximum = c.quality.split("/")
+                self.status["wireless." + device + ".quality"] = int(quality)
+                self.status["wireless." + device + ".max_quality"] = int(maximum)
+            except AttributeError:
+                pass
+            
+    def _start_adhoc_interface(self, if_name, ip, ssid, gateway, key, netmask="255.255.255.0", channel="auto"):
+        """
+        # auto IF_NAME
+        iface IF_NAME inet static
+        address IP
+        netmask NETMASK
+        # gateway GATEWAY
+        wireless-channel CHANNEL
+        wireless-essid SSID
+        wireless-mode ad-hoc
+        wireless-key KEY
+        """
+        options = {"address" : ip, "netmask" : netmask, "wireless-channel" : channel,
+                   "wireless-essid" : ssid, "wireless-mode" : "ad-hoc", "wireless-key" : key}
+        scheme = Scheme.find(if_name, ssid)
+        if scheme is not None:
+            scheme.delete()
+        scheme = Scheme(if_name, ssid, inet="static", options=options)
+        scheme.save()
+        scheme.activate()
                     
 if __name__ == "__main__":
     delft = DelftAPI()
