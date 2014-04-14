@@ -87,7 +87,7 @@ class DelftAPI(API):
         while not self.run_event.is_set() and not self.stop_event.is_set():
             self._monitor_wireless()
             self._parse_iproute()
-            self._evaluate_available_networks("wlan0", *self._current_essid_and_quality("wlan0"))
+            self._evaluate_available_networks("wlan0", self._current_essid("wlan0"))
             if not self.stop_event.is_set():
                 self.run_event.wait(SLEEP)
         if not self._stopping:
@@ -299,13 +299,12 @@ class DelftAPI(API):
                 self.status["wireless." + device + "." + k] = v 
             self.network_strengths[device] = info
             
-    def _current_essid_and_quality(self, if_name):
-        essid = self.status["dispersy.endpoint." + if_name + ".essid"]
+    def _current_essid(self, if_name):
         try:
-            return essid.get_value(), self.status["wireless." + essid.get_value() + ".quality"].get_value()
-        except TypeError:
+            return self.status["dispersy.endpoint." + if_name + ".essid"].get_value()
+        except AttributeError:
             pass
-        return None, -1
+        return None
     
     def _evaluate_available_networks(self, if_name, current_essid):
         current = self.network_strengths.get(current_essid, {})
@@ -316,7 +315,7 @@ class DelftAPI(API):
                 if essid in self.network_configurations.keys():
                     if not self.starting_interface:
                         self._start_adhoc_interface(if_name, self.network_configurations.get(essid))                    
-                break # TODO: Not taking account multiple better choices
+                break # TODO: Not taking in account multiple better choices
             
     def _start_adhoc_interface(self, if_name, conf):
         """
