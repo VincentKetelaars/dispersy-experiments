@@ -24,6 +24,7 @@ from pywifi.wifi.exceptions import InterfaceError
 logger = get_logger(__name__)
 
 SLEEP = 1
+WIRELESS_QUALITY_GAP_PERCENTAGE = 1.25
 
 class DelftAPI(API):
     '''
@@ -48,8 +49,9 @@ class DelftAPI(API):
         self.status = get_status(name)
         
         di_kwargs = {}
+        self.network_configurations = {}
         try:
-            di_kwargs = self._get_arguments_from_config()
+            di_kwargs, self.network_configurations = self._get_arguments_from_config()
         except:
             logger.exception("Could not get arguments from config, make do with what you've got")
         finally:
@@ -73,15 +75,19 @@ class DelftAPI(API):
         
         # Set signal quit handler
         signal.signal(signal.SIGQUIT, self.on_quit)
-
-        t = Thread(name="Adhoc", target=self._start_adhoc_interface, args=("wlan0", "192.168.1.1", "MyAdhoc", "192.168.1.254", "1234567890"))
-        t.start()
+        
+        # Remember networks and strengths
+        self.network_strengths = {}
+        
+        # Make sure we don't try to start to many interfaces
+        self.starting_interface = False
         
     def run(self):
         logger.info("Running")
         while not self.run_event.is_set() and not self.stop_event.is_set():
             self._monitor_wireless()
             self._parse_iproute()
+            self._evaluate_available_networks("wlan0", *self._current_essid_and_quality("wlan0"))
             if not self.stop_event.is_set():
                 self.run_event.wait(SLEEP)
         if not self._stopping:
@@ -168,7 +174,7 @@ class DelftAPI(API):
         try:
             me = info["multiendpoint"]
             for e in me:
-                name = self._get_device_by_address(e["address"])
+                name = self._get_interface_by_address(e["address"])
                 self.status[base_endpoint + name + ".ip"] = e["address"].ip
                 self.status[base_endpoint + name + ".port"] = e["address"].port
                 self.status[base_endpoint + name + ".total_up"] = e["total_up"]
@@ -179,7 +185,7 @@ class DelftAPI(API):
             
     def socket_state_callback(self, address, state):
         base = "swift.sockets."
-        device = self._get_device_by_address(address)
+        device = self._get_interface_by_address(address)
         
         if device is None:
             device = "unknown"
@@ -201,6 +207,14 @@ class DelftAPI(API):
     """
     
     def _parse_iproute(self):
+        ifs = {}
+        iwgetid = os.popen('iwgetid').read()
+        for line in iwgetid.splitlines(False):
+            device = self._regex_find(line, "ESSID:(.+)", "").strip('"')
+            device = device.replace(" ", "_")
+            if_name = self._regex_find(line, "(\w+\d)", None)
+            ifs[if_name] = device
+            self.status["wireless." + device + ".if_name"] = if_name        
         iproute = os.popen('ip route').read()
         for line in iproute.splitlines(False): # There might be multiple lines that correspond
             ip = self._regex_find(line, "src (\d+\.\d+\.\d+\.\d+)", None)
@@ -211,12 +225,7 @@ class DelftAPI(API):
                 if not self._interface_running(device):
                     self.interface_came_up(ip, if_name, device, gateway=gateway)
                     self.use_interfaces[device] = (time.time(), u"up", ip) # Set the newest state
-        iwgetid = os.popen('iwgetid').read()
-        for line in iwgetid.splitlines(False):
-            device = self._regex_find(line, "ESSID:(.+)", "").strip('"')
-            device = device.replace(" ", "_")
-            if_name = self._regex_find(line, "(\w+\d)", None)
-            self.status["wireless." + device + ".if_name"] = if_name
+                self.status["dispersy.endpoint." + if_name + ".essid"] = ifs.get(if_name)
                 
     def _interface_running(self, device):
         return device in self.use_interfaces.iterkeys() and self.use_interfaces[device][1] == u"up"
@@ -226,6 +235,11 @@ class DelftAPI(API):
         if m:
             return m.groups()[0]
         return default
+    
+    def _get_interface_by_address(self, address):
+        if address.interface is not None:
+            return address.interface.name
+        return None
     
     def _get_device_by_address(self, address):
         if address.interface is not None and address.interface.device is not None:
@@ -259,8 +273,15 @@ class DelftAPI(API):
                 di_kwargs[value(p.name)] = value(p.get_value())
             else:
                 di_kwargs[value(p.name)] = [value(c.get_value()) for c in children("parameters." + value(p.name))]
-
-        return di_kwargs
+        
+        networks = {}
+        for p in children("networks"):
+            n_kwargs = {}
+            for n in children("networks." + value(p.name)):
+                n_kwargs[value(n.name)] = value(n.get_value())
+            networks[n_kwargs.get("wireless-essid")] = n_kwargs
+            
+        return di_kwargs, networks
     
     def _monitor_wireless(self, **kwargs):
         cells = []
@@ -270,12 +291,34 @@ class DelftAPI(API):
             pass
         for c in cells:
             device = c.ssid.replace(" ", "_")
-            self.status["wireless." + device + ".signal"] = int(vars(c).get("signal", -1))
             quality, maximum = vars(c).get("quality", "-1/-1").split("/")
-            self.status["wireless." + device + ".quality"] = int(quality)
-            self.status["wireless." + device + ".max_quality"] = int(maximum)
+            info = {"signal" : int(vars(c).get("signal", -1)), "quality" : int(quality),
+                    "max_quality" : int(maximum), "encryption_type" : vars(c).get("encryption_type", ""),
+                    "channel" : vars(c).get("channel", -1)}
+            for k, v in info.iteritems():
+                self.status["wireless." + device + "." + k] = v 
+            self.network_strengths[device] = info
             
-    def _start_adhoc_interface(self, if_name, ip, ssid, gateway, key, netmask="255.255.255.0", channel="auto"):
+    def _current_essid_and_quality(self, if_name):
+        essid = self.status["dispersy.endpoint." + if_name + ".essid"]
+        try:
+            return essid.get_value(), self.status["wireless." + essid.get_value() + ".quality"].get_value()
+        except TypeError:
+            pass
+        return None, -1
+    
+    def _evaluate_available_networks(self, if_name, current_essid):
+        current = self.network_strengths.get(current_essid, {})
+        for essid, value in self.network_strengths.iteritems():
+            if value["quality"] > 0 and value["quality"] > current.get("quality", 0) * WIRELESS_QUALITY_GAP_PERCENTAGE:
+                logger.debug("%s with quality %d is a better choice than %s with quality %d", 
+                             essid, value[1], current_essid, current["quality"])
+                if essid in self.network_configurations.keys():
+                    if not self.starting_interface:
+                        self._start_adhoc_interface(if_name, self.network_configurations.get(essid))                    
+                break # TODO: Not taking account multiple better choices
+            
+    def _start_adhoc_interface(self, if_name, conf):
         """
         # auto IF_NAME
         iface IF_NAME inet static
@@ -287,14 +330,29 @@ class DelftAPI(API):
         wireless-mode ad-hoc
         wireless-key KEY
         """
-        options = {"address" : ip, "netmask" : netmask, "wireless-channel" : channel,
-                   "wireless-essid" : ssid, "wireless-mode" : "ad-hoc", "wireless-key" : key}
-        scheme = Scheme.find(if_name, ssid)
-        if scheme is not None:
-            scheme.delete()
-        scheme = Scheme(if_name, ssid, inet="static", options=options)
-        scheme.save()
-        scheme.activate()
+#         options = {"address" : ip, "netmask" : netmask, "wireless-channel" : channel, "gateway" : gateway,
+#                    "wireless-essid" : ssid, "wireless-mode" : "ad-hoc", "wireless-key" : key}
+        
+        def run():
+            self.starting_interface = True
+            scheme = Scheme.find(if_name, conf.get("wireless-essid", None))
+            if scheme is not None:
+                scheme.delete()
+            scheme = Scheme(if_name, conf.get("wireless-essid", None), inet="static", options=conf)
+            scheme.save()
+            try:
+                scheme.activate()
+            except:
+                logger.exception("Failed to activate wireless network")
+            else:
+                for k, v in conf.iteritems():
+                    self.status["wireless." + conf.get("wireless-essid") + "." + k] = v
+                self.status["dispersy.endpoint." + if_name + ".essid"] = conf.get("wireless-essid")
+            finally:
+                self.starting_interface = False
+            
+        t = Thread(name="Adhoc", target=run)
+        t.start()
                     
 if __name__ == "__main__":
     delft = DelftAPI()
