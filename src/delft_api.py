@@ -311,19 +311,26 @@ class DelftAPI(API):
         for essid, value in self.network_strengths.iteritems():
             if value["quality"] > 0 and value["quality"] > current.get("quality", 0) * WIRELESS_QUALITY_GAP_PERCENTAGE:
                 logger.debug("%s with quality %d is a better choice than %s with quality %d", 
-                             essid, value[1], current_essid, current["quality"])
+                             essid, value["quality"], current_essid, current.get("quality", -1))
                 if essid in self.network_configurations.keys():
                     if not self.starting_interface:
-                        self._start_adhoc_interface(if_name, self.network_configurations.get(essid))                    
+                        self._use_network_interface(if_name, self.network_configurations.get(essid))                    
                 break # TODO: Not taking in account multiple better choices
+        else: # Give preference to wifi from configuration
+            if current_essid is None or not current_essid in self.network_configurations.keys():
+                for essid, conf in self.network_configurations.iteritems():
+                    if essid in self.network_strengths.iterkeys() or conf.get("wireless-mode") == "ad-hoc":
+                        logger.debug("Start using the %s network", essid)
+                        self._use_network_interface(if_name, conf)
+                        break
             
-    def _start_adhoc_interface(self, if_name, conf):
+    def _use_network_interface(self, if_name, conf):
         """
         # auto IF_NAME
         iface IF_NAME inet static
         address IP
         netmask NETMASK
-        # gateway GATEWAY
+        gateway GATEWAY
         wireless-channel CHANNEL
         wireless-essid SSID
         wireless-mode ad-hoc
@@ -337,7 +344,7 @@ class DelftAPI(API):
             scheme = Scheme.find(if_name, conf.get("wireless-essid", None))
             if scheme is not None:
                 scheme.delete()
-            scheme = Scheme(if_name, conf.get("wireless-essid", None), inet="static", options=conf)
+            scheme = Scheme(if_name, conf.get("wireless-essid", None), inet="dhcp", options=conf)
             scheme.save()
             try:
                 scheme.activate()
@@ -349,7 +356,8 @@ class DelftAPI(API):
                 self.status["dispersy.endpoint." + if_name + ".essid"] = conf.get("wireless-essid")
             finally:
                 self.starting_interface = False
-            
+        
+        logger.debug("Request to use %s for %s", conf.get("wireless-essid"), if_name)
         t = Thread(name="Adhoc", target=run)
         t.start()
                     
