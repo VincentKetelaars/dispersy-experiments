@@ -956,7 +956,8 @@ class MultiEndpoint(CommonEndpoint):
                     logger.debug("Interface is already up and running")
                     return
                 e.socket_running = -1 # This new socket is not yet running, so initialize to -1
-                addr.set_port(e.address.port) # Use the old port
+                if addr.port <= 0:
+                    addr.set_port(e.address.port) # Use the old port
                 old_ip = e.address.ip
                 e.swift_add_socket(addr) # If ip already exists, try adding it to swift (only if not already working)
                 if old_ip != addr.ip: # New address
