@@ -1272,7 +1272,7 @@ def get_hash(filename, swift_path):
                     hashline = f.readline()
                 roothash = hashline.strip().split(" ")[2]
             except (IndexError, IOError):
-                logger.exception("Reading mbinmap failed")
+                logger.exception("Reading mbinmap from %s failed", filename)
         if roothash is not None:
             logger.debug("Found roothash in mbinmap: %s", roothash)
             return roothash
