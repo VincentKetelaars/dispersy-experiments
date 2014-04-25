@@ -67,7 +67,7 @@ class DelftAPI(API):
         
         # dictionary of known interfaces that should be used and the last state and time
         self.use_interfaces = {} # (timestamp, status, ip)
-        self._listen_args = [Address.unknown(l) for l in di_kwargs.get("listen", [])]
+        self._listen_args = dict((a.ip, a) for a in [Address.unknown(l) for l in di_kwargs.get("listen", [])])
         
         # Set callbacks
         self.state_change_callback(self._state_changed)
@@ -120,10 +120,7 @@ class DelftAPI(API):
         """
         If the initial configuration has explicitly mentioned this ip address, then use this port
         """
-        for l in self._listen_args:
-            if l.ip == ip:
-                port = l.port
-        API.interface_came_up(self, ip, interface_name, device_name, gateway=gateway, port=port)
+        API.interface_came_up(self, ip, interface_name, device_name, gateway=gateway, port=self._listen_args.get(ip, Address(port=port)).port)
         
     """
     CALLBACKS
@@ -288,7 +285,7 @@ class DelftAPI(API):
         try:
             cells = Cell.all()
         except InterfaceError:
-            pass
+            logger.exception("Could not get cells")
         for c in cells:
             device = c.ssid.replace(" ", "_")
             quality, maximum = vars(c).get("quality", "-1/-1").split("/")
@@ -315,7 +312,7 @@ class DelftAPI(API):
                 if essid in self.network_configurations.keys():
                     if not self.starting_interface:
                         self._use_network_interface(if_name, self.network_configurations.get(essid))                    
-                break # TODO: Not taking in account multiple better choices
+                        break # TODO: Not taking in account multiple better choices
         else: # Give preference to wifi from configuration
             if current_essid is None or not current_essid in self.network_configurations.keys():
                 for essid, conf in self.network_configurations.iteritems():
@@ -336,18 +333,13 @@ class DelftAPI(API):
         wireless-mode ad-hoc
         wireless-key KEY
         """
-#         options = {"address" : ip, "netmask" : netmask, "wireless-channel" : channel, "gateway" : gateway,
-#                    "wireless-essid" : ssid, "wireless-mode" : "ad-hoc", "wireless-key" : key}
         
         def run():
             self.starting_interface = True
-            scheme = Scheme.find(if_name, conf.get("wireless-essid", None))
-            if scheme is not None:
-                scheme.delete()
-            scheme = Scheme(if_name, conf.get("wireless-essid", None), inet="dhcp", options=conf)
-            scheme.save()
+            scheme = Scheme(if_name, conf.get("wireless-essid", None), inet="static", options=conf)
             try:
-                scheme.activate()
+                if scheme.activate() is not None:
+                    self.interface_came_up(conf.get("address"), if_name, conf.get("wireless-essid"), gateway=conf.get("gateway"))
             except:
                 logger.exception("Failed to activate wireless network")
             else:
