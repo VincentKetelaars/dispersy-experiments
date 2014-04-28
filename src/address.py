@@ -189,6 +189,9 @@ class Address(object):
         elif self.family == AF_INET6:
             return "[" + self.ip + "]:" + str(self.port)
         
+    def __repr__(self):
+        return "Address (%s %d %d %s %s %s)" % (self.ip, self.port, self.family, self.flowinfo, self.scopeid, self.interface)
+        
     def is_wildcard_ip(self):
         return self.ip == "0.0.0.0"
     

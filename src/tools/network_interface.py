@@ -26,8 +26,16 @@ class Interface(object):
     
     def ipv6(self):
         return self._version == AF_INET6
+    
+    def set_device(self, device):
+        if device is not None:
+            self.device = device
         
     def __str__(self):
+        return "Interface (%s, %s, %s, %s, %s, %s) " %(self.name, self.address, self.netmask, self.broadcast, 
+                                                       self.gateway, self.device)
+        
+    def __repr__(self):
         return "Interface (%s, %s, %s, %s, %s, %s) " %(self.name, self.address, self.netmask, self.broadcast, 
                                                        self.gateway, self.device)
         
