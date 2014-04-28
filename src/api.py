@@ -452,7 +452,8 @@ class ReceiverAPI(PipeHandler):
         if addr.resolve_interface():
             if addr.interface.name != if_name:
                 logger.warning("Interfaces do not match %s %s", addr.interface.name, if_name)
-            addr.interface.device = device
+            if device is not None:
+                addr.interface.device = device
             addr.interface.gateway = gateway
             if addr.interface.address is None: # In case netifaces does not recognize interface such as ppp
                 addr.interface.address = ip         

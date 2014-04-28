@@ -525,6 +525,7 @@ class MultiEndpoint(CommonEndpoint):
         self._thread_stop_event = Event()
         self._endpoint = None
         self.swift_endpoints = []
+        self._interfaces_that_came_up = {}
         CommonEndpoint.__init__(self, swift_process, api_callback=api_callback)
         
         if swift_process:
@@ -580,7 +581,7 @@ class MultiEndpoint(CommonEndpoint):
     def add_endpoint(self, addr):
         logger.info("Add %s", addr)
         with self.lock:
-            new_endpoint = SwiftEndpoint(self._swift, addr, api_callback=self._api_callback)
+            new_endpoint = SwiftEndpoint(self._swift, addr, api_callback=self._api_callback, device=self._interfaces_that_came_up.get(addr.ip))
             new_endpoint.dispersy_contacts = set([DispersyContact.shallow_copy(dc) for dc in self.dispersy_contacts]) # Initialize
             try:
                 new_endpoint.open(self._dispersy)
@@ -948,6 +949,7 @@ class MultiEndpoint(CommonEndpoint):
         logger.debug("%s came up", addr.interface)
         if addr.interface is None:
             return
+        self._interfaces_that_came_up[addr.ip] = addr.interface.device
         for e in self.swift_endpoints:
             if (e.address.ip == addr.ip or e.address.interface.name == addr.interface.name or
                 e.address.interface.device == addr.interface.device):
@@ -1121,14 +1123,16 @@ class MultiEndpoint(CommonEndpoint):
     
 class SwiftEndpoint(CommonEndpoint):
     
-    def __init__(self, swift_process, address, api_callback=None):
-        super(SwiftEndpoint, self).__init__(swift_process, api_callback=api_callback, address=address) # Dispersy and session code 
+    def __init__(self, swift_process, address, api_callback=None, device=None):
+        super(SwiftEndpoint, self).__init__(swift_process, api_callback=api_callback, address=address) # Dispersy and session code
+        logger.debug("Creating SwiftEndpoint %s %s %s %s", swift_process, address, api_callback, device)
         self.waiting_queue = Queue.Queue()
         if self.address.resolve_interface():
             if not address in self._swift.working_sockets:
                 self.swift_add_socket(self.address)
             else:
                 self.socket_running = 0
+            self.address.interface.set_device(device)
         else:
             logger.warning("This address can not be resolved to an interface")
         
