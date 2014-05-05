@@ -314,7 +314,8 @@ class DelftAPI(API):
                     self._use_network_interface(if_name, self.network_configurations.get(essid))                    
                     break # TODO: Not taking in account multiple better choices
         else: # Give preference to wifi from configuration
-            if current_essid is None or not current_essid in self.network_configurations.keys() or current.get("quality", -1) <= 0:
+            if (current_essid is None or not current_essid in self.network_configurations.keys()
+                or (current.get("quality", -1) <= 0 and not self._interface_running(if_name))):
                 for essid, conf in self.network_configurations.iteritems():
                     if essid in self.network_strengths.iterkeys() or conf.get("wireless-mode") == "ad-hoc":
                         logger.debug("Start using the %s network", essid)
