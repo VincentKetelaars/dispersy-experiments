@@ -9,6 +9,7 @@ import os
 import re
 from threading import Event, Thread
 from errno import EWOULDBLOCK
+from collections import defaultdict
 
 from src.database.API import get_status, get_config
 
@@ -77,7 +78,7 @@ class DelftAPI(API):
         signal.signal(signal.SIGQUIT, self.on_quit)
         
         # Remember networks and strengths
-        self.network_strengths = {}
+        self.network_strengths = defaultdict(list)
         
         # Make sure we don't try to start to many interfaces
         self.starting_interface = False
@@ -87,7 +88,7 @@ class DelftAPI(API):
         while not self.run_event.is_set() and not self.stop_event.is_set():
             self._monitor_wireless()
             self._parse_iproute()
-            self._evaluate_available_networks("wlan0", self._current_essid("wlan0"))
+            self._evaluate_available_networks("wlan0", *self._current_essid_and_ap())
             if not self.stop_event.is_set():
                 self.run_event.wait(SLEEP)
         if not self._stopping:
@@ -205,7 +206,7 @@ class DelftAPI(API):
     PRIVATE FUNCTIONS
     """
     
-    def _get_wireless_essid(self):        
+    def _get_wireless_essids(self):        
         ifs = {}
         iwgetid = os.popen('iwgetid').read()
         for line in iwgetid.splitlines(False):
@@ -217,6 +218,23 @@ class DelftAPI(API):
             self.status["wireless." + if_name + ".essid"] = device
         return ifs
     
+    def _get_iwconfig(self):
+        info = {}
+        iwconfig = os.popen('iwconfig').read()
+        for line in iwconfig.splitlines(False):
+            if len(line.strip()) == 0 or line.startswith('lo') or line.startswith('eth'):
+                continue
+            if line.startswith("wlan"):
+                info["interface"] = line[:5]
+            if line.find("ESSID:") >= 0:
+                info["essid"] = line.split(":")[1].strip().strip('"')
+            if line.find("Access Point") >= 0:
+                mac_address = re.compile("[0-9A-F:]{17}")
+                match_result = mac_address.search(line)
+                if match_result is not None:
+                    info["mac"] = match_result.group(0)
+        return info
+    
     def _parse_iproute(self):     
         iproute = os.popen('ip route').read()
         for line in iproute.splitlines(False): # There might be multiple lines that correspond
@@ -224,7 +242,7 @@ class DelftAPI(API):
             if_name = self._regex_find(line, "dev ([a-zA-Z]{3,4}\d)", None)
             gateway = self._regex_find(line, "default via (\d+\.\d+\.\d+\.\d+)", None)
             if ip is not None and if_name is not None:
-                ifs = self._get_wireless_essid()
+                ifs = self._get_wireless_essids()
                 device = ifs.get(if_name) if ifs.get(if_name) is not None else if_name[0:-1]
                 if not self._interface_running(if_name):
                     self.interface_came_up(ip, if_name, device, gateway=gateway)
@@ -296,23 +314,34 @@ class DelftAPI(API):
             quality, maximum = vars(c).get("quality", "-1/-1").split("/")
             info = {"signal" : int(vars(c).get("signal", -1)), "quality" : int(quality),
                     "max_quality" : int(maximum), "encryption_type" : vars(c).get("encryption_type", ""),
-                    "channel" : vars(c).get("channel", -1)}
+                    "channel" : vars(c).get("channel", -1), "mac" : vars(c).get("mac", None), 
+                    "device" : c.ssid}
             for k, v in info.iteritems():
-                self.status["wireless." + device + "." + k] = v 
-            self.network_strengths[device] = info
+                self.status["wireless." + device + "." + k] = v
+            for network in self.network_strengths[device]:
+                if network.get("mac") == info.get("mac"):
+                    network = info
+            else:
+                if info.get("mac", None) is not None:
+                    self.network_strengths[device].append(info)
             
-    def _current_essid(self, if_name):
-        return self._get_wireless_essid().get(if_name)
+    def _current_essid_and_ap(self):
+        info = self._get_iwconfig() # Could check if the interface is the same..
+        return info.get("essid"), info.get("mac")
     
-    def _evaluate_available_networks(self, if_name, current_essid):
-        current = self.network_strengths.get(current_essid, {})
-        for essid, value in self.network_strengths.iteritems():
-            if value["quality"] > 0 and value["quality"] > current.get("quality", 0) * WIRELESS_QUALITY_GAP_PERCENTAGE:
-                logger.debug("%s with quality %d is a better choice than %s with quality %d", 
-                             essid, value["quality"], current_essid, current.get("quality", -1))
-                if essid in self.network_configurations.keys():
-                    self._use_network_interface(if_name, self.network_configurations.get(essid))                    
-                    break # TODO: Not taking in account multiple better choices
+    def _evaluate_available_networks(self, if_name, current_essid, current_ap):
+        current = {}
+        for c in self.network_strengths.get(current_essid, []):
+            if c.get("mac") == current_ap:
+                current = c
+        for essid, essid_list in self.network_strengths.iteritems():
+            for value in essid_list:
+                if value["quality"] > 0 and value["quality"] > current.get("quality", 0) * WIRELESS_QUALITY_GAP_PERCENTAGE:
+                    logger.debug("%s with quality %d is a better choice than %s with quality %d", 
+                                 essid, value["quality"], current_essid, current.get("quality", -1))
+                    if essid in self.network_configurations.keys():
+                        self._use_network_interface(if_name, self.network_configurations.get(essid))                    
+                        return # TODO: Not taking in account multiple better choices
         else: # Give preference to wifi from configuration
             if (current_essid is None or not current_essid in self.network_configurations.keys()
                 or (current.get("quality", -1) <= 0 and not self._interface_running(if_name))):
@@ -354,7 +383,7 @@ class DelftAPI(API):
         
         
         if not self.starting_interface:
-            logger.debug("Request to use %s for %s", conf.get("wireless-essid"), if_name)
+            logger.debug("Request to use %s for %s with parameters %s", conf.get("wireless-essid"), if_name, conf)
             t = Thread(name="Adhoc", target=run)
             t.start()
         else:
