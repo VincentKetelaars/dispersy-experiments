@@ -227,7 +227,7 @@ class DelftAPI(API):
             if line.startswith("wlan"):
                 info["interface"] = line[:5]
             if line.find("ESSID:") >= 0:
-                essid_re = re.compile('ESSID:"(.+)"')
+                essid_re = re.compile('ESSID:"(.+?)"')
                 matches = essid_re.search(line)
                 info["essid"] = matches.group(1)
             if line.find("Access Point") >= 0 or line.find("Cell"):
