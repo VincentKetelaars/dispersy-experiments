@@ -330,6 +330,7 @@ class DelftAPI(API):
         return info.get("essid"), info.get("mac")
     
     def _evaluate_available_networks(self, if_name, current_essid, current_ap):
+        logger.debug("Evaluate %s %s %s %s %s", if_name, current_essid, current_ap, self.network_configurations, self.network_strengths)
         current = {}
         for c in self.network_strengths.get(current_essid, []):
             if c.get("mac") == current_ap:
@@ -344,7 +345,7 @@ class DelftAPI(API):
                         return # TODO: Not taking in account multiple better choices
         else: # Give preference to wifi from configuration
             if (current_essid is None or not current_essid in self.network_configurations.keys()
-                or (current.get("quality", -1) <= 0 and not self._interface_running(if_name))):
+                or current.get("quality", -1) < 0 or (current.get("quality", -1) == 0 and not self._interface_running(if_name))):
                 for essid, conf in self.network_configurations.iteritems():
                     if essid in self.network_strengths.iterkeys() or conf.get("wireless-mode") == "ad-hoc":
                         logger.debug("Start using the %s network", essid)
