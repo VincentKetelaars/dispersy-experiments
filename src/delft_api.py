@@ -229,12 +229,12 @@ class DelftAPI(API):
             if line.find("ESSID:") >= 0:
                 essid_re = re.compile('ESSID:"(.+?)"')
                 matches = essid_re.search(line)
-                info["essid"] = matches.group(1)
+                info["essid"] = matches.group(1) if matches is not None else None
             if line.find("Access Point") >= 0 or line.find("Cell"):
                 mac_address = re.compile("[0-9A-F:]{17}")
                 match_result = mac_address.search(line)
                 if match_result is not None:
-                    info["mac"] = match_result.group(0)
+                    info["mac"] = match_result.group(0) if match_result is not None else None
         return info
     
     def _parse_iproute(self):     
@@ -323,9 +323,11 @@ class DelftAPI(API):
             for network in self.network_strengths[device]:
                 if network.get("mac") == info.get("mac"):
                     network = info
+                    break
             else:
                 if info.get("mac", None) is not None:
                     self.network_strengths[device].append(info)
+            logger.debug(self.network_strengths)
             
     def _current_essid_and_ap(self):
         info = self._get_iwconfig() # Could check if the interface is the same..
