@@ -101,13 +101,15 @@ class MySQLToCSV(object):
         
         logger.debug("Working on database %s", database)
         
+        TIME_DATE_FORMAT = "%Y-%m-%d_%H:%M:%S"
+        
         start_time = None
         if start is not None:
-            start_time = datetime.strptime(start, "%H:%M:%S_%d-%m-%Y")
+            start_time = datetime.strptime(start, TIME_DATE_FORMAT)
             
         end_time = None
         if end is not None:
-            end_time = datetime.strptime(end, "%H:%M:%S_%d-%m-%Y")
+            end_time = datetime.strptime(end, TIME_DATE_FORMAT)
         
         logger.debug("Channel %s has id %d", channel, self.channel[0])
         params_to_csv = {}
@@ -228,7 +230,7 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--channel", required=True, help="Channel")
     parser.add_argument("-C", "--columns", action="store_true", help="Data arranged in columns")
     parser.add_argument("-d", "--database", required=True, help="Database")
-    parser.add_argument("-e", "--end", help="Get only values before this time, formatted: hh:mm:ss_dd-MM-YYYY")
+    parser.add_argument("-e", "--end", help="Get only values before this time, formatted: YYYY-MM-dd_hh:mm:ss")
     parser.add_argument("-f", "--file", required=True, help="CSV file")
     parser.add_argument("-p", "--params", default=[], nargs="+", help="Parameters")
     parser.add_argument("-r", "--rows", action="store_true", help="Data arranged in rows")

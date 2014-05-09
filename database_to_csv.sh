@@ -4,7 +4,7 @@ FOLDER=${HOME}/Desktop/mysql/
 usage() {
 	echo "Usage"
 	echo "-c | --columns		Use columns"
-	echo "-d | --date		to set date (dd-mm-yyyy), defaults to today"
+	echo "-d | --date		to set date (yyyy-mm-dd), defaults to today"
 	echo "-e | --endtime 		to set endtime (default 23:59:59)"
 	echo "-h | --help 		to display usage"
 	echo "-r | --rows		Use rows"
@@ -16,7 +16,7 @@ usage() {
 ENDTIME="23:59:59"
 STARTTIME="00:00:00"
 VERBOSE=false
-DATE=`date +%d-%m-%Y`
+DATE=`date +%Y-%m-%d`
 NO_PARAMS=""
 while [ "$1" != "" ]; do
     case $1 in
@@ -47,8 +47,7 @@ while [ "$1" != "" ]; do
     shift
 done
 
-FILEDATE=`date +%Y%m%d`
-FILE=${FILEDATE}_${STARTTIME}
+FILE=${DATE}_${STARTTIME}
 
 APPEND_FILE=$(echo ${NO_PARAMS} | sed 's/[^a-zA-Z]*//g' | tr '[:upper:]' '[:lower:]' | grep -o . | sort -n | tr -d '\n')
 if [ ! -z "${APPEND_FILE}" ]; then
@@ -57,8 +56,8 @@ fi
 
 FILEPATH=${FOLDER}${FILE}.csv
 
-STARTDATETIME="${STARTTIME}_${DATE}"
-ENDDATETIME="${ENDTIME}_${DATE}"
+STARTDATETIME="${DATE}_${STARTTIME}"
+ENDDATETIME="${DATE}_${ENDTIME}"
 
 if $VERBOSE; then
 	set -v
