@@ -317,7 +317,11 @@ class DelftAPI(API):
             logger.exception("Could not get cells")
         for c in cells:
             device = c.ssid.replace(" ", "_")
-            quality, maximum = vars(c).get("quality", "-1/-1").split("/")
+            try:
+                quality = int(vars(c).get("quality"))
+                maximum = -1
+            except TypeError:
+                quality, maximum = vars(c).get("quality", "-1/-1").split("/")
             info = {"signal" : int(vars(c).get("signal", -1)), "quality" : int(quality),
                     "max_quality" : int(maximum), "encryption_type" : vars(c).get("encryption_type", ""),
                     "channel" : vars(c).get("channel", -1), "mac" : vars(c).get("mac", None), 
