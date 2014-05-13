@@ -320,7 +320,7 @@ class DelftAPI(API):
             try:
                 quality = int(vars(c).get("quality"))
                 maximum = -1
-            except ValueError:
+            except (TypeError, ValueError):
                 quality, maximum = vars(c).get("quality", "-1/-1").split("/")
             info = {"signal" : int(vars(c).get("signal", -1)), "quality" : int(quality),
                     "max_quality" : int(maximum), "encryption_type" : vars(c).get("encryption_type", ""),
