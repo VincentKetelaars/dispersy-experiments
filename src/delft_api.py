@@ -88,7 +88,7 @@ class DelftAPI(API):
         while not self.run_event.is_set() and not self.stop_event.is_set():
             self._monitor_wireless()
             self._parse_iproute()
-            if self.network_configurations.get("enable", False):
+            if self.network_configurations.get("enabled", False):
                 self._evaluate_available_networks("wlan0", *self._current_essid_and_ap())
             if not self.stop_event.is_set():
                 self.run_event.wait(SLEEP)
