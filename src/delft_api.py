@@ -88,7 +88,8 @@ class DelftAPI(API):
         while not self.run_event.is_set() and not self.stop_event.is_set():
             self._monitor_wireless()
             self._parse_iproute()
-            self._evaluate_available_networks("wlan0", *self._current_essid_and_ap())
+            if self.network_configurations.get("enable", False):
+                self._evaluate_available_networks("wlan0", *self._current_essid_and_ap())
             if not self.stop_event.is_set():
                 self.run_event.wait(SLEEP)
         if not self._stopping:
@@ -298,10 +299,13 @@ class DelftAPI(API):
         
         networks = {}
         for p in children("networks"):
-            n_kwargs = {}
-            for n in children("networks." + value(p.name)):
-                n_kwargs[value(n.name)] = value(n.get_value())
-            networks[n_kwargs.get("wireless-essid")] = n_kwargs
+            if p.datatype != "folder":
+                networks[value(p.name)] = value(p.get_value())
+            else:
+                n_kwargs = {}
+                for n in children("networks." + value(p.name)):
+                    n_kwargs[value(n.name)] = value(n.get_value())
+                networks[n_kwargs.get("wireless-essid")] = n_kwargs
             
         return di_kwargs, networks
     
@@ -327,7 +331,7 @@ class DelftAPI(API):
             else:
                 if info.get("mac", None) is not None:
                     self.network_strengths[device].append(info)
-            logger.debug(self.network_strengths)
+        logger.debug(self.network_strengths)
             
     def _current_essid_and_ap(self):
         info = self._get_iwconfig() # Could check if the interface is the same..
