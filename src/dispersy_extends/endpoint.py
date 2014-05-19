@@ -398,6 +398,7 @@ class CommonEndpoint(SwiftHandler):
         self.address = address
         self._wan_voters = {}
         self._wan_address = { address : 0 } # Initialize zero vote
+        self.bootstrap_last_received = {} # Last time received message from bootstrapper
         
     @property
     def wan_address(self):
@@ -411,6 +412,7 @@ class CommonEndpoint(SwiftHandler):
         """
         # Wan addresses can change over time for an endpoint
         # We assume the lan address to be unique
+        # FIX: Weird ass assumption
         if self._wan_voters.get(sender_lan) == address:
             return  # Same vote as last time
         if self._wan_voters.get(sender_lan) is not None: # So we have a new vote
@@ -449,8 +451,12 @@ class CommonEndpoint(SwiftHandler):
         @rtype: Community, DispersyContact
         """
         community = self.get_community(packets[0][2:22]) # Packet of first tuple
+        if community is None:
+            return None, None
         address = Address.tuple(sock_addr)
-        if community is None or self.is_bootstrap_candidate(addr=address): 
+        if self.is_bootstrap_candidate(addr=address):
+            if recv:
+                self.bootstrap_last_received[sock_addr[0]] = datetime.utcnow()
             return None, None
         _bytes = sum([len(p) for p in packets])
         contact = DispersyContact(address, community_id=community.cid)
@@ -860,7 +866,13 @@ class MultiEndpoint(CommonEndpoint):
             if name == ADDRESSES_REQUEST_MESSAGE_NAME: # Apparently someone does not know us yet (Perhaps my wan is not what I think it is)
                 message = self._dispersy.convert_packet_to_message(data, load=False, auto_load=False)
                 e.vote_wan_address(message.payload.wan_address, message.payload.sender_lan, message.payload.sender_wan)
-            return
+#             if name == u"dispersy-introduction-response":
+#                 try:
+#                     message = self._dispersy.convert_packet_to_message(data, load=False, auto_load=False)
+#                     e.vote_wan_address(message.payload.source_wan_address, sock_addr[0], sock_addr[0])
+#                 except AssertionError:
+#                     pass
+#             return
         logger.warning("This %s should be represented by an endpoint", sock_addr)
         # In case the incoming_addr does not match any of the endpoints
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)        
@@ -1120,6 +1132,13 @@ class MultiEndpoint(CommonEndpoint):
         d = self.retrieve_download_impl(roothash)
         if roothash in self._started_downloads.keys() and self._swift.is_running() and d.downloading():
             self.add_peers_to_download(d, self._started_downloads[roothash], saddr)
+            
+    def wan_address_vote(self, wan_address, candidate):
+        candidate_address = Address.unknown(candidate.sock_addr)
+        last_bootstrap_contacts = sorted([(e, e.bootstrap_last_received.get(candidate.sock_addr[0], datetime.min)) for e in self.swift_endpoints], key=lambda x: x[1], reverse=True)
+        logger.debug("Wan address vote %s %s", self.bootstrap_last_received, last_bootstrap_contacts)
+        if not last_bootstrap_contacts == [] and last_bootstrap_contacts[0][1] != datetime.min:
+            last_bootstrap_contacts[0][0].vote_wan_address(Address.unknown(wan_address), candidate_address, candidate_address)
     
 class SwiftEndpoint(CommonEndpoint):
     

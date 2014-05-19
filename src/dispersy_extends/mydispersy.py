@@ -21,3 +21,7 @@ class MyDispersy(Dispersy):
         for c in self._communities.itervalues():
             if isinstance(c, MyCommunity):
                 c.swift_community.put_endpoint_calls(q, roothashes)
+                
+    def wan_address_vote(self, address, voter):
+        self.endpoint.wan_address_vote(address, voter)
+        return Dispersy.wan_address_vote(self, address, voter)
