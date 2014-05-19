@@ -831,7 +831,7 @@ class MultiEndpoint(CommonEndpoint):
                 if e is not None and e.is_alive and e.socket_running:
                     logger.debug("%d bytes will be sent with public endpoint %s and public peer %s", total_size, e, paddr)
                     return (e, paddr.addr())
-            return recur(self._endpoint, len(self.swift_endpoints))
+            return recur(self._next_endpoint(self._endpoint), len(self.swift_endpoints)) # Make sure there is some change
         
         if (len(self.swift_endpoints) == 0):
             self._endpoint = None
