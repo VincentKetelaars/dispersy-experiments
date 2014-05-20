@@ -959,7 +959,7 @@ class MultiEndpoint(CommonEndpoint):
                          
     def interface_came_up(self, addr):
         logger.debug("%s came up", addr.interface)
-        if addr.interface is None:
+        if addr.interface is None or addr.ip in self._interfaces_that_came_up.keys():
             return
         self._interfaces_that_came_up[addr.ip] = addr.interface.device
         for e in self.swift_endpoints:
@@ -1121,9 +1121,10 @@ class MultiEndpoint(CommonEndpoint):
     def addresses_requested(self, community, member, sender_lan, sender_wan, endpoint_id, wan_address):
         dc = DispersyContact(sender_wan)
         for e in self.swift_endpoints + [self]:
-            dc = e.get_contact(sender_lan, mid=member.mid)
-            if dc is not None:
-                dc.update_address(sender_lan, sender_wan, endpoint_id, member.mid)
+            edc = e.get_contact(sender_lan, mid=member.mid)
+            if edc is not None:
+                edc.update_address(sender_lan, sender_wan, endpoint_id, member.mid)
+                dc = edc
         if dc.addresses_sent + timedelta(seconds=MIN_TIME_BETWEEN_ADDRESSES_MESSAGE) < datetime.utcnow():
             self.send_addresses_to_communities(community, dc)
     
@@ -1136,7 +1137,6 @@ class MultiEndpoint(CommonEndpoint):
     def wan_address_vote(self, wan_address, candidate):
         candidate_address = Address.unknown(candidate.sock_addr)
         last_bootstrap_contacts = sorted([(e, e.bootstrap_last_received.get(candidate.sock_addr[0], datetime.min)) for e in self.swift_endpoints], key=lambda x: x[1], reverse=True)
-        logger.debug("Wan address vote %s %s", self.bootstrap_last_received, last_bootstrap_contacts)
         if not last_bootstrap_contacts == [] and last_bootstrap_contacts[0][1] != datetime.min:
             last_bootstrap_contacts[0][0].vote_wan_address(Address.unknown(wan_address), candidate_address, candidate_address)
     
