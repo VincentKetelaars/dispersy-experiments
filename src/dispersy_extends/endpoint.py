@@ -409,6 +409,9 @@ class CommonEndpoint(SwiftHandler):
         Use the vote to determine the wan address. Endpoints can only vote once
         Only allowed to vote for wan address when outside of our local network. I.e.
         wan is not private
+        @type address: Address
+        @type sender_lan: Address
+        @type sender_wan: Address 
         """
         # Wan addresses can change over time for an endpoint
         # We assume the lan address to be unique
@@ -866,14 +869,8 @@ class MultiEndpoint(CommonEndpoint):
             if name == ADDRESSES_REQUEST_MESSAGE_NAME: # Apparently someone does not know us yet (Perhaps my wan is not what I think it is)
                 message = self._dispersy.convert_packet_to_message(data, load=False, auto_load=False)
                 e.vote_wan_address(message.payload.wan_address, message.payload.sender_lan, message.payload.sender_wan)
-#             if name == u"dispersy-introduction-response":
-#                 try:
-#                     message = self._dispersy.convert_packet_to_message(data, load=False, auto_load=False)
-#                     e.vote_wan_address(message.payload.source_wan_address, sock_addr[0], sock_addr[0])
-#                 except AssertionError:
-#                     pass
-#             return
-        logger.warning("This %s should be represented by an endpoint", sock_addr)
+            return
+        logger.warning("This %s should be represented by an endpoint", incoming_addr)
         # In case the incoming_addr does not match any of the endpoints
         TunnelEndpoint.i2ithread_data_came_in(self, session, sock_addr, data)        
         
