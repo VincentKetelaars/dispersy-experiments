@@ -21,6 +21,7 @@ from src.logger import get_logger
 from pywifi.wifi.scan import Cell
 from pywifi.wifi.scheme import Scheme
 from pywifi.wifi.exceptions import InterfaceError
+from src.database.Config import NoSuchParameterException
 
 logger = get_logger(__name__)
 
@@ -284,7 +285,7 @@ class DelftAPI(API):
             parameters = []
             try:
                 parameters = self.cfg.get(param).get_children()
-            except AttributeError:
+            except (AttributeError, NoSuchParameterException):
                 logger.exception("Failed to recover %s", param)
             return parameters
         
