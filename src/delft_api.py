@@ -243,7 +243,7 @@ class DelftAPI(API):
         for line in iproute.splitlines(False): # There might be multiple lines that correspond
             ip = self._regex_find(line, "src (\d+\.\d+\.\d+\.\d+)", None)
             if_name = self._regex_find(line, "dev ([a-zA-Z]{3,4}\d)", None)
-            gateway = self._regex_find(line, "default via (\d+\.\d+\.\d+\.\d+)", None)
+            gateway = self._regex_find(line, "default via (\d+\.\d+\.\d+\.\d+)", None) or self._regex_find(line, "(\d+\.\d+\.\d+\.\d+) ", None, start=True)
             if ip is not None and if_name is not None:
                 ifs = self._get_wireless_essids()
                 device = ifs.get(if_name) if ifs.get(if_name) is not None else if_name[0:-1]
@@ -253,8 +253,11 @@ class DelftAPI(API):
     def _interface_running(self, if_name):
         return if_name in self.use_interfaces.iterkeys() and self.use_interfaces[if_name][1] == u"up"
         
-    def _regex_find(self, _input, _format, default):
-        m = re.search(_format, _input, re.IGNORECASE)
+    def _regex_find(self, _input, _format, default, start=False):
+        if start:
+            m = re.match(_format, _input, re.IGNORECASE)
+        else:
+            m = re.search(_format, _input, re.IGNORECASE)
         if m:
             return m.groups()[0]
         return default
