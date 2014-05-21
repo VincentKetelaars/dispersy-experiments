@@ -171,19 +171,16 @@ class DelftAPI(API):
             
     def dispersy_info_callback(self, info):
         base_endpoint = "dispersy.endpoint."
-        try:
-            me = info["multiendpoint"]
-            for e in me:
-                name = self._get_interface_by_address(e["address"])
-                if name is None: # This is odd.. Shouldn't happen
-                    continue
-                self.status[base_endpoint + name + ".ip"] = e["address"].ip
-                self.status[base_endpoint + name + ".port"] = e["address"].port
-                self.status[base_endpoint + name + ".total_up"] = e["total_up"]
-                self.status[base_endpoint + name + ".total_down"] = e["total_down"]
-                self.status[base_endpoint + name + ".total_send"] = e["total_send"]
-        except KeyError:
-            pass
+        me = info["multiendpoint"]
+        for e in me:
+            name = self._get_interface_by_address(e["address"])
+            if name is None: # This is odd.. Shouldn't happen
+                continue
+            self.status[base_endpoint + name + ".ip"] = e["address"].ip
+            self.status[base_endpoint + name + ".port"] = e["address"].port
+            del e["address"] # So that we can iterate freely over the rest
+            for k, v in e.iteritems():
+                self.status[base_endpoint + name + "." + k] = str(v)
             
     def socket_state_callback(self, address, state):
         base = "swift.sockets."
