@@ -207,8 +207,9 @@ class Address(object):
         for if_ in get_interface_addresses(version=self.family):
             if self.same_subnet(if_.address, interface=if_): # Same subnet
                 self._if = if_
-                return True
-        return False
+                if if_.address == self._ip: # Return directly if the ip is the same
+                    return True
+        return self.interface_exists()
     
     def same_subnet(self, ip, interface=None):
         """
