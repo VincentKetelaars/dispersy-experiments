@@ -221,9 +221,9 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     
     def has_peer(self, timelapsed=MAX_SWARM_LIFE_WITHOUT_LEECHERS):
         if self.downloading():
-            return self._last_leecher_time + timedelta(seconds=timelapsed) > datetime.utcnow()
+            return self._last_leecher_time + timedelta(seconds=timelapsed) > datetime.utcnow() or len(self.midict.get("channels", [])) > 0
         elif self.seeding():
-            return self._last_seeder_time + timedelta(seconds=timelapsed) > datetime.utcnow()
+            return self._last_seeder_time + timedelta(seconds=timelapsed) > datetime.utcnow() or len(self.midict.get("channels", [])) > 0
         # TODO: What should we do here? Can be initializing..
         return True
         
