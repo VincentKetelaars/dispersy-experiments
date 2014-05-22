@@ -1084,8 +1084,8 @@ class MultiEndpoint(CommonEndpoint):
             return 
         for e in self.swift_endpoints:
             if sock_addr is None or e.address == sock_addr:
-                if e.socket_running and addr in [a for dc in e.dispersy_contacts 
-                                                 for a in dc.get_peer_addresses(self.address, self.wan_address)]:
+                dc = e.get_contact(addr)
+                if e.socket_running and dc is not None and dc.last_rcvd(addr) + timedelta(seconds=ENDPOINT_CONTACT_TIMEOUT) > datetime.utcnow():
                     SwiftHandler.swift_add_peer(self, d, addr, sock_addr=e.address)
                     
     def _send_socket_information(self):

@@ -219,7 +219,7 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     def checkpoint_done(self):
         return self._final_checkpoint != datetime.min
     
-    def has_peer(self, timelapsed=MAX_SWARM_LIFE_WITHOUT_LEECHERS):
+    def has_peer(self, timelapsed=MAX_SWARM_LIFE_WITHOUT_LEECHERS): # TODO: When do we know for sure we have a peer? channel can be for the opposite transfer, numleech doesn't always work
         if self.downloading():
             return self._last_leecher_time + timedelta(seconds=timelapsed) > datetime.utcnow() or len(self.midict.get("channels", [])) > 0
         elif self.seeding():
