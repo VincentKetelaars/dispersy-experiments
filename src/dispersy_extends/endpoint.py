@@ -346,11 +346,11 @@ class SwiftHandler(TunnelEndpoint):
                             almost_done_swarms += 1
                             logger.debug("Estimate %s to be done downloading in %f", 
                                          d.get_def().get_roothash_as_hex(), dw_time_left)
-                    if len(self._swift_download_stack) and not d.has_peer():
+                    if len(self._swift_download_stack) > 0 and not d.has_peer():
                         swarms_to_be_removed.append(d)
                 elif d.seeding() or d.initialized(): # Seeding or initializing
                     seeding_swarms += 1
-                    if len(self._swift_upload_stack) and not d.has_peer():
+                    if len(self._swift_upload_stack) > 0 and not d.has_peer():
                         swarms_to_be_removed.append(d)
         # Start new swarms if there is room
         for _ in range(downloading_swarms - almost_done_swarms, MAX_CONCURRENT_DOWNLOADING_SWARMS):
@@ -867,8 +867,11 @@ class MultiEndpoint(CommonEndpoint):
         if e is not None:
             e.i2ithread_data_came_in(session, sock_addr, data) # Ensure that you fool the SwiftEndpoint as well
             if name == ADDRESSES_REQUEST_MESSAGE_NAME: # Apparently someone does not know us yet (Perhaps my wan is not what I think it is)
-                message = self._dispersy.convert_packet_to_message(data, load=False, auto_load=False)
-                e.vote_wan_address(message.payload.wan_address, message.payload.sender_lan, message.payload.sender_wan)
+                try:
+                    message = self._dispersy.convert_packet_to_message(data, load=False, auto_load=False)
+                    e.vote_wan_address(message.payload.wan_address, message.payload.sender_lan, message.payload.sender_wan)
+                except:
+                    logger.exception("Could not convert packet to message")
             return
         logger.warning("This %s should be represented by an endpoint", incoming_addr)
         # In case the incoming_addr does not match any of the endpoints
