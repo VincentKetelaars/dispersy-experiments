@@ -152,10 +152,11 @@ class MySQLToCSV(object):
         
         if not rows: # Transpose data
             logger.debug("Using columns")
-            max_row_length = max([len(r) for r in data])
-            for r in data:
-                r += [""] * (max_row_length - len(r))
-            data = list(izip(*data))
+            if data:
+                max_row_length = max([len(r) for r in data])
+                for r in data:
+                    r += [""] * (max_row_length - len(r))
+                data = list(izip(*data))
         else:
             logger.debug("Using rows")
                     
