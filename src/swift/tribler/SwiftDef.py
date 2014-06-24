@@ -8,11 +8,12 @@ import binascii
 import subprocess
 import random
 import time
-from src.swift.tribler.Base import ContentDefinition, DEBUG
+import logging
+
+from src.swift.tribler.Base import ContentDefinition
 from src.swift.tribler.simpledefs import SWIFT_URL_SCHEME
 from src.swift.tribler.exceptions import OperationNotEnabledByConfigurationException
 from src.swift.tribler.util import filelist2swiftspec
-
 
 
 class SwiftDef(ContentDefinition):
@@ -20,7 +21,9 @@ class SwiftDef(ContentDefinition):
     """ Definition of a swift swarm, that is, the root hash (video-on-demand)
     and any optional peer-address sources. """
 
-    def __init__(self, roothash=None, tracker=None, chunksize=None,duration=None):
+    def __init__(self, roothash=None, tracker=None, chunksize=None, duration=None):
+        self._logger = logging.getLogger(self.__class__.__name__)
+
         self.readonly = False
         self.roothash = roothash
         self.tracker = tracker
@@ -182,8 +185,15 @@ class SwiftDef(ContentDefinition):
         if self.readonly:
             raise OperationNotEnabledByConfigurationException()
 
+        encoded_outpath = None
+        if outpath:
+            encoded_outpath = outpath
+            if sys.platform == "win32":
+                encoded_outpath = encoded_outpath.replace("\\", "/")
+            encoded_outpath = encoded_outpath.encode("utf-8")
+
         s = os.stat(inpath)
-        d = {'inpath': inpath, 'outpath': outpath,'length':s.st_size}
+        d = {'inpath': inpath, 'outpath': encoded_outpath, 'length': s.st_size}
         self.files.append(d)
 
     def create_multifilespec(self):
@@ -198,14 +208,14 @@ class SwiftDef(ContentDefinition):
 
             self.multifilespec = filelist2swiftspec(filelist)
 
-            print >>sys.stderr, "SwiftDef: multifile", self.multifilespec
+            self._logger.info("SwiftDef: multifile %s", self.multifilespec)
 
             return self.multifilespec
         else:
             return None
 
 
-    def finalize(self, binpath, userprogresscallback=None, destdir='.',removetemp=False):
+    def finalize(self, binpath, userprogresscallback=None, destdir='.', removetemp=False):
         """
         Calculate root hash (time consuming).
 
@@ -219,7 +229,8 @@ class SwiftDef(ContentDefinition):
         argument.
         @param destdir OS path of where to store temporary files.
         @param removetemp Boolean, remove temporary files or not
-        @return filename of multi-spec definition or None (single-file)
+        @return filename of multi-spec definition or True (single-file)
+        @return False if finalize failed
         """
         if userprogresscallback is not None:
             userprogresscallback(0.0)
@@ -232,7 +243,7 @@ class SwiftDef(ContentDefinition):
             if userprogresscallback is not None:
                 userprogresscallback(0.2)
 
-            specfn = "multifilespec-p" + str(os.getpid()) +"-r"+str(random.random())+".txt"
+            specfn = "multifilespec-p" + str(os.getpid()) + "-r" + str(random.random()) + ".txt"
             specpn = os.path.join(destdir, specfn)
 
             f = open(specpn, "wb")
@@ -243,7 +254,7 @@ class SwiftDef(ContentDefinition):
         else:
             filename = self.files[0]['inpath']
 
-        urlfn = "swifturl-p" + str(os.getpid()) +"-r"+str(random.random())+".txt"
+        urlfn = "swifturl-p" + str(os.getpid()) + "-r" + str(random.random()) + ".txt"
         urlpn = os.path.join(destdir, urlfn)
 
         args = []
@@ -281,8 +292,7 @@ class SwiftDef(ContentDefinition):
             args.append(filename)
         # args.append("-B") # DEBUG Hack
 
-        if DEBUG:
-            print >>sys.stderr, "SwiftDef: finalize: Running", args
+        self._logger.debug("SwiftDef: finalize: Running %s", args)
 
         if sys.platform == "win32":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -315,9 +325,9 @@ class SwiftDef(ContentDefinition):
             pass
 
         if url is None or len(url) == 0:
-            self.roothash = '0' * 20
-            print >>sys.stderr, "swift: finalize: Error calculating roothash"
-            return None
+            self.roothash = None
+            self._logger.error("swift: finalize: Error calculating roothash")
+            return False
 
         if userprogresscallback is not None:
             userprogresscallback(0.9)
@@ -346,7 +356,7 @@ class SwiftDef(ContentDefinition):
         if userprogresscallback is not None:
             userprogresscallback(1.0)
 
-        return specpn
+        return specpn or True
 
     def save_multifilespec(self, filename):
         """

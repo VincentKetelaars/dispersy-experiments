@@ -34,6 +34,7 @@ logger = get_logger(__name__)
 class MySwiftProcess(SwiftProcess):
     
     def __init__(self, binpath, workdir, zerostatedir, listenaddrs, httpgwport, cmdgwport, spmgr, gateways={}):
+        self._logger = logger
         # Called by any thread, assume sessionlock is held
         self.splock = RLock()
         self.binpath = binpath
@@ -62,7 +63,7 @@ class MySwiftProcess(SwiftProcess):
         # Arno, 2012-05-29: Hack. Win32 getopt code eats first arg when Windows app
         # instead of CONSOLE app.
         args.append("-j")
-#         args.append("-B") # Set Channel debug_file
+        args.append("-B") # Set Channel debug_file
 #         args.append("-D" + self.workdir + "/channeldebug")
         if listenaddrs: # In case there is nothing to listen too, either None or []
             args.append("-l")  # listen

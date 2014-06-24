@@ -112,6 +112,7 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         self._bad_swarm_callback = None
         self._channel_closed_callback = None
         SwiftDownloadImpl.__init__(self, session, sdef)
+        DownloadConfigInterface.__init__(self)
         self.sp = sp
         self._last_leecher_time = datetime.utcnow()
         self._last_seeder_time = datetime.utcnow()
@@ -132,10 +133,10 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
     def set_selected_files(self, files):
         DownloadConfigInterface.set_selected_files(self, files)
     
-    def setup(self, dcfg=None, pstate=None, initialdlstatus=DLSTATUS_STOPPED, lm_network_engine_wrapper_created_callback=None, lm_network_vod_event_callback=None):
+    def setup(self, dcfg=None, pstate=None, initialdlstatus=DLSTATUS_STOPPED, lm_network_engine_wrapper_created_callback=None):
         # By setting initialstatus=DLSTATUS_STOPPED, no lm_network stuff will be created
         # We rely on the fact that a proper import is done for DownloadStartupConfig in this function
-        SwiftDownloadImpl.setup(self, dcfg, pstate, initialdlstatus, lm_network_engine_wrapper_created_callback, lm_network_vod_event_callback)
+        SwiftDownloadImpl.setup(self, dcfg, pstate, initialdlstatus, lm_network_engine_wrapper_created_callback)
     
     def set_download_ready_callback(self, callback):
         self._download_ready_callback = callback        

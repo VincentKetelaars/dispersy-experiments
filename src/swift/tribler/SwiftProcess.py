@@ -4,9 +4,10 @@
 import sys
 import subprocess
 import random
+import binascii
 import urllib
 import json
-import binascii
+import logging
 from threading import RLock, currentThread, Thread
 from traceback import print_exc
 from collections import defaultdict
@@ -20,8 +21,6 @@ try:
 except NameError:
     WindowsError = Exception
 
-DEBUG = False
-
 DONE_STATE_WORKING = 0
 DONE_STATE_EARLY_SHUTDOWN = 1
 DONE_STATE_SHUTDOWN = 2
@@ -33,6 +32,8 @@ class SwiftProcess:
     A swift engine can participate in one or more swarms."""
 
     def __init__(self, binpath, workdir, zerostatedir, listenport, httpgwport, cmdgwport, spmgr):
+        self._logger = logging.getLogger(self.__class__.__name__)
+
         # Called by any thread, assume sessionlock is held
         self.splock = RLock()
         self.binpath = binpath
@@ -42,9 +43,9 @@ class SwiftProcess:
 
         # Main UDP listen socket
         if listenport is None:
-            self.listenaddr = random.randint(10001, 10999)
+            self.listenport = random.randint(10001, 10999)
         else:
-            self.listenaddr = listenport
+            self.listenport = listenport
         # NSSA control socket
         if cmdgwport is None:
             self.cmdport = random.randint(11001, 11999)
@@ -66,12 +67,12 @@ class SwiftProcess:
         # instead of CONSOLE app.
         args.append("-j")
         args.append("-l")  # listen port
-        args.append("0.0.0.0:" + str(self.listenaddr))
+        args.append("0.0.0.0:" + str(self.listenport))
         args.append("-c")  # command port
         args.append("127.0.0.1:" + str(self.cmdport))
         args.append("-g")  # HTTP gateway port
         args.append("127.0.0.1:" + str(self.httpport))
-        args.append("-w")
+
         if zerostatedir is not None:
             if sys.platform == "win32":
                 # Swift on Windows expects command line arguments as UTF-16.
@@ -87,8 +88,7 @@ class SwiftProcess:
             args.append("180")  # seconds
         # args.append("-B")  # Enable debugging on swift
 
-        if DEBUG:
-            print >> sys.stderr, "SwiftProcess: __init__: Running", args, "workdir", workdir
+        self._logger.debug("SwiftProcess: __init__: Running %s workdir %s", args, workdir)
 
         if sys.platform == "win32":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -107,15 +107,16 @@ class SwiftProcess:
             while True:
                 line = socket.readline()
                 if not line:
-                    print >> sys.stderr, prefix, "readline returned nothing quitting"
+                    self._logger.info("%s readline returned nothing quitting", prefix)
                     break
-                print >> sys.stderr, prefix, line.rstrip()
-        self.popen_outputthreads = [Thread(target=read_and_print, args=(self.popen.stdout,), name="SwiftProcess_%d_stdout" % self.listenaddr), Thread(target=read_and_print, args=(self.popen.stderr,), name="SwiftProcess_%d_stderr" % self.listenaddr)]
+                self._logger.info("%s %s", prefix, line.rstrip())
+        self.popen_outputthreads = [Thread(target=read_and_print, args=(self.popen.stdout,), name="SwiftProcess_%d_stdout" % self.listenport), Thread(target=read_and_print, args=(self.popen.stderr,), name="SwiftProcess_%d_stderr" % self.listenport)]
         [thread.start() for thread in self.popen_outputthreads]
 
         self.roothash2dl = {}
         self.donestate = DONE_STATE_WORKING  # shutting down
         self.fastconn = None
+        self.tunnels = {}
 
         # callbacks for when swift detect a channel close
         self._channel_close_callbacks = defaultdict(list)
@@ -133,7 +134,7 @@ class SwiftProcess:
         if self.is_alive():
             self.fastconn = FastI2IConnection(self.cmdport, self.i2ithread_readlinecallback, self.connection_lost)
         else:
-            print >> sys.stderr, "sp: start_cmd_connection: Process dead? returncode", self.popen.returncode, "pid", self.popen.pid
+            self._logger.error("sp: start_cmd_connection: Process dead? returncode %s pid %s", self.popen.returncode, self.popen.pid)
 
     def i2ithread_readlinecallback(self, ic, cmd):
         # if DEBUG:
@@ -160,17 +161,17 @@ class SwiftProcess:
             ic.buffer = ic.buffer[length:]
 
             try:
-                self.roothash2dl["dispersy-endpoint"].i2ithread_data_came_in(session, (host, port), data)
+                self.tunnels[session](session, (host, port), data)
             except KeyError:
                 if self._warn_missing_endpoint:
                     self._warn_missing_endpoint = False
-                    print >> sys.stderr, "sp: Dispersy endpoint is not available"
+                    self._logger.error("sp: Dispersy endpoint is not available")
 
         else:
             roothash = binascii.unhexlify(words[1])
 
             if words[0] == "ERROR":
-                print >> sys.stderr, "sp: i2ithread_readlinecallback:", cmd
+                self._logger.info("sp: i2ithread_readlinecallback: %s" % cmd)
 
             elif words[0] == "CLOSE_EVENT":
                 roothash_hex = words[1]
@@ -196,8 +197,7 @@ class SwiftProcess:
             self.splock.acquire()
             try:
                 if roothash not in self.roothash2dl.keys():
-                    if DEBUG:
-                        print >> sys.stderr, "sp: i2ithread_readlinecallback: unknown roothash", words[1]
+                    self._logger.debug("sp: i2ithread_readlinecallback: unknown roothash %s", words[1])
                     return
 
                 d = self.roothash2dl[roothash]
@@ -230,7 +230,7 @@ class SwiftProcess:
             elif words[0] == "PLAY":
                 # print >>sys.stderr,"sp: i2ithread_readlinecallback: Got PLAY",cmd
                 httpurl = words[2]
-                d.i2ithread_vod_event_callback(VODEVENT_START, httpurl)
+                d.i2ithread_vod_event_callback(httpurl)
             elif words[0] == "MOREINFO":
                 jsondata = cmd[len("MOREINFO ") + 40 + 1:]
                 midict = json.loads(jsondata)
@@ -241,9 +241,29 @@ class SwiftProcess:
     #
     # Swift Mgmt interface
     #
+
+    def register_tunnel(self, prefix, callback):
+        with self.splock:
+            if prefix not in self.tunnels:
+                # register new channel prefix
+                self.tunnels[prefix] = callback
+                self.send_tunnel_subscribe(prefix)
+            else:
+                raise RuntimeError("Tunnel already registered by another module")
+
+    def unregister_tunnel(self, prefix, send_unsubscribe=False):
+        with self.splock:
+            if prefix in self.tunnels:
+                # unregister channel prefix
+                del self.tunnels[prefix]
+
+                if send_unsubscribe:
+                    self.send_tunnel_unsubscribe(prefix)
+            else:
+                self._logger.info("sp: unregister_tunnel: Error, no tunnel has been registered with prefix: %s" % prefix)
+
     def start_download(self, d):
-        self.splock.acquire()
-        try:
+        with self.splock:
             if self.donestate != DONE_STATE_WORKING or not self.is_alive():
                 return
 
@@ -272,23 +292,15 @@ class SwiftProcess:
 
             self.send_start(url, roothash_hex=roothash_hex, maxdlspeed=maxdlspeed, maxulspeed=maxulspeed, destdir=d.get_dest_dir(), metadir=metadir)
 
-        finally:
-            self.splock.release()
-
     def add_download(self, d):
-        self.splock.acquire()
-        try:
+        with self.splock:
             roothash = d.get_def().get_roothash()
 
             # Before send to handle INFO msgs
             self.roothash2dl[roothash] = d
 
-        finally:
-            self.splock.release()
-
     def remove_download(self, d, removestate, removecontent):
-        self.splock.acquire()
-        try:
+        with self.splock:
             if self.donestate != DONE_STATE_WORKING or not self.is_alive():
                 return
 
@@ -300,15 +312,9 @@ class SwiftProcess:
             roothash = d.get_def().get_roothash()
 
             del self.roothash2dl[roothash]
-        finally:
-            self.splock.release()
 
     def get_downloads(self):
-        self.splock.acquire()
-        try:
-            return self.roothash2dl.values()
-        finally:
-            self.splock.release()
+        return self.roothash2dl.values()
 
     def get_pid(self):
         if self.popen is not None:
@@ -317,79 +323,58 @@ class SwiftProcess:
             return -1
 
     def get_listen_port(self):
-        return self.listenaddr
+        return self.listenport
 
     def set_max_speed(self, d, direct, speed):
-        self.splock.acquire()
-        try:
-            if self.donestate != DONE_STATE_WORKING or not self.is_alive():
-                return
+        if self.donestate != DONE_STATE_WORKING or not self.is_alive():
+            return
 
-            roothash_hex = d.get_def().get_roothash_as_hex()
+        roothash_hex = d.get_def().get_roothash_as_hex()
 
-            # In Tribler Core API  = unlimited. In Swift CMDGW API
-            # 0 = none.
-            if speed == 0.0:
-                speed = 4294967296.0
+        # In Tribler Core API  = unlimited. In Swift CMDGW API
+        # 0 = none.
+        if speed == 0.0:
+            speed = 4294967296.0
 
-            self.send_max_speed(roothash_hex, direct, speed)
-        finally:
-            self.splock.release()
+        self.send_max_speed(roothash_hex, direct, speed)
 
     def checkpoint_download(self, d):
-        self.splock.acquire()
-        try:
-            # Arno, 2012-05-15: Allow during shutdown.
-            if not self.is_alive():
-                return
+        # Arno, 2012-05-15: Allow during shutdown.
+        if not self.is_alive():
+            return
 
-            roothash_hex = d.get_def().get_roothash_as_hex()
-            self.send_checkpoint(roothash_hex)
-        finally:
-            self.splock.release()
+        roothash_hex = d.get_def().get_roothash_as_hex()
+        self.send_checkpoint(roothash_hex)
 
     def set_moreinfo_stats(self, d, enable):
-        self.splock.acquire()
-        try:
-            if self.donestate != DONE_STATE_WORKING or not self.is_alive():
-                return
+        if self.donestate != DONE_STATE_WORKING or not self.is_alive():
+            return
 
-            roothash_hex = d.get_def().get_roothash_as_hex()
-            self.send_setmoreinfo(roothash_hex, enable)
-        finally:
-            self.splock.release()
+        roothash_hex = d.get_def().get_roothash_as_hex()
+        self.send_setmoreinfo(roothash_hex, enable)
 
     def set_subscribe_channel_close(self, download, enable, callback):
-        # Note that CALLBACK is called on the i2ithread, and hence should not lock
-        self.splock.acquire()
-        try:
-            if self.donestate != DONE_STATE_WORKING or not self.is_alive():
-                return
+        if self.donestate != DONE_STATE_WORKING or not self.is_alive():
+            return
 
-            roothash_hex = download.get_def().get_roothash_as_hex() if (download is None or download != "ALL") else "ALL"
-            if enable:
-                if not self._channel_close_callbacks[roothash_hex]:
-                    self.send_subscribe(roothash_hex, "CHANNEL_CLOSE", True)
-                self._channel_close_callbacks[roothash_hex].append(callback)
+        roothash_hex = download.get_def().get_roothash_as_hex() if (download is None or download != "ALL") else "ALL"
+        if enable:
+            if not self._channel_close_callbacks[roothash_hex]:
+                self.send_subscribe(roothash_hex, "CHANNEL_CLOSE", True)
+            self._channel_close_callbacks[roothash_hex].append(callback)
 
-            else:
-                self._channel_close_callbacks[roothash_hex].remove(callback)
-                if not self._channel_close_callbacks[roothash_hex]:
-                    self.send_subscribe(roothash_hex, "CHANNEL_CLOSE", False)
-        finally:
-            self.splock.release()
+        else:
+            self._channel_close_callbacks[roothash_hex].remove(callback)
+            if not self._channel_close_callbacks[roothash_hex]:
+                self.send_subscribe(roothash_hex, "CHANNEL_CLOSE", False)
 
     def add_peer(self, d, addr):
-        self.splock.acquire()
-        try:
-            if self.donestate != DONE_STATE_WORKING or not self.is_alive():
-                return
+        if self.donestate != DONE_STATE_WORKING or not self.is_alive():
+            return
 
-            addrstr = addr[0] + ':' + str(addr[1])
-            roothash_hex = d.get_def().get_roothash_as_hex()
-            self.send_peer_addr(roothash_hex, addrstr)
-        finally:
-            self.splock.release()
+        addrstr = addr[0] + ':' + str(addr[1])
+        roothash_hex = d.get_def().get_roothash_as_hex()
+        self.send_peer_addr(roothash_hex, addrstr)
 
     def early_shutdown(self):
         # Called by any thread, assume sessionlock is held
@@ -399,9 +384,9 @@ class SwiftProcess:
         else:
             return
 
-        if self.popen is not None:
+        if self.fastconn:
             # Tell engine to shutdown so it can deregister dls from tracker
-            print >> sys.stderr, "sp: Telling process to shutdown"
+            self._logger.info("sp: Telling process to shutdown")
             self.send_shutdown()
 
     def network_shutdown(self):
@@ -411,11 +396,9 @@ class SwiftProcess:
         else:
             return
 
-        # could do fastconn.close() here
-
         if self.popen is not None:
             try:
-                print >> sys.stderr, "sp: Terminating process"
+                self._logger.info("sp: Terminating process")
                 self.popen.terminate()
                 self.popen.wait()
                 self.popen = None
@@ -427,13 +410,12 @@ class SwiftProcess:
         if self.fastconn:
             self.fastconn.stop()
 
+
     #
     # Internal methods
     #
     def send_start(self, url, roothash_hex=None, maxdlspeed=None, maxulspeed=None, destdir=None, metadir=None):
-        # assume splock is held to avoid concurrency on socket
-        if DEBUG:
-            print >> sys.stderr, "sp: send_start:", url, "destdir", destdir, "metadir", metadir
+        self._logger.info("sp: send_start: %s, destdir=%s, metadir=%s", url, destdir, metadir)
 
         cmd = 'START ' + url
         if destdir is not None:
@@ -449,19 +431,15 @@ class SwiftProcess:
         self.write(cmd)
 
     def send_remove(self, roothash_hex, removestate, removecontent):
-        # assume splock is held to avoid concurrency on socket
         self.write('REMOVE ' + roothash_hex + ' ' + str(int(removestate)) + ' ' + str(int(removecontent)) + '\r\n')
 
     def send_checkpoint(self, roothash_hex):
-        # assume splock is held to avoid concurrency on socket
         self.write('CHECKPOINT ' + roothash_hex + '\r\n')
 
     def send_shutdown(self):
-        # assume splock is held to avoid concurrency on socket
         self.write('SHUTDOWN\r\n')
 
     def send_max_speed(self, roothash_hex, direct, speed):
-        # assume splock is held to avoid concurrency on socket
         cmd = 'MAXSPEED ' + roothash_hex
         if direct == DOWNLOAD:
             cmd += ' DOWNLOAD '
@@ -471,16 +449,23 @@ class SwiftProcess:
 
         self.write(cmd)
 
-    def send_tunnel(self, session, address, data):
-        # assume splock is held to avoid concurrency on socket
-        if DEBUG:
-            print >> sys.stderr, "sp: send_tunnel:", len(data), "bytes -> %s:%d" % address
+    def send_tunnel_subscribe(self, prefix):
+        self._logger.debug("sp: send_tunnel_subcribe to prefix:" + prefix.encode("HEX"))
 
-        self.write("TUNNELSEND %s:%d/%s %d\r\n" % (address[0], address[1], session.encode("HEX"), len(data)))
-        self.write(data)
+        self.write("TUNNELSUBSCRIBE %s\r\n" % (prefix.encode("HEX")))
+
+    def send_tunnel_unsubscribe(self, prefix):
+        self._logger.debug("sp: send_tunnel_unsubcribe prefix:" + prefix.encode("HEX"))
+
+        self.write("TUNNELUNSUBSCRIBE %s\r\n" % (prefix.encode("HEX")))
+
+    def send_tunnel(self, session, address, data):
+        self._logger.debug("sp: send_tunnel:" + repr(len(data)) + "bytes -> %s:%d" % address)
+
+        cmd = "TUNNELSEND %s:%d/%s %d\r\n" % (address[0], address[1], session.encode("HEX"), len(data))
+        self.write(cmd + data)
 
     def send_setmoreinfo(self, roothash_hex, enable):
-        # assume splock is held to avoid concurrency on socket
         onoff = "0"
         if enable:
             onoff = "1"
@@ -497,13 +482,10 @@ class SwiftProcess:
         assert roothash_hex == "ALL"
         assert event_type == "CHANNEL_CLOSE"
         assert isinstance(enable, bool), type(enable)
-        # assume splock is held to avoid concurrency on socket
-        if DEBUG:
-            print >> sys.stderr, "sp: send_subscribe:", roothash_hex, event_type, enable
+        self._logger.debug("sp: send_subscribe: %s %s %s", roothash_hex, event_type, enable)
         self.write("SUBSCRIBE %s %s %d\r\n" % (roothash_hex, event_type, int(enable),))
 
     def send_peer_addr(self, roothash_hex, addrstr):
-        # assume splock is held to avoid concurrency on socket
         self.write('PEERADDR ' + roothash_hex + ' ' + addrstr + '\r\n')
 
     def is_alive(self):

@@ -51,13 +51,14 @@ class DelftAPI(API):
         self.status = get_status(name)
         
         di_kwargs = {}
-        self.network_configurations = {}
+        self.api_params = {}
         try:
-            di_kwargs, self.network_configurations = self._get_arguments_from_config()
+            di_kwargs, self.api_params = self._get_arguments_from_config()
         except:
             logger.exception("Could not get arguments from config, make do with what you've got")
         finally:
             self.cfg.close_connection() # Don't need it anymore!
+            self.network_configurations = self.api_params.get("networks", {})
         
         API.__init__(self, name, **di_kwargs)
 
@@ -89,7 +90,7 @@ class DelftAPI(API):
         while not self.run_event.is_set() and not self.stop_event.is_set():
             self._monitor_wireless()
             self._parse_iproute()
-            if self.network_configurations.get("enabled", False):
+            if self.api_params.get("networks_enabled", False):
                 self._evaluate_available_networks("wlan0", *self._current_essid_and_ap())
             if not self.stop_event.is_set():
                 self.run_event.wait(SLEEP)
@@ -298,17 +299,17 @@ class DelftAPI(API):
             else:
                 di_kwargs[value(p.name)] = [value(c.get_value()) for c in children("parameters." + value(p.name))]
         
-        networks = {}
-        for p in children("networks"):
+        api = {}
+        for p in children("api"):
             if p.datatype != "folder":
-                networks[value(p.name)] = value(p.get_value())
+                api[value(p.name)] = value(p.get_value())
             else:
                 n_kwargs = {}
-                for n in children("networks." + value(p.name)):
+                for n in children("api." + value(p.name)):
                     n_kwargs[value(n.name)] = value(n.get_value())
-                networks[n_kwargs.get("wireless-essid")] = n_kwargs
+                api[value(n.name)] = n_kwargs
             
-        return di_kwargs, networks
+        return di_kwargs, api
     
     def _monitor_wireless(self, **kwargs):
         cells = []
@@ -336,14 +337,12 @@ class DelftAPI(API):
             else:
                 if info.get("mac", None) is not None:
                     self.network_strengths[device].append(info)
-        logger.debug(self.network_strengths)
             
     def _current_essid_and_ap(self):
         info = self._get_iwconfig() # Could check if the interface is the same..
         return info.get("essid"), info.get("mac")
     
     def _evaluate_available_networks(self, if_name, current_essid, current_ap):
-        logger.debug("Evaluate %s %s %s %s %s", if_name, current_essid, current_ap, self.network_configurations, self.network_strengths)
         current = {}
         for c in self.network_strengths.get(current_essid, []):
             if c.get("mac") == current_ap:
