@@ -151,7 +151,7 @@ class SwiftHandler(TunnelEndpoint):
         if not d.get_def().get_roothash() in self._started_downloads.keys():
             if d.bad_swarm:
                 return logger.debug("%s is a bad swarm", d.get_def().get_roothash_as_hex())
-            d.get_def().set_tracker("")
+#             d.get_def().set_tracker("")
             self._started_downloads[d.get_def().get_roothash()] = cid
             self._swift.start_download(d)
             self.add_peers_to_download(d, cid)
