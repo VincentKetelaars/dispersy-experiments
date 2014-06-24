@@ -306,7 +306,7 @@ class MySwiftProcess(SwiftProcess):
             elif words[0] == "PLAY":
                 # print >>sys.stderr,"sp: i2ithread_readlinecallback: Got PLAY",cmd
                 httpurl = words[2]
-                d.i2ithread_vod_event_callback(VODEVENT_START, httpurl)
+                d.i2ithread_vod_event_callback(httpurl)
             elif words[0] == "MOREINFO":
                 jsondata = cmd[len("MOREINFO ") + 40 + 1:]
                 midict = json.loads(jsondata)

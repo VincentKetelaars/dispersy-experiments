@@ -162,8 +162,8 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         SwiftDownloadImpl.i2ithread_moreinfo_callback(self, midict)
         self._moreinfo_callback(self.get_def().get_roothash())
       
-    def i2ithread_vod_event_callback(self, event, httpurl):
-        SwiftDownloadImpl.i2ithread_vod_event_callback(self, event, httpurl)
+    def i2ithread_vod_event_callback(self, httpurl):
+        SwiftDownloadImpl.i2ithread_vod_event_callback(self, httpurl)
         
     def network_create_engine_wrapper(self, lm_network_engine_wrapper_created_callback, pstate, lm_network_vod_event_callback, initialdlstatus=None):
         SwiftDownloadImpl.network_create_engine_wrapper(self, lm_network_engine_wrapper_created_callback, pstate, lm_network_vod_event_callback, initialdlstatus=initialdlstatus)
