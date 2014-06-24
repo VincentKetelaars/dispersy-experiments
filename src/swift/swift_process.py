@@ -115,6 +115,7 @@ class MySwiftProcess(SwiftProcess):
         self.roothash2dl = {}
         self.donestate = DONE_STATE_WORKING  # shutting down
         self.fastconn = None
+        self.tunnels = {}
 
         # callbacks for when swift detect a channel close
         self._channel_close_callbacks = defaultdict(list)

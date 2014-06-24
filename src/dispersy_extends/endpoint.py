@@ -567,6 +567,7 @@ class MultiEndpoint(CommonEndpoint):
             
     def open(self, dispersy):
         ret = TunnelEndpoint.open(self, dispersy)
+        
         self._swift.start_cmd_connection()
         ret = ret and all([x.open(dispersy) for x in self.swift_endpoints])
                     
@@ -584,6 +585,7 @@ class MultiEndpoint(CommonEndpoint):
         self._thread_stop_event.set()
         self._thread_loop.join()
         
+        self._swift.unregister_tunnel(self._session)
         SwiftHandler.close(self)
         # Note that the swift_endpoints are still available after return, although closed
         return all([x.close(timeout) for x in self.swift_endpoints])
@@ -1038,6 +1040,7 @@ class MultiEndpoint(CommonEndpoint):
     def swift_started_running_callback(self):
         logger.info("The TCP connection with Swift is up")
         self._waiting_on_cmd_connection = False
+        self._swift.register_tunnel(self._session,self.i2ithread_data_came_in)
         self.dequeue_swift_queue()
         for e in self.swift_endpoints:
             e.swift_started_running_callback()
