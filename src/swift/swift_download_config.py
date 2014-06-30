@@ -185,7 +185,7 @@ class FakeSessionSwiftDownloadImpl(SwiftDownloadImpl):
         
     def speed(self, direction):
         try:
-            return self.get_current_speed(direction)
+            return self.get_current_speed(direction) / 1024.0
         except KeyError:
             logger.debug("Could not fetch speed %s", direction)
             return 0
