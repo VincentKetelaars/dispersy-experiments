@@ -371,7 +371,7 @@ class MySwiftProcess(SwiftProcess):
             SwiftProcess.send_tunnel(self, session, address, data)
         else:
             self._logger.debug("sp: send_tunnel:" + repr(len(data)) + "bytes -> %s:%d" % address)
-            cmd = "TUNNELSEND %s:%d/%s %d\r\n" % (address[0], address[1], session.encode("HEX"), len(data), str(addr))
+            cmd = "TUNNELSEND %s:%d/%s %d %s\r\n" % (address[0], address[1], session.encode("HEX"), len(data), str(addr))
             self.write(cmd + data)
             
     def is_running(self):
