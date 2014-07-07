@@ -212,16 +212,13 @@ class MySwiftProcess(SwiftProcess):
 
         words = cmd.split()
         assert all(isinstance(word, str) for word in words)
-        
+
         if words[0] == "TUNNELRECV":
             address, session = words[1].split("/")
             host, port = address.split(":")
             port = int(port)
             session = session.decode("HEX")
             length = int(words[2])
-            incoming_addr = 0 # None port numbers are ignored
-            if len(words) > 3:
-                incoming_addr = Address.unknown(words[3])
 
             # require LENGTH bytes
             if len(ic.buffer) < length:
@@ -231,11 +228,11 @@ class MySwiftProcess(SwiftProcess):
             ic.buffer = ic.buffer[length:]
 
             try:
-                self.roothash2dl["dispersy-endpoint"].i2ithread_data_came_in(session, (host, port), data, incoming_addr)
+                self.tunnels[session](session, (host, port), data)
             except KeyError:
                 if self._warn_missing_endpoint:
                     self._warn_missing_endpoint = False
-                    print >> sys.stderr, "sp: Dispersy endpoint is not available"
+                    self._logger.error("sp: Dispersy endpoint is not available")
                     
         elif words[0] == "SOCKETINFO":
             saddr = Address.unknown(words[1])
@@ -253,7 +250,11 @@ class MySwiftProcess(SwiftProcess):
                     self._sockaddr_info_callback(saddr, state)
 
         else:
-            roothash = binascii.unhexlify(words[1])
+            try:
+                roothash = binascii.unhexlify(words[1])
+            except TypeError:
+                logger.warning("This is not a hexadecimal number %s", words[1])
+                return
 
             if words[0] == "ERROR":
                 error = " ".join(words[2:])
@@ -274,8 +275,33 @@ class MySwiftProcess(SwiftProcess):
                         logger.warning("Unknown Swift Error: %s", error)
                     self.connection_lost(self.get_cmdport(), error_code=error_code)
 
+            elif words[0] == "CLOSE_EVENT":
+                roothash_hex = words[1]
+                address = words[2].split(":")
+                address = (address[0], int(address[1]))
+                raw_bytes_up = int(words[3])
+                raw_bytes_down = int(words[4])
+                cooked_bytes_up = int(words[5])
+                cooked_bytes_down = int(words[6])
+
+                if roothash_hex in self._channel_close_callbacks:
+                    for callback in self._channel_close_callbacks[roothash_hex]:
+                        try:
+                            callback(roothash_hex, address, raw_bytes_up, raw_bytes_down, cooked_bytes_up, cooked_bytes_down)
+                        except:
+                            pass
+                for callback in self._channel_close_callbacks["ALL"]:
+                    try:
+                        callback(roothash_hex, address, raw_bytes_up, raw_bytes_down, cooked_bytes_up, cooked_bytes_down)
+                    except:
+                        pass
+
             self.splock.acquire()
             try:
+                if roothash not in self.roothash2dl.keys():
+                    self._logger.debug("sp: i2ithread_readlinecallback: unknown roothash %s", words[1])
+                    return
+
                 d = self.roothash2dl[roothash]
             except KeyError:
                 logger.debug("Unknown roothash %s", roothash)
@@ -311,14 +337,14 @@ class MySwiftProcess(SwiftProcess):
                 midict = json.loads(jsondata)
                 d.i2ithread_moreinfo_callback(midict)
             elif words[0] == "ERROR":
-                d.i2ithread_info_callback(DLSTATUS_STOPPED_ON_ERROR, 0.0, 0, 0.0, 0.0, 0, 0, 0, 0)                    
+                d.i2ithread_info_callback(DLSTATUS_STOPPED_ON_ERROR, 0.0, 0, 0.0, 0.0, 0, 0, 0, 0)               
             elif words[0] == "CHANNELCLOSED":
                 saddr = Address.unknown(words[2])
                 paddr = Address.unknown(words[3])
                 if self._channel_closed_callback is not None:
                     self._channel_closed_callback(roothash, saddr, paddr)
                 if d._channel_closed_callback is not None:
-                    d._channel_closed_callback(roothash, saddr, paddr)
+                    d._channel_closed_callback(roothash, saddr, paddr) 
     
     def write(self, msg):
         if self.is_running():
