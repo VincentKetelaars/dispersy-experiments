@@ -82,7 +82,7 @@ class MySwiftProcess(SwiftProcess):
         args.append("127.0.0.1:" + str(self.cmdport))
 #         args.append("-g")  # HTTP gateway port
 #         args.append("127.0.0.1:" + str(self.httpport))
-        args.append("-w")
+#         args.append("-w")
         if zerostatedir is not None:
             if sys.platform == "win32":
                 # Swift on Windows expects command line arguments as UTF-16.
@@ -96,7 +96,7 @@ class MySwiftProcess(SwiftProcess):
                 args.append(zerostatedir)
 #             args.append("-T")  # zero state connection timeout
 #             args.append("180")  # seconds
-        # args.append("-B")  # Enable debugging on swift
+#         args.append("-B")  # Enable debugging on swift
         
         logger.debug("SWIFT ARGS: %s", args)
         
@@ -206,7 +206,7 @@ class MySwiftProcess(SwiftProcess):
         self._channel_closed_callback = callback
     
     def i2ithread_readlinecallback(self, cmd_buffer):
-        logger.debug("CMD IN: %s", cmd_buffer)
+#         logger.debug("CMD IN: %s", cmd_buffer)
         if self.donestate != DONE_STATE_WORKING:
             return ''
 
@@ -375,7 +375,7 @@ class MySwiftProcess(SwiftProcess):
     
     def write(self, msg):
         if self.is_running():
-            logger.debug("CMD OUT: %s", msg[0:100])
+#             logger.debug("CMD OUT: %s", msg[0:100])
             try:
                 SwiftProcess.write(self, msg)
             except (AttributeError, socket.error):
@@ -394,7 +394,7 @@ class MySwiftProcess(SwiftProcess):
         if addr.port == 0:
             SwiftProcess.send_tunnel(self, session, address, data)
         else:
-            self._logger.debug("sp: send_tunnel:" + repr(len(data)) + "bytes -> %s:%d" % address)
+#             self._logger.debug("sp: send_tunnel:" + repr(len(data)) + "bytes -> %s:%d" % address)
             cmd = "TUNNELSEND %s:%d/%s %d %s\r\n" % (address[0], address[1], session.encode("HEX"), len(data), str(addr))
             self.write(cmd + data)
             
