@@ -5,11 +5,10 @@
 # its CMDGW interface
 #
 
-import sys
+import logging
 from threading import Thread, Lock, currentThread, Event
 import socket
 from traceback import print_exc
-from src.swift.tribler.exceptions import TCPConnectionFailedException
 try:
     prctlimported = True
     import prctl
@@ -18,13 +17,16 @@ except ImportError as e:
 
 from dispersy.decorator import attach_profiler
 
-DEBUG = False
 
 class FastI2IConnection(Thread):
 
     def __init__(self, port, readlinecallback, closecallback):
         Thread.__init__(self)
-        self.setName("FastI2I" + self.getName())
+
+        self._logger = logging.getLogger(self.__class__.__name__)
+
+        name = "FastI2I" + self.getName()
+        self.setName(name)
         self.setDaemon(True)
 
         self.port = port
@@ -39,9 +41,7 @@ class FastI2IConnection(Thread):
         self.lock = Lock()
 
         self.start()
-        timedout = self.sock_connected.wait(60)
-        if timedout is not None and not timedout: # Previous to 2.7 wait returns None always
-            raise TCPConnectionFailedException('Did not connect to socket within 60s.')
+        assert self.sock_connected.wait(60) or self.sock_connected.is_set(), 'Did not connect to socket within 60s.'
 
     @attach_profiler
     def run(self):
@@ -49,17 +49,25 @@ class FastI2IConnection(Thread):
         if prctlimported:
             prctl.set_name("Tribler" + currentThread().getName())
 
+        data = None
         try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.connect(("127.0.0.1", self.port))
-            self.sock_connected.set()
+            with self.lock:
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.sock.connect(("127.0.0.1", self.port))
+                self.sock_connected.set()
             while True:
                 data = self.sock.recv(10240)
                 if len(data) == 0:
                     break
                 self.data_came_in(data)
+
         except:
             print_exc()
+
+            import sys
+            print >> sys.stderr, "Error while parsing, (%s)" % data or ''
+
+        finally:
             self.close()
 
     def stop(self):
@@ -72,35 +80,9 @@ class FastI2IConnection(Thread):
             pass
 
     def data_came_in(self, data):
-        """ Read \r\n ended lines from data and call readlinecallback(self,line) """
-        # data may come in in parts, not lines! Or multiple lines at same time
-
-        if DEBUG:
-            print >> sys.stderr, "fasti2i: data_came_in", repr(data), len(data)
-
-        if len(self.buffer) == 0:
-            self.buffer = data
-        else:
-            self.buffer = self.buffer + data
-        self.read_lines()
-
-    def read_lines(self):
-        while True:
-            cmd, separator, self.buffer = self.buffer.partition("\r\n")
-            if separator:
-                if self.readlinecallback(self, cmd):
-                    # 01/05/12 Boudewijn: when a positive value is returned we immediately return to
-                    # allow more bytes to be pushed into the buffer
-                    self.buffer = "".join((cmd, separator, self.buffer))
-
-                    # 06/05/13 Boudewijn: we must return to read the remainder of the data.  note
-                    # that the remainder (all bytes behind the first separator) must be removed from
-                    # self.buffer during the readlinecallback call
-                    break
-
-            else:
-                self.buffer = cmd
-                break
+        self._logger.debug("fasti2i: data_came_in %s %s", repr(data), len(data))
+        self.buffer = self.readlinecallback(self.buffer + data)
+        assert self.buffer is not None, data
 
     def write(self, data):
         """ Called by any thread """
