@@ -219,6 +219,9 @@ class MySwiftProcess(SwiftProcess):
             port = int(port)
             session = session.decode("HEX")
             length = int(words[2])
+            incoming_addr = 0 # None port numbers are ignored
+            if len(words) > 3:
+                incoming_addr = Address.unknown(words[3])
 
             # require LENGTH bytes
             if len(ic.buffer) < length:
@@ -228,7 +231,7 @@ class MySwiftProcess(SwiftProcess):
             ic.buffer = ic.buffer[length:]
 
             try:
-                self.tunnels[session](session, (host, port), data)
+                self.tunnels[session](session, (host, port), data, incoming_addr)
             except KeyError:
                 if self._warn_missing_endpoint:
                     self._warn_missing_endpoint = False
