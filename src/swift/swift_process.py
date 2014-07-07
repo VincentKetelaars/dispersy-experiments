@@ -63,7 +63,6 @@ class MySwiftProcess(SwiftProcess):
         # Arno, 2012-05-29: Hack. Win32 getopt code eats first arg when Windows app
         # instead of CONSOLE app.
         args.append("-j")
-        args.append("-B") # Set Channel debug_file
 #         args.append("-D" + self.workdir + "/channeldebug")
         if listenaddrs: # In case there is nothing to listen too, either None or []
             args.append("-l")  # listen
@@ -95,8 +94,8 @@ class MySwiftProcess(SwiftProcess):
             else:
                 args.append("-e")
                 args.append(zerostatedir)
-            args.append("-T")  # zero state connection timeout
-            args.append("180")  # seconds
+#             args.append("-T")  # zero state connection timeout
+#             args.append("180")  # seconds
         # args.append("-B")  # Enable debugging on swift
         
         logger.debug("SWIFT ARGS: %s", args)
