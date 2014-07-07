@@ -370,8 +370,9 @@ class MySwiftProcess(SwiftProcess):
         if addr.port == 0:
             SwiftProcess.send_tunnel(self, session, address, data)
         else:
-            self.write("TUNNELSEND %s:%d/%s %d %s\r\n" % (address[0], address[1], session.encode("HEX"), len(data), str(addr)))
-            self.write(data)
+            self._logger.debug("sp: send_tunnel:" + repr(len(data)) + "bytes -> %s:%d" % address)
+            cmd = "TUNNELSEND %s:%d/%s %d\r\n" % (address[0], address[1], session.encode("HEX"), len(data), str(addr))
+            self.write(cmd + data)
             
     def is_running(self):
         return (self.fastconn is not None and self.donestate != DONE_STATE_SHUTDOWN
