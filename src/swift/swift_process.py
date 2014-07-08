@@ -244,9 +244,12 @@ class MySwiftProcess(SwiftProcess):
             
             
             elif swift_cmd == "SOCKETINFO":
-                saddr, state = swift_body.split(" ")
+                try:
+                    saddr, state = swift_body.split(" ")
+                except ValueError:
+                    logger.warning("Could not parse SOCKETINFO %s", swift_body)
+                    return
                 saddr = Address.unknown(saddr)
-                state = -1
                 try:
                     state = int(state)
                 except ValueError:
