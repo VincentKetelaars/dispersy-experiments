@@ -241,28 +241,6 @@ class MySwiftProcess(SwiftProcess):
                         continue
 
                 return cmd_buffer
-            
-            
-            elif swift_cmd == "SOCKETINFO":
-                try:
-                    saddr, state = swift_body.split(" ")
-                except ValueError:
-                    logger.warning("Could not parse SOCKETINFO %s", swift_body)
-                    return
-                saddr = Address.unknown(saddr)
-                try:
-                    state = int(state)
-                except ValueError:
-                    pass
-                if saddr != Address():
-                    if state == 0:
-                        self.working_sockets.add(saddr)
-                    else:
-                        self.working_sockets.discard(saddr)
-                    if self._sockaddr_info_callback:
-                        self._sockaddr_info_callback(saddr, state)
-                        
-                return cmd_buffer
 
             else:
                 if swift_body.find('\r\n') == -1:  # incomplete command
@@ -273,6 +251,23 @@ class MySwiftProcess(SwiftProcess):
 
                 roothash_hex = swift_body.split(" ", 1)[0]
                 roothash = binascii.unhexlify(roothash_hex)
+
+                if swift_cmd == "SOCKETINFO":
+                    saddr, state = swift_body.split(" ")
+                    saddr = Address.unknown(saddr)
+                    try:
+                        state = int(state)
+                    except ValueError:
+                        pass
+                    if saddr != Address():
+                        if state == 0:
+                            self.working_sockets.add(saddr)
+                        else:
+                            self.working_sockets.discard(saddr)
+                        if self._sockaddr_info_callback:
+                            self._sockaddr_info_callback(saddr, state)
+                            
+                    return cmd_buffer
                 
                 if swift_cmd == "ERROR":
                     error = swift_body.split(" ", 1)[1]
