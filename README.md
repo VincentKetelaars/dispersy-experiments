@@ -25,7 +25,7 @@ For *autogen.sh* you will need (to install) aclocal in automake, and libtool
 ####Install Libswift:
 
 If not already installed, make sure to install *scons*.
-Before calling *scons*, make sure to point *CPPPATH* to the directory of Libevent. Also ensure that *LIBPATH* points to directory where libevent is installed (*/usr/local/lib* by default). Finally Libswift uses OpenSSL, which means that you have to make sure that the *opensslpath* variable, in the *SConstruct* file, holds the path to the openssl directory.
+Before calling *scons*, make sure to point CPPPATH to the directory of Libevent. Also ensure that LIBPATH points to directory where libevent is installed (*/usr/local/lib* by default). Finally Libswift uses OpenSSL, which means that you have to make sure that the *opensslpath* variable, in the *SConstruct* file, holds the path to the openssl directory. (Not providing the correct OpenSSL path will not generate any warnings.)
 
 ``` sh
 cd ../libswift
@@ -56,7 +56,6 @@ In addition it might be useful to go through the src/definitions.py to adjust ce
 - The *defaultConfiguration.xml* file is used in *prepare_mysql.sh* in case you want to change the location. 
 - Paramaters to the UAVAPI are set by the child tags of **Dispersy.parameters** in the *defaultConfiguration.xml* file.
 - Furthermore you can use the *change_user.sh* script to change username and password.
-- *clear_database.sh* clears the uav mysql database from stats and logs.
 
 ###DELFTAPI
 
@@ -65,3 +64,4 @@ In addition it might be useful to go through the src/definitions.py to adjust ce
 ###POST USE
 - *database_to_csv.sh* outputs the uav mysql database to csv.
 - *create_gnu_plot.sh* can be used to create a gnuplot from a csv file. Note that the csv file needs to be column aligned. (Use the *-c* option for *database_to_csv.sh*)
+- *clear_database.sh* clears the uav mysql database from stats and logs.
